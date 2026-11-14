@@ -42,7 +42,9 @@ export default async function run({ container }: ExecArgs): Promise<void> {
     const lm = loaded.ledger[0];
     for (const s of pnl.stores) {
       const st = statementOf([lm.entities.get(s.establishment_id)!]);
-      eq(`${month} ${s.code} net sales`, c(s.net_sales), st.revenue.total);
+      // Net sales are the goods; the delivery charged on web orders is revenue of its own.
+      eq(`${month} ${s.code} net sales`, c(s.net_sales), st.revenue.pos + st.revenue.web);
+      eq(`${month} ${s.code} delivery charged`, c(s.shipping_income), st.revenue.shipping);
       eq(`${month} ${s.code} material cost`, c(s.cogs), st.cogs.total);
       eq(`${month} ${s.code} payment fees`, c(s.payment_fees), st.opex.card_fees);
       eq(`${month} ${s.code} commissions`, c(s.commissions), st.opex.commissions);
@@ -56,7 +58,8 @@ export default async function run({ container }: ExecArgs): Promise<void> {
       { id: "total", code: "TOTAL", name: "Consolidated", color: null, kind: "total" as const },
     ]);
     const all = doc.statements[month].total;
-    eq(`${month} consolidated revenue = Ejecutivo.net`, c(ex.totals.net), all.revenue.total);
+    // The Executive reads sale_fact, which has no delivery line: it matches the goods.
+    eq(`${month} consolidated net sales = Ejecutivo.net`, c(ex.totals.net), all.revenue.pos + all.revenue.web);
     eq(`${month} consolidated material cost = Ejecutivo.cost`, c(ex.totals.cost), all.cogs.total);
     eq(`${month} consolidated fees = Ejecutivo.fee`, c(ex.totals.fee), all.opex.card_fees);
     eq(`${month} consolidated commissions = Ejecutivo.commission`, c(ex.totals.commission), all.opex.commissions);

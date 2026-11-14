@@ -223,6 +223,13 @@ export interface EntityMonth {
    * lenses, a frame sold with them). Absent = none recorded.
    */
   taxable_net_sales?: number;
+  /**
+   * What the web's customers paid for DELIVERY (the order's shipping lines):
+   * income of its own, next to the sales — it is a price the owner sells the
+   * delivery at (lib/shipping-rates.ts), not a pass-through. What the carrier
+   * charges him is a cost item of the online store. Absent = none.
+   */
+  shipping_income?: number;
   /** Σ tax: collected for the state, a liability. */
   sales_tax: number;
   /** Σ total (what customers were charged, tax included). */
@@ -285,6 +292,8 @@ export interface LedgerInput {
    */
   netByMonthStore?: Map<string, Map<string, number>>;
   tz: string;
+  /** Delivery charged on each web order, in cents, by order id (lib/shipping-rates.ts). Absent = none. */
+  shippingByOrder?: ReadonlyMap<string, number>;
   /** Include the online orders as the «web» entity (ignored with `onlineStoreId`). */
   web: boolean;
   /**
@@ -384,8 +393,11 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
       if (first.channel === "web") ent.web_net_sales = (ent.web_net_sales ?? 0) + net;
       ent.taxable_net_sales = (ent.taxable_net_sales ?? 0) + group.reduce((s, l) => s + (l.tax_cents > 0 ? l.total_cents - l.tax_cents : 0), 0);
       ent.sales_count += 1;
+      // The delivery the customer paid for: income, and part of what the gateway charged its fee on.
+      const shipping = first.channel === "web" ? Math.max(0, Math.round(input.shippingByOrder?.get(first.order_id) ?? 0)) : 0;
+      if (shipping) ent.shipping_income = (ent.shipping_income ?? 0) + shipping;
       // A web order's fee is the gateway's: % of what the customer paid + fixed.
-      if (first.channel === "web") ent.payment_fees += Math.round((gross * gatewayPct) / 100) + gatewayFixed;
+      if (first.channel === "web") ent.payment_fees += Math.round(((gross + shipping) * gatewayPct) / 100) + gatewayFixed;
       for (const l of group) commissionFacts.push({ establishment_id: keyOf(l), seller_id: l.seller_id, seller_code: l.seller_code, net: l.total_cents - l.tax_cents });
     }
 
@@ -454,6 +466,7 @@ export const OPEX_CATEGORIES = TAX_CATEGORIES.filter((c) => c !== "cost_of_goods
  */
 export const TAX_LINES: Record<string, { schedule_c: string; f1120s: string }> = {
   revenue: { schedule_c: "1", f1120s: "1a" },
+  shipping_income: { schedule_c: "1", f1120s: "1a" },
   cogs: { schedule_c: "4 (Part III)", f1120s: "2 (Form 1125-A)" },
   cost_of_goods: { schedule_c: "4 (Part III, 39)", f1120s: "2 (Form 1125-A)" },
   gross_profit: { schedule_c: "5", f1120s: "3" },
@@ -479,7 +492,8 @@ export const TAX_LINES: Record<string, { schedule_c: string; f1120s: string }> =
 };
 
 export interface Statement {
-  revenue: { pos: number; web: number; total: number };
+  /** `pos` + `web` are the sales of goods (net of sales tax); `shipping` is the delivery charged to the web's customers; `total` is the three. */
+  revenue: { pos: number; web: number; shipping: number; total: number };
   /** Sales tax collected: a liability to the state, NOT revenue. */
   sales_tax: number;
   /** Net sales that carried sales tax, and the rest (exempt): the two figures of the sales-tax return. */
@@ -517,12 +531,13 @@ export function statementOf(parts: readonly EntityMonth[]): Statement {
   opex.commissions = 0;
   opex.total = 0;
   const cogs = { ...emptyCogs(), items: 0, total_all: 0 };
-  let pos = 0, web = 0, tax = 0, taxable = 0, gross = 0, count = 0, fixed = 0, variableItems = 0, perSale = 0;
+  let pos = 0, web = 0, shipping = 0, tax = 0, taxable = 0, gross = 0, count = 0, fixed = 0, variableItems = 0, perSale = 0;
   for (const e of parts) {
     // What was sold on the web: the «web» entity whole, or the web orders of the online store.
     const onWeb = e.web_net_sales ?? (e.channel === "web" ? e.net_sales : 0);
     web += onWeb;
     pos += e.net_sales - onWeb;
+    shipping += e.shipping_income ?? 0;
     tax += e.sales_tax;
     taxable += e.taxable_net_sales ?? 0;
     gross += e.gross_sales;
@@ -540,7 +555,9 @@ export function statementOf(parts: readonly EntityMonth[]): Statement {
     }
   }
   cogs.total_all = cogs.total + cogs.items;
-  const revenue = pos + web;
+  // Revenue = what was sold + the delivery charged. The sales-tax figures below are about the goods only.
+  const goods = pos + web;
+  const revenue = goods + shipping;
   opex.total = OPEX_CATEGORIES.reduce((s, c) => s + opex[c], 0) + opex.card_fees + opex.commissions;
   const gross_profit = revenue - cogs.total_all;
   const operating_income = gross_profit - opex.total;
@@ -548,10 +565,10 @@ export function statementOf(parts: readonly EntityMonth[]): Statement {
   const contribution = gross_contribution - variableItems;
   const cm = revenue > 0 ? contribution / revenue : null;
   return {
-    revenue: { pos, web, total: revenue },
+    revenue: { pos, web, shipping, total: revenue },
     sales_tax: tax,
     taxable_sales: taxable,
-    exempt_sales: revenue - taxable,
+    exempt_sales: goods - taxable,
     gross_sales: gross,
     sales_count: count,
     cogs,
@@ -669,6 +686,48 @@ export interface LoadedLedger {
   onlineStoreId: string | null;
 }
 
+export interface ShippingRow {
+  order_id: string;
+  version: number;
+  method_id: string;
+  amount: number | string | null;
+}
+
+/**
+ * Cents of delivery per order from its shipping lines: only the lines of the
+ * order's LATEST version (an order change copies the links into a new
+ * version), each method once. Pure.
+ */
+export function shippingCentsByOrder(rows: readonly ShippingRow[]): Map<string, number> {
+  const latest = new Map<string, number>();
+  for (const r of rows) latest.set(r.order_id, Math.max(latest.get(r.order_id) ?? 0, Number(r.version) || 0));
+  const seen = new Set<string>();
+  const out = new Map<string, number>();
+  for (const r of rows) {
+    if ((Number(r.version) || 0) !== latest.get(r.order_id)) continue;
+    const key = `${r.order_id}|${r.method_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const cents = Math.round(Number(r.amount ?? 0) * 100);
+    if (Number.isFinite(cents) && cents > 0) out.set(r.order_id, (out.get(r.order_id) ?? 0) + cents);
+  }
+  return out;
+}
+
+async function loadShippingByOrder(pg: Knex, orderIds: string[]): Promise<Map<string, number>> {
+  const rows: ShippingRow[] = [];
+  for (let i = 0; i < orderIds.length; i += 1000) {
+    const page = (await pg("order_shipping as os")
+      .join("order_shipping_method as sm", "sm.id", "os.shipping_method_id")
+      .whereNull("os.deleted_at")
+      .whereNull("sm.deleted_at")
+      .whereIn("os.order_id", orderIds.slice(i, i + 1000))
+      .select("os.order_id", "os.version", "sm.id as method_id", "sm.amount")) as ShippingRow[];
+    rows.push(...page);
+  }
+  return shippingCentsByOrder(rows);
+}
+
 /**
  * Reads everything a span of months needs, in a handful of queries for the
  * whole span (not per month), and runs `ledgerOf`. `storeIds` null = every
@@ -718,6 +777,11 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     lens_finish: (f.lens_finish as string | null) ?? null,
     sold_date_local: String(f.sold_date_local),
   }));
+
+  // Delivery charged on the web's orders (the order's shipping lines of its
+  // current version). A read that fails leaves it out rather than failing the books.
+  const webOrderIds = [...new Set(lines.filter((l) => l.channel === "web").map((l) => l.order_id))];
+  const shippingByOrder = webOrderIds.length ? await loadShippingByOrder(pg, webOrderIds).catch(() => new Map<string, number>()) : new Map<string, number>();
 
   // Payment fees: the window is two days wider on each side so no time zone
   // cuts a payment off; `sumFeesByStore` keeps the local month.
@@ -782,6 +846,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     tz,
     web,
     onlineStoreId: online,
+    shippingByOrder,
   });
 
   // A deactivated store keeps its history: it stays in the months it still
@@ -789,7 +854,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
   const hasFigures = (id: string) =>
     ledger.some((lm) => {
       const e = lm.entities.get(id);
-      return Boolean(e && (e.net_sales || e.cogs.total || e.payment_fees || e.commissions || e.sales_count || e.costs.some((c) => c.cents)));
+      return Boolean(e && (e.net_sales || e.shipping_income || e.cogs.total || e.payment_fees || e.commissions || e.sales_count || e.costs.some((c) => c.cents)));
     });
   const shownStores = inView.filter((s) => s.is_active || hasFigures(s.id));
   return { ledger, stores: everyStore, shownStores, rules, onlineStoreId: online };

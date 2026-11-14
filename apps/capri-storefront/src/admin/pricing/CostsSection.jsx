@@ -21,6 +21,7 @@ import HelpTip from "../HelpTip.jsx";
 import Icon from "../icons.jsx";
 import FinAcc from "../finance/Accordion.jsx";
 import { deleteCostItem, deleteCostRule, saveCostItem, saveCostRule, saveSalesTax, toggleRuleInStore } from "../finance/financeApi.js";
+import { cadenceOf, landsOf, percentSharesOf, whoOf } from "../finance/explain.js";
 import { blankItem, FREQUENCIES, groupOf, monthlyOf, round2, RULE_KINDS, slugOf, sumBy, TAX_CATEGORIES, TAX_DEFAULT_CATEGORY, taxOf } from "../finance/model.js";
 
 const ICONS = { fixed: "store", variable: "trendUp", shared: "layers", perSale: "receipt", taxes: "clipboard" };
@@ -57,7 +58,7 @@ function Toggle({ on, label, disabled, onChange, className = "" }) {
 }
 
 /** Una partida de costo, editable en su fila. */
-function CostRow({ item, group, stores, salesCount, chainSales, canShare, onSaved, onError, onCancelNew }) {
+function CostRow({ item, group, stores, activeCount = 0, salesCount, chainSales, canShare, onSaved, onError, onCancelNew }) {
   const { t, lang } = useLang();
   const { confirm } = useFeedback();
   const start = useMemo(() => editable(item), [item]);
@@ -196,6 +197,21 @@ function CostRow({ item, group, stores, salesCount, chainSales, canShare, onSave
   const cats = [...(TAX_FIRST[group] || []), ...TAX_CATEGORIES.filter((c) => !(TAX_FIRST[group] || []).includes(c))];
   const s = storeOf(row.establishment_id);
 
+  // ── La partida dicha de corrido (finance/explain.js): de quién es, cada
+  // cuánto y cuánto pesa al mes, quién la cargó este mes y dónde cae.
+  const who = whoOf(row);
+  const cad = cadenceOf(row, sales);
+  const lands = landsOf(row);
+  const shares = percentSharesOf(row, stores);
+  const charged = (item.charged || []).map((c) => ({ ...c, store: storeOf(c.establishment_id) })).filter((c) => c.store);
+  const whoText = who === "own" ? t("adm.fin.ex.own", { store: s?.code || "…" })
+    : who === "perSaleOwn" ? t("adm.fin.ex.perSaleOwn", { store: s?.code || "…" })
+    : who === "perSaleAll" ? t("adm.fin.ex.perSaleAll")
+    : t("adm.fin.ex.shared", { n: activeCount });
+  const howText = who !== "shared" ? "" : shares.length ? t("adm.fin.ex.byPercent", { list: shares.map((x) => `${x.code} ${x.pct} %`).join(" · ") }) : t("adm.fin.ex.bySales");
+  const cadText = t(`adm.fin.ex.cad.${cad.key}`, { amount: m(cad.amount), monthly: m(cad.monthly), n: cad.n, times: cad.times, over: cad.over, month: cad.month || "—" });
+  const landsText = t("adm.fin.ex.lands", { bucket: t(`adm.fin.ex.bucket.${lands.bucket}`), cat: t(`adm.fin.tax.${lands.tax}`), c: lands.schedule_c, s: lands.f1120s });
+
   return (
     <div ref={elRef} className={`fin-row ${row.active ? "" : "is-off"} ${dirty ? "is-dirty" : ""} ${busy ? "is-busy" : ""} ${status ? `is-${status}` : ""} ${dirty && !valid(row) ? "is-invalid" : ""}`} onKeyDown={onKey} onBlur={onBlur} role="row">
       <span className="fin-c name" role="cell">
@@ -244,6 +260,25 @@ function CostRow({ item, group, stores, salesCount, chainSales, canShare, onSave
         {dirty && item.id && status !== "saving" && <button type="button" className="fin-ib" disabled={busy} onClick={undo} title={t("adm.fin.undo")} aria-label={t("adm.fin.undo")}><Icon name="undo" size={13} /></button>}
         <button type="button" className="fin-ib warn" disabled={busy} onClick={remove} title={item.id ? t("adm.fin.delete") : t("adm.fin.cancel")} aria-label={item.id ? t("adm.fin.delete") : t("adm.fin.cancel")}><Icon name={item.id ? "trash" : "close"} size={13} /></button>
       </span>
+      <div className={`fin-explain ${row.active ? "" : "off"}`} role="cell">
+        <span className={`fin-who ${who}`} title={t(`adm.fin.ex.hint.${who}`)}>
+          {s ? <span className="fin-dot" style={{ background: s.color || "var(--adm-muted)" }} aria-hidden="true" /> : <Icon name={who === "shared" ? "layers" : "receipt"} size={11} />}
+          {whoText}
+        </span>
+        {howText && <span className="fin-ex-i">{howText}</span>}
+        <span className="fin-ex-i"><b>{cadText}</b></span>
+        {row.active && charged.length > 0 && (who === "shared" || who === "perSaleAll") && (
+          <span className="fin-ex-i fin-ex-split" title={t("adm.fin.ex.thisMonthHint")}>
+            {t("adm.fin.ex.thisMonth")}{" "}
+            {charged.map((c) => (
+              <span key={c.establishment_id} className="fin-ex-part"><span className="fin-dot" style={{ background: c.store.color || "var(--adm-muted)" }} aria-hidden="true" />{c.store.code} {m(c.amount)}</span>
+            ))}
+          </span>
+        )}
+        <span className="fin-ex-i fin-ex-lands">{landsText}</span>
+        {!row.active && <span className="fin-ex-i fin-ex-off">{t("adm.fin.ex.off")}</span>}
+        {row.active && row.ends_on && <span className="fin-ex-i">{t("adm.fin.ex.until", { date: row.ends_on })}</span>}
+      </div>
       {more && (
         <div className="fin-more" role="cell">
           <label>{t("adm.fin.f.starts")}<input type="date" className="fin-in" value={row.starts_on} onChange={(e) => set("starts_on", e.target.value)} /></label>
@@ -419,6 +454,8 @@ export default function CostsAccordions({ data, scopeStore, open, onToggle, onSa
   const [drafts, setDrafts] = useState({});
   const stores = useMemo(() => data.stores.filter((s) => s.is_active || data.items.some((i) => i.establishment_id === s.id)), [data]);
   const canShare = true;
+  // Entre cuántas tiendas se reparte un compartido: las ACTIVAS (lib/financial-statement.ts).
+  const activeCount = data.stores.filter((x) => x.is_active).length;
   const chainSales = Object.values(data.sales_count || {}).reduce((a, b) => a + b, 0);
   const visible = useMemo(() => data.items.filter((it) => !scopeStore || !it.establishment_id || it.establishment_id === scopeStore), [data.items, scopeStore]);
   // El orden de las filas se fija al abrir la pantalla (activas primero, de mayor
@@ -462,11 +499,11 @@ export default function CostsAccordions({ data, scopeStore, open, onToggle, onSa
     <div className="fin-table" role="table" aria-label={t(`adm.fin.acc.${group}`)}>
       <Head perSale={group === "perSale"} />
       {drafts[group] && (
-        <CostRow key="new" item={drafts[group]} group={group} stores={stores} salesCount={data.sales_count || {}} chainSales={chainSales} canShare={canShare}
+        <CostRow key="new" item={drafts[group]} group={group} stores={stores} activeCount={activeCount} salesCount={data.sales_count || {}} chainSales={chainSales} canShare={canShare}
           onSaved={(opts) => savedDraft(group, opts)} onError={onError} onCancelNew={() => setDrafts((d) => ({ ...d, [group]: null }))} />
       )}
       {byGroup[group].map((it) => (
-        <CostRow key={it.id} item={it} group={group} stores={stores} salesCount={data.sales_count || {}} chainSales={chainSales} canShare={canShare} onSaved={onSaved} onError={onError} />
+        <CostRow key={it.id} item={it} group={group} stores={stores} activeCount={activeCount} salesCount={data.sales_count || {}} chainSales={chainSales} canShare={canShare} onSaved={onSaved} onError={onError} />
       ))}
       {!byGroup[group].length && !drafts[group] && <p className="fin-empty">{t(`adm.fin.empty.${group}`)}</p>}
     </div>

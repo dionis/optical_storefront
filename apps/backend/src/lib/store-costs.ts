@@ -231,6 +231,8 @@ export function allocateShared(chargeCents: number, allocation: CostItemLike["al
 
 export interface PnlInput {
   net_sales: number;
+  /** Delivery charged to the web's customers: income next to the sales (the online store). Absent = 0. */
+  shipping_income?: number;
   cogs: number;
   payment_fees: number;
   commissions: number;
@@ -240,6 +242,7 @@ export interface PnlInput {
 }
 
 export interface Pnl extends PnlInput {
+  shipping_income: number;
   variable_total: number;
   contribution: number;
   contribution_pct: number | null;
@@ -252,11 +255,15 @@ export interface Pnl extends PnlInput {
 /** Monthly result and break-even point = fixed ÷ contribution margin % (HU-96). */
 export function computePnl(i: PnlInput): Pnl {
   const variable_total = i.payment_fees + i.commissions + i.variable_manual;
-  const contribution = i.net_sales - i.cogs - variable_total;
-  const contribution_pct = i.net_sales > 0 ? contribution / i.net_sales : null;
+  // Income = what was sold + the delivery charged (the statement's revenue).
+  const shipping_income = i.shipping_income ?? 0;
+  const income = i.net_sales + shipping_income;
+  const contribution = income - i.cogs - variable_total;
+  const contribution_pct = income > 0 ? contribution / income : null;
   const fixed_total = i.fixed + i.shared;
   return {
     ...i,
+    shipping_income,
     variable_total,
     contribution,
     contribution_pct: contribution_pct === null ? null : Math.round(contribution_pct * 1000) / 10,

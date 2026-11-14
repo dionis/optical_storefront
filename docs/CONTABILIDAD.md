@@ -355,14 +355,43 @@ variables a mano   = partidas "variable" activas del mes de la tienda
 fijos              = partidas "fixed" activas del mes de la tienda
 compartidos        = su parte de las partidas sin tienda (activas, no por venta)
 
+entrega cobrada    = Σ de lo que pagó de entrega cada pedido web del mes
+                     (solo la tienda online; ver «Entrega cobrada» abajo)
+
+ingresos        = ventas netas + entrega cobrada
 variable_total  = fees + comisiones + variables a mano
-contribución    = ventas netas − costo de mercancía − variable_total
-contribución %  = contribución / ventas netas × 100          (null si netas = 0)
+contribución    = ingresos − costo de mercancía − variable_total
+contribución %  = contribución / ingresos × 100              (null si ingresos = 0)
 fijos_total     = fijos + compartidos
 resultado       = contribución − fijos_total
-punto de equilibrio = fijos_total / (contribución / ventas netas)   (null si la
+punto de equilibrio = fijos_total / (contribución / ingresos)   (null si la
                       contribución no es positiva)
 ```
+
+### Entrega cobrada (`shipping_income`, 13-nov-2026)
+
+La tienda online VENDE la entrega a un precio fijo (`lib/shipping-rates.ts`:
+`FLAT_SHIPPING_RATE`, $30, solo EE. UU.). Lo que el pedido paga por ella es
+**ingreso** de la tienda online, junto a sus ventas, y no un reembolso del
+transportista:
+
+```
+entrega de un pedido = Σ order_shipping_method.amount de las líneas de envío
+                       de la ÚLTIMA versión del pedido, cada método una vez
+                       (shippingCentsByOrder; un cambio de pedido copia los
+                       enlaces a una versión nueva)
+se cuenta            = solo para pedidos web con líneas activas en sale_fact
+                       del mes (un pedido anulado no aporta entrega)
+comisión de pasarela = % × (bienes con impuesto + entrega) + fijo, por pedido
+```
+
+Lo que cobra el transportista por llevar el pedido es OTRA partida: un costo
+«por venta» de la tienda online (`per_sale`, importe × pedidos del mes). La
+diferencia entre las dos es lo que deja la entrega.
+
+`sale_fact` no tiene línea de entrega: el Ejecutivo (§1) sigue sin contarla.
+Las cifras del impuesto de venta son de BIENES: `gravadas + exentas = ventas
+netas` (sin la entrega), y `ventas cobradas = ventas netas + impuesto`.
 
 ### Frecuencias y vigencia de una partida (`monthlyCharge`, 7-nov-2026)
 
@@ -606,6 +635,7 @@ máximo 36), agrupados por mes, trimestre o año; por tienda, «web» y consolid
 ```
 Ingresos           = ventas netas en tienda + ventas netas en línea
                      (Σ total − impuesto de sale_fact activas)
+                     + entrega cobrada (pedidos web; §5 «Entrega cobrada»)
 Costo de mercancía = monturas + lentes + tratamientos + fijos por venta
                      (líneas "material" de computeCostSheet, una ficha por venta)
                      + partidas con tax_category = cost_of_goods

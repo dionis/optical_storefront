@@ -73,6 +73,10 @@ export async function financeRules(container: MedusaContainer, storeId: string |
       // The «Mensual» column: what the frequency is worth in an average month;
       // a per-sale item × this month's sales of its store (of the chain when shared).
       monthly: normalizedMonthly(it, it.per_sale ? (it.establishment_id ? salesCount[it.establishment_id] ?? 0 : chainSales) : null) / 100,
+      // Who it charged THIS month and how much (the ledger's split of a shared
+      // item; a per-sale item × each store's sales). Empty = nothing this month
+      // (off, outside its dates, or no sales yet).
+      charged: pnl.item_charges[it.id] ?? [],
     })),
     rules: rules.filter(isPerSaleRule).map((r) => {
       const id = r.id ?? `${r.kind}:${r.match_key}`;

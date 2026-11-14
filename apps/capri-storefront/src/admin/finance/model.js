@@ -19,6 +19,9 @@ export const TAX_DEFAULT_CATEGORY = { cost_of_goods: "remakes", rent: "rent", ut
 /** Línea de Schedule C (Form 1040) y de Form 1120-S. Copia de TAX_LINES (lib/financial-statement.ts), para el libro de Excel. */
 export const SCHEDULE_C = { cost_of_goods: "4", rent: "20b", utilities: "25", payroll: "26", payroll_taxes: "23", insurance: "15", advertising: "8", software: "18", professional_fees: "17", bank_fees: "27a", repairs: "21", supplies: "22", taxes_licenses: "23", depreciation: "13", other: "27a" };
 
+/** Línea de Form 1120-S de cada categoría. Copia de TAX_LINES (lib/financial-statement.ts). */
+export const F1120S = { cost_of_goods: "2", rent: "11", utilities: "19", payroll: "8", payroll_taxes: "12", insurance: "19", advertising: "16", software: "19", professional_fees: "19", bank_fees: "19", repairs: "9", supplies: "19", taxes_licenses: "12", depreciation: "14", other: "19" };
+
 export const taxOf = (item) => (TAX_CATEGORIES.includes(item?.tax_category) ? item.tax_category : CATEGORY_TAX[item?.category] || "other");
 
 /** El equivalente mensual de un costo, en DÓLARES (un costo por venta: × las ventas del mes). */

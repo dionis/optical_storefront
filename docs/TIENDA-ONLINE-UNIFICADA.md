@@ -210,6 +210,17 @@ fijado y con descuento, lista de lentes, cotización = carrito, `revalidate`
 tras un cambio de precio, línea suelta, tarjeta y Seguridad) y un pedido web
 completo asentado en la columna de la tienda online.
 
+### 3.8 Precio de las monturas, entrega y libros (0069–0070, 13-nov-2026)
+
+- **Monturas a «3 × costo»**: la tienda online lleva la regla `cost_multiple`
+  (docs/PRICE-MATRIX.md): cada montura con costo se vende en la web a su costo
+  × 3. Lentes, tratamientos y estuches siguen su propia lista de la tienda.
+- **Entrega**: UN precio fijo de $30, solo EE. UU. (`lib/shipping-rates.ts`,
+  env `SHIPPING_FLAT_RATE`). Ya no hay segunda mensajería.
+- **Libros**: lo que el pedido paga de entrega es ingreso de la tienda online
+  («Entrega cobrada»); lo que cobra el transportista se pone como costo «por
+  venta» de esa tienda (docs/CONTABILIDAD.md §5).
+
 ## 4. Lo que falta (lo hace Daniel: Coolify y Stripe)
 
 Ninguno toca código. Los valores están preparados en

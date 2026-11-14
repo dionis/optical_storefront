@@ -42,14 +42,19 @@ export function fiscalReportHtml(doc, { t, lang, entity = "total" }) {
   const monthLabel = (p) => { const [y, mo] = p.split("-").map(Number); return new Date(y, mo - 1, 1).toLocaleDateString(lang === "en" ? "en-US" : "es-US", { month: "long", year: "numeric" }); };
   const tl = (k) => doc.tax_lines?.[k] || {};
   const period = t("adm.fin.st.periodText", { from: monthLabel(doc.months[0]), to: monthLabel(doc.months[doc.months.length - 1]) });
+  // «Ventas netas» = lo vendido (sin impuesto). La entrega cobrada al cliente de
+  // la tienda online es ingreso aparte: gravadas + exentas = ventas netas, siempre.
+  const goods = (s) => Number(s.revenue.pos) + Number(s.revenue.web);
+  const ship = (s) => Number(s.revenue.shipping) || 0;
   const row = (label, value, cls = "") => `<tr class="${cls}"><td class="c">${esc(label)}</td><td>${esc(value)}</td></tr>`;
 
   const summary = [
     row(t("adm.fin.fx.gross"), m(all.gross_sales)),
     row(t("adm.fin.fx.salesTax"), neg(all.sales_tax)),
-    row(t("adm.fin.fx.net"), m(all.revenue.total), "b"),
+    row(t("adm.fin.fx.net"), m(goods(all)), "b"),
     row(t("adm.fin.fx.taxable"), m(all.taxable_sales), "lv2"),
     row(t("adm.fin.fx.exempt"), m(all.exempt_sales), "lv2"),
+    ...(ship(all) ? [row(t("adm.fin.fx.shipping"), m(ship(all))), row(t("adm.fin.fx.income"), m(all.revenue.total), "b")] : []),
     row(t("adm.fin.fx.cogs"), neg(all.cogs.total_all)),
     row(t("adm.fin.fx.grossProfit"), m(all.gross_profit), "b"),
     row(t("adm.fin.fx.expenses"), neg(all.opex.total)),
@@ -58,14 +63,16 @@ export function fiscalReportHtml(doc, { t, lang, entity = "total" }) {
 
   const months = doc.periods.map((p) => {
     const s = doc.statements[p][ent.id];
-    return `<tr><td class="c">${esc(monthLabel(p))}</td><td>${s.sales_count}</td><td>${esc(m(s.revenue.total))}</td><td>${esc(m(s.taxable_sales))}</td><td>${esc(m(s.exempt_sales))}</td><td>${esc(m(s.sales_tax))}</td></tr>`;
+    return `<tr><td class="c">${esc(monthLabel(p))}</td><td>${s.sales_count}</td><td>${esc(m(goods(s)))}</td><td>${esc(m(s.taxable_sales))}</td><td>${esc(m(s.exempt_sales))}</td><td>${esc(m(s.sales_tax))}</td></tr>`;
   }).join("");
-  const monthsTotal = `<tr class="fin"><td class="c">${esc(t("adm.fin.st.total"))}</td><td>${all.sales_count}</td><td>${esc(m(all.revenue.total))}</td><td>${esc(m(all.taxable_sales))}</td><td>${esc(m(all.exempt_sales))}</td><td>${esc(m(all.sales_tax))}</td></tr>`;
+  const monthsTotal = `<tr class="fin"><td class="c">${esc(t("adm.fin.st.total"))}</td><td>${all.sales_count}</td><td>${esc(m(goods(all)))}</td><td>${esc(m(all.taxable_sales))}</td><td>${esc(m(all.exempt_sales))}</td><td>${esc(m(all.sales_tax))}</td></tr>`;
 
   const line = (label, value, key, cls = "") => `<tr class="${cls}"><td class="c">${esc(label)}</td><td>${esc(value)}</td><td class="tl">${esc(tl(key).schedule_c || "")}</td><td class="tl">${esc(tl(key).f1120s || "")}</td></tr>`;
   const expenses = OPEX.filter((k) => Number(all.opex[k])).map((k) => line(t(k === "card_fees" ? "adm.fin.st.l.opex.card_fees" : k === "commissions" ? "adm.fin.st.l.opex.commissions" : `adm.fin.tax.${k}`), m(all.opex[k]), k, "lv2")).join("");
   const schedule = [
-    line(t("adm.fin.fx.net"), m(all.revenue.total), "revenue", "b"),
+    ...(ship(all)
+      ? [line(t("adm.fin.fx.net"), m(goods(all)), "revenue", "lv2"), line(t("adm.fin.fx.shipping"), m(ship(all)), "shipping_income", "lv2"), line(t("adm.fin.fx.income"), m(all.revenue.total), "revenue", "b")]
+      : [line(t("adm.fin.fx.net"), m(all.revenue.total), "revenue", "b")]),
     line(t("adm.fin.fx.cogs"), neg(all.cogs.total_all), "cogs"),
     line(t("adm.fin.fx.grossProfit"), m(all.gross_profit), "gross_profit", "b"),
     `<tr class="sec"><td colspan="4">${esc(t("adm.fin.fx.expensesTitle"))}</td></tr>`,
@@ -76,7 +83,7 @@ export function fiscalReportHtml(doc, { t, lang, entity = "total" }) {
 
   const stores = doc.entities.filter((e) => e.kind !== "total");
   const byStore = ent.kind === "total" && stores.length > 1
-    ? `<h3>${esc(t("adm.fin.fx.byStore"))}</h3><table><thead><tr><th class="c">${esc(t("adm.fin.fx.store"))}</th><th>${esc(t("adm.fin.fx.sales"))}</th><th>${esc(t("adm.fin.fx.net"))}</th><th>${esc(t("adm.fin.fx.taxable"))}</th><th>${esc(t("adm.fin.fx.salesTaxShort"))}</th><th>${esc(t("adm.fin.fx.netIncome"))}</th></tr></thead><tbody>${stores.map((e) => { const s = doc.statements.all[e.id]; return `<tr><td class="c">${esc(name(e))}</td><td>${s.sales_count}</td><td>${esc(m(s.revenue.total))}</td><td>${esc(m(s.taxable_sales))}</td><td>${esc(m(s.sales_tax))}</td><td>${esc(s.net_income < 0 ? neg(s.net_income) : m(s.net_income))}</td></tr>`; }).join("")}</tbody></table>`
+    ? `<h3>${esc(t("adm.fin.fx.byStore"))}</h3><table><thead><tr><th class="c">${esc(t("adm.fin.fx.store"))}</th><th>${esc(t("adm.fin.fx.sales"))}</th><th>${esc(t("adm.fin.fx.net"))}</th><th>${esc(t("adm.fin.fx.taxable"))}</th><th>${esc(t("adm.fin.fx.salesTaxShort"))}</th><th>${esc(t("adm.fin.fx.netIncome"))}</th></tr></thead><tbody>${stores.map((e) => { const s = doc.statements.all[e.id]; return `<tr><td class="c">${esc(name(e))}</td><td>${s.sales_count}</td><td>${esc(m(goods(s)))}</td><td>${esc(m(s.taxable_sales))}</td><td>${esc(m(s.sales_tax))}</td><td>${esc(s.net_income < 0 ? neg(s.net_income) : m(s.net_income))}</td></tr>`; }).join("")}</tbody></table>`
     : "";
 
   const html = `<header class="lh"><div><h1>${esc(doc.business.legal_name || doc.business.name)}</h1><h2>${esc(t("adm.fin.fx.title"))}</h2><p>${esc(name(ent))} · ${esc(period)}</p><p class="basis">${esc(t("adm.fin.st.basis", { currency: doc.business.currency }))}</p></div><div class="prep">${esc(t("adm.fin.st.preparer"))}</div></header>
@@ -169,7 +176,7 @@ export default function FiscalReport({ scope = "all", stores = [], onClose }) {
         {!bad && state !== "loading" && state !== "ok" && <p className="fx-msg bad">{t(state)}</p>}
         {!bad && state === "ok" && s && (
           <dl className="fx-preview">
-            <div><dt>{t("adm.fin.fx.net")}</dt><dd>{m(s.revenue.total)}</dd></div>
+            <div><dt>{t("adm.fin.fx.net")}</dt><dd>{m(Number(s.revenue.pos) + Number(s.revenue.web))}</dd></div>
             <div><dt>{t("adm.fin.fx.taxable")}</dt><dd>{m(s.taxable_sales)}</dd></div>
             <div><dt>{t("adm.fin.fx.exempt")}</dt><dd>{m(s.exempt_sales)}</dd></div>
             <div><dt>{t("adm.fin.fx.salesTaxShort")}</dt><dd>{m(s.sales_tax)}</dd></div>

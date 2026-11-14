@@ -57,6 +57,8 @@ function linesOf() {
     { id: "h.revenue", section: true },
     { id: "revenue.pos", get: (s) => s.revenue.pos, level: 2, tax: "revenue" },
     { id: "revenue.web", get: (s) => s.revenue.web, level: 2, tax: "revenue" },
+    // La entrega cobrada al cliente de la tienda online: ingreso propio, junto a las ventas.
+    { id: "revenue.shipping", get: (s) => s.revenue.shipping ?? 0, level: 2, tax: "shipping_income" },
     { id: "revenue.total", get: (s) => s.revenue.total, level: 1, tax: "revenue", help: "fin.st.revenue", strong: true },
     { id: "h.cogs", section: true },
     { id: "cogs.frames", get: (s) => s.cogs.frames, level: 2, minus: true, tax: "cogs" },
