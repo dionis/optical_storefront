@@ -1,3 +1,4 @@
+import { quoteWithPromotion } from "../../../../lib/pos-promotion";
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ONLINE_KIND } from "../../../../lib/establishments";
 import { tenant } from "../../../../lib/tenant";
@@ -20,7 +21,6 @@ import {
   listSales,
   listTerminals,
   PosError,
-  quoteSale,
   rxContexts,
   rxDesigns,
   type RxInput,
@@ -130,6 +130,9 @@ interface SaleBody {
   customer?: PosCustomerInput;
   lines?: PosLineInput[];
   discount_pct?: unknown;
+  /** A promotion of the store (lib/promotions.ts) and, for «compre N, lleve M», the paid sale(s). */
+  promotion_id?: string | null;
+  promotion_ref?: string | null;
   approval_id?: string | null;
   payments?: unknown;
   prescriptions?: { new?: (RxInput & Record<string, unknown>) | null; worn?: (RxInput & Record<string, unknown>) | null };
@@ -183,18 +186,20 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
       throw new PosError("worn_date_required");
     }
 
-    const [quote, settings, methods] = await Promise.all([
-      quoteSale(req.scope, store.id, lines.lines, discount.pct),
+    const [promoted, settings, methods] = await Promise.all([
+      quoteWithPromotion(req.scope, store.id, lines.lines, discount.pct, body.promotion_id, body.promotion_ref),
       getPosSettings(req.scope),
       listPaymentMethods(req.scope),
     ]);
+    const { quote } = promoted;
     const needsRx = needsPrescription(lines.lines);
     // «Graduación pendiente»: sold now, the prescription is added from the sale (lib/rx-pending.ts).
     const rxPending = body.rx_pending === true && needsRx && !prescriptions.new;
     checkPrescriptions(req.scope, prescriptions, needsRx && !rxPending, rxContexts(quote), rxDesigns(quote));
 
     const limitPct = discountLimitFor(scope, settings.discount_limits);
-    const needsApproval = discountNeedsApproval({ isAdmin: scope.is_admin, pct: quote.discount_pct, limitPct, belowMinimum: quote.below_minimum });
+    // A promotion's percentage was set up by the owner: no approval for it.
+    const needsApproval = promoted.discount_source === "promotion" ? false : discountNeedsApproval({ isAdmin: scope.is_admin, pct: quote.discount_pct, limitPct, belowMinimum: quote.below_minimum });
 
     const payments = cleanPayments(body.payments, quote.total_cents, methods, { establishmentId: store.id });
     if ("reason" in payments) throw new PosError(payments.reason, 422, payments.method ? { method: payments.method } : {});
@@ -219,6 +224,7 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
       notifyEmail: body.notify_email === true,
       notifySms: body.notify_sms === true,
       rxPending,
+      promotion: promoted.promotion,
       idempotencyKey: key,
     });
     res.json({ sale });

@@ -5,6 +5,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { cleanText, createEstablishment, listEstablishments } from "../../../lib/establishments";
 import { isValidPhone } from "../../../lib/field-rules";
 import { normalizeColor } from "../../../lib/store-color";
+import { tenant } from "../../../lib/tenant";
 
 /**
  * TIENDAS (establecimientos).
@@ -19,7 +20,8 @@ import { normalizeColor } from "../../../lib/store-color";
  * adm.err.stores.<reason>.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
-  res.json({ establishments: await listEstablishments(req.scope) });
+  // `timezone`: the stores' wall clock, for «open now» (lib/store-hours.ts).
+  res.json({ establishments: await listEstablishments(req.scope), timezone: tenant().timezone });
 }
 
 interface CreateBody {

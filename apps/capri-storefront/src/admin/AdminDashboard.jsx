@@ -47,6 +47,7 @@ const TAB_IMPORTS = {
   alerts: () => import("./AlertRules.jsx"),
   aiusage: () => import("./AiUsage.jsx"),
   oplog: () => import("./OperationLog.jsx"),
+  promotions: () => import("./Promotions.jsx"),
   salesboard: () => import("./SalesBoard.jsx"),
   storestatus: () => import("./StoreStatus.jsx"),
   mysales: () => import("./MySales.jsx"),
@@ -82,6 +83,7 @@ const PosConfig = lazy(TAB_IMPORTS.posconfig);
 const AlertRules = lazy(TAB_IMPORTS.alerts);
 const AiUsage = lazy(TAB_IMPORTS.aiusage);
 const OperationLog = lazy(TAB_IMPORTS.oplog);
+const Promotions = lazy(TAB_IMPORTS.promotions);
 const SalesBoard = lazy(TAB_IMPORTS.salesboard);
 const StoreStatus = lazy(TAB_IMPORTS.storestatus);
 const MySales = lazy(TAB_IMPORTS.mysales);
@@ -739,6 +741,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "alerts" && <AlertRules me={me} />}
       {tab === "aiusage" && <AiUsage />}
       {tab === "oplog" && <OperationLog me={me} />}
+      {tab === "promotions" && <Promotions />}
       {tab === "salesboard" && <SalesBoard go={go} tabs={tabs} me={me} />}
       {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} me={me} />}
       {tab === "mysales" && <MySales go={go} me={me} openSale={salePanel.open} />}

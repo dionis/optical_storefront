@@ -4,6 +4,8 @@ import { acceptedAt, sellableStores, sellerTillProblem } from "../../../../lib/p
 import { ensureTerminal, listPaymentMethods, VOID_REASONS } from "../../../../lib/pos-data";
 import { canVoid, posHandler, posScope } from "../../../../lib/pos-route";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
+import { livePromotions } from "../../../../lib/promotions-data";
+import { tenant } from "../../../../lib/tenant";
 
 /**
  * GET /admin/pos/context — what the till needs to open: the stores this user
@@ -34,6 +36,13 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
         kind: s.kind,
         terminals,
         payment_methods: methods.filter((m) => acceptedAt(m, s.id)).map((m) => m.code),
+        // Opening hours (lib/store-hours.ts): the till warns when a sale is rung up outside them.
+        hours: s.hours,
+        // The promotions running in this store today (lib/promotions.ts): the seller picks one for the sale.
+        promotions: (await livePromotions(req.scope, s.id)).map((p) => ({
+          id: p.id, name: p.name, description: p.description, kind: p.kind, pct: p.pct, buy_qty: p.buy_qty, get_qty: p.get_qty,
+          min_total: p.min_total_cents === null ? null : p.min_total_cents / 100, value: p.value_cents === null ? null : p.value_cents / 100, ends_on: p.ends_on,
+        })),
       });
     }
     res.json({
@@ -49,6 +58,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       can_void: canVoid(scope),
       void_reasons: VOID_REASONS,
       optical_thresholds: settings.optical_thresholds,
+      timezone: tenant().timezone,
     });
   });
 }

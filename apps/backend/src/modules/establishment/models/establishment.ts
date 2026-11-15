@@ -35,6 +35,8 @@ export const Establishment = model.define("establishment", {
   receipt_note: model.text().nullable(),
   /** Share of the net sales the store keeps in the settlement (HU-33); null = none. */
   settlement_pct: model.float().nullable(),
+  /** Opening hours (lib/store-hours.ts); null = not set. */
+  hours: model.json().nullable(),
   is_active: model.boolean().default(true),
   created_by: model.text().nullable(),
   updated_by: model.text().nullable(),

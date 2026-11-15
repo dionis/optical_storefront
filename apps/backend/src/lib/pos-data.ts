@@ -1,3 +1,4 @@
+import type { AppliedPromotion } from "./promotions";
 import type { ICustomerModuleService, IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import {
@@ -1192,6 +1193,8 @@ export interface CreateSaleInput {
    * and the lab ticket waits until the prescription is added from the sale.
    */
   rxPending?: boolean;
+  /** The promotion the sale used (lib/pos-promotion.ts), copied onto the sale. */
+  promotion?: AppliedPromotion | null;
   idempotencyKey: string | null;
 }
 
@@ -1566,6 +1569,7 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
     // Only the private keys (the patient's frames): a store frame's photo is a public URL.
     own_frame_photo_keys: photoKeys.filter((k, i) => k && input.lines[i]?.kind === "own_frame") as unknown as Record<string, unknown>,
     rx_pending: input.rxPending === true && withLenses && !rx.newId,
+    promotion: (input.promotion ?? null) as unknown as Record<string, unknown> | null,
   });
   return { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed };
 }
@@ -1696,6 +1700,8 @@ export interface SaleRow {
   wearing_photo_at: string | null;
   /** Lenses sold before the prescription exists; it is added from the sale (lib/rx-pending.ts). */
   rx_pending: boolean;
+  /** The promotion it used (lib/promotions.ts), as it was then; null = none. */
+  promotion: AppliedPromotion | null;
   /**
    * The live payment rows. `id` and `details` are what the payment correction
    * (lib/payment-correction.ts) sends back for a row it keeps; `corrected_at`
@@ -1761,6 +1767,7 @@ export function toSale(s: Record<string, unknown>, payments: Array<Record<string
     has_wearing_photo: typeof s.wearing_photo_key === "string" && s.wearing_photo_key.length > 0,
     wearing_photo_at: iso(s.wearing_photo_at),
     rx_pending: s.rx_pending === true,
+    promotion: s.promotion && typeof s.promotion === "object" ? (s.promotion as AppliedPromotion) : null,
     payments: payments
       .filter((p) => p.sale_id === s.id)
       .map((p) => ({

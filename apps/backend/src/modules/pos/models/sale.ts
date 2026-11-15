@@ -84,4 +84,6 @@ export const PosSale = model.define("pos_sale", {
    * later). Cleared when it is added from the sale (lib/rx-pending.ts).
    */
   rx_pending: model.boolean().default(false),
+  /** The promotion the sale used, copied (lib/promotions.ts AppliedPromotion); null = none. */
+  promotion: model.json().nullable(),
 });

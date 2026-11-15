@@ -67,7 +67,7 @@ const sale = (over: Partial<SaleRow> = {}): SaleRow => ({
   created_at: "2026-10-10T12:00:00.000Z",
   payments: [{ id: "pospay_1", method_code: "cash", amount: 80, kind: "deposit", reference: null, details: null, created_at: "2026-10-10T12:00:00.000Z", corrected_at: null }],
   internal_note: null, edited_at: null, edited_by: null, deleted_at: null, deleted_by: null, delete_reason: null, previous_numbers: [],
-  has_wearing_photo: false, wearing_photo_at: null, rx_pending: false,
+  has_wearing_photo: false, wearing_photo_at: null, rx_pending: false, promotion: null,
   ...over,
 });
 

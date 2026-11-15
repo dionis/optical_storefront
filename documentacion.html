@@ -128,6 +128,19 @@
 </section>
 
 <section>
+  <h2>15-nov-2026 — Horario de las tiendas y promociones por tienda</h2>
+  <p>El dueño: «se debe poder editar el horario de apertura y cierre de cada tienda y manejarlo en el panel de admin; además, promociones por tienda, configura algunas 5 y que se puedan habilitar o deshabilitar, agregar otras, editar […] compre 2 lleve 1 gratis, examen de la vista gratis si compra con nosotros […] debe quedar claro qué es descuento y qué es promoción; la promoción se hace por intervalo de tiempo».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Horario de cada tienda</b>: Tiendas → «Horario»: apertura y cierre de cada día (o cerrada), «Copiar el lunes a martes–viernes» y días especiales (feriados, días cortos). El directorio dice «Abierta · cierra 18:00» o «Cerrada · abre lun 09:00»; los recibos llevan la semana en una línea; la caja avisa (sin bloquear) si se vende fuera de horario.</td><td><span class="tag ok">Listo</span></td><td><code>lib/store-hours.ts</code>, migración <code>CreateEstablishmentHours7</code>, <code>StoreHoursEditor.jsx</code>, <code>storeHours.js</code></td></tr>
+    <tr><td><b>Promociones por tienda</b> (Comercial → Promociones): nombre, tipo (compre N lleve M · % en toda la compra · servicio gratis · regalo), tiendas, fechas de inicio y fin, compra mínima, condiciones; encender/apagar, editar, añadir, quitar. Cinco de ejemplo listas y apagadas: Compre 2 lleve 1 gratis · Examen de la vista gratis con tu compra · Segundo par al 50 % · Estuche y limpiador de regalo · Temporada escolar 15 %.</td><td><span class="tag ok">Listo</span></td><td><code>lib/promotions.ts</code>, <code>lib/promotions-data.ts</code>, migración <code>CreateStorePromotion8</code>, <code>/admin/store-promotions</code>, <code>Promotions.jsx</code></td></tr>
+    <tr><td><b>En la caja</b>: en el paso Precio, «Promoción» lista las activas hoy en esa tienda. El «compre N lleve M» pide el número de las ventas pagadas. <b>Descuento y promoción nunca se suman</b>: se aplica el mayor y la pantalla, la ficha y el recibo dicen cuál («Promoción «…» (15 %)» o «Descuento 20 %»); un servicio o regalo sale como «Incluye: …». La promoción no pide aprobación.</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos-promotion.ts</code>, <code>pos_sale.promotion</code> (migración <code>CreatePos9</code>), <code>PosSale.jsx</code>, <code>SaleDocuments.jsx</code>, <code>SaleDetailPanel.jsx</code></td></tr>
+    <tr><td><b>Descuento se llama descuento</b>: el porcentaje por artículo que el dueño pone en «Productos y precios» ahora dice «Descuento −X %» (antes «Promoción −X %»).</td><td><span class="tag ok">Listo</span></td><td><code>i18n/parts/price-matrix.js</code></td></tr>
+  </table>
+  <p class="muted">Supuestos (el dueño no lo precisó): descuento y promoción no se suman (gana el mayor); el horario se usa para informar y avisar, nunca bloquea una venta; las cinco promociones de ejemplo nacen apagadas para que ninguna tienda las aplique antes de que el dueño elija. Pruebas: 103 suites / 1663 (store-hours-promotions); <code>scripts/test-store-hours.mjs</code> (8). QA local: 27 comprobaciones por la API (horario, promociones, cotización, venta, recibo, apagar a mitad de venta) y la caja, Tiendas y Promociones en escritorio, Galaxy Tab A7 Lite y teléfono. <b>Requiere redeploy del backend</b> (3 migraciones).</p>
+</section>
+
+<section>
   <h2>15-nov-2026 — Registro de operaciones (auditoría de la base de datos)</h2>
   <p>El dueño: «hay que guardar el log de todas las operaciones que se hagan en la base de datos con lujo de detalles para auditoría […] un clic ordena ascendente/descendente, doble clic busca un dato de esa columna […] solo en super admin […] exportar e imprimir en PDF según intervalo de tiempo, tienda, etc.; debe quedar profesional».</p>
   <table>

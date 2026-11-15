@@ -120,6 +120,8 @@ export const BAR_TABS = {
   products: { store: true, period: false, export: true },
   // ── Solo el buscador ──
   stores: NONE,
+  // Promociones: una lista de ofertas con sus propias tiendas y fechas.
+  promotions: NONE,
   team: NONE,
   security: NONE,
   posconfig: NONE,

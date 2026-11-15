@@ -44,6 +44,8 @@ export const NAV_GROUPS = [
     { key: "patients", icon: "user" },
     { key: "products", icon: "prices" },
     { key: "costs", icon: "percent" },
+    // Promociones por tienda con fechas (compre 2 lleve 1, examen gratis…): no son los descuentos (docs/PROMOCIONES.md).
+    { key: "promotions", icon: "tag" },
     { key: "sellers", icon: "sellers" },
   ] },
   { key: "admin", icon: "security", items: [

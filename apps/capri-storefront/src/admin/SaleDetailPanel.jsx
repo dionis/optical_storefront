@@ -836,7 +836,10 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
               <Section icon="dollar" title={t("adm.sd.sec.amounts")}>
                 <dl className="sd-totals">
                   <div><dt>{t("adm.sd.list")}</dt><dd>{m(s.list)}</dd></div>
-                  {s.discount > 0 && <div><dt>{t("adm.sd.discount", { n: s.discount_pct })}</dt><dd>−{m(s.discount)}</dd></div>}
+                  {s.discount > 0 && <div><dt>{s.promotion?.priced ? t("adm.promo.pos.line", { name: s.promotion.name, n: s.discount_pct }) : t("adm.sd.discount", { n: s.discount_pct })}</dt><dd>−{m(s.discount)}</dd></div>}
+                  {/* Promoción sin dinero (examen gratis, regalo) o la que perdió frente a un descuento mayor: se dice igual. */}
+                  {s.promotion && !s.promotion.priced && <div><dt>{t(s.promotion.pct ? "adm.promo.pos.notPriced" : "adm.promo.pos.included", { name: s.promotion.name })}</dt><dd>{s.promotion.value_cents ? m(s.promotion.value_cents / 100) : "✓"}</dd></div>}
+                  {s.promotion?.ref && <div><dt>{t("adm.doc.rcpt.promoRef", { ref: s.promotion.ref })}</dt><dd /></div>}
                   {doc?.totals?.tax > 0 && <div><dt>{t("adm.sd.tax")}</dt><dd>{m(doc.totals.tax)}</dd></div>}
                   <div className="sd-total"><dt>{t("adm.sd.total")}</dt><dd>{m(s.total)}</dd></div>
                   <div><dt>{t("adm.sd.paid")}</dt><dd>{m(s.paid)}</dd></div>

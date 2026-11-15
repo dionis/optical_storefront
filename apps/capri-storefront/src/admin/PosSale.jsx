@@ -45,6 +45,9 @@ import HelpTip from "./HelpTip.jsx";
 import { EMPTY_RX, fromRx, inferType, toRx, validateRx } from "./rxRules.js";
 import { promoOf } from "./pricing/promo.js";
 import "./pricing/promo.css";
+import { hoursStatus } from "./storeHours.js";
+import { promoEffect } from "./adminPromotions.js";
+import "./promotions.css";
 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
 // Tema de ayuda (HelpTip) de cada paso; la receta tiene los suyos en la cuadrícula.
@@ -398,6 +401,9 @@ export default function PosSale({ me }) {
   const [wornFrame, setWornFrame] = useState(EMPTY_WORN_FRAME);
   // 5 · precio
   const [discount, setDiscount] = useState("");
+  // Promoción de la tienda elegida para esta venta (backend lib/promotions.ts): no se suma al descuento, gana la mayor.
+  const [promoId, setPromoId] = useState("");
+  const [promoRef, setPromoRef] = useState("");
   const [q, setQ] = useState(null);
   // "idle" | "loading" | "ok" | "error": estado de la última cotización; en error se conserva `q` para la franja.
   const [qStatus, setQStatus] = useState("idle");
@@ -433,6 +439,13 @@ export default function PosSale({ me }) {
       .catch((e) => setCtxError(e.message));
   }, []);
   const store = ctx?.stores.find((s) => s.id === storeId) || null;
+  // ¿Cerrada según su horario? Se vuelve a mirar cada minuto (la caja se queda abierta horas).
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => { const h = setInterval(() => setClock(Date.now()), 60_000); return () => clearInterval(h); }, []);
+  const afterHours = useMemo(() => {
+    const st = hoursStatus(store?.hours, new Date(clock), ctx?.timezone);
+    return st.known && !st.open ? st : null;
+  }, [store?.hours, clock, ctx?.timezone]);
   useEffect(() => {
     if (!store) return;
     write("pos_store", store.id);
@@ -606,15 +619,19 @@ export default function PosSale({ me }) {
   // dependencia: dos renders con la misma venta no vuelven a preguntar.
   // Lo más lejos que se llegó: al volver a un paso anterior (saltos entre pasos) la cotización sigue viva.
   const reached = Math.max(step, maxStep);
+  // La promoción elegida, si sigue entre las de hoy de esta tienda. Un «compre N, lleve M» espera el número de la venta pagada.
+  const promo = (store?.promotions || []).find((p) => p.id === promoId) || null;
+  const promoWaitsRef = Boolean(promo && promo.kind === "bogo" && !promoRef.trim());
+  const promoParams = () => (promo && !promoWaitsRef ? { promotion_id: promo.id, promotion_ref: promo.kind === "bogo" ? promoRef.trim() : null } : {});
   const withRx = reached >= RX_FROM && !noRx && !rxPending && rxFilled(rxNew);
   // Una línea con lente pero sin material (la montura del cliente antes de
   // Lentes, o el material quitado) no tiene precio posible: no se pregunta.
   const quotable = lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code);
   const quoteBody = useMemo(() => (store && lines.length && quotable && reached >= QUOTE_FROM && STEPS[step] !== "done"
-    ? JSON.stringify({ store: store.id, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, prescription: withRx ? newBody() : null, worn: withRx ? wornBody() : null })
+    ? JSON.stringify({ store: store.id, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, ...promoParams(), prescription: withRx ? newBody() : null, worn: withRx ? wornBody() : null })
     : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store?.id, lines, discount, quotable && reached >= QUOTE_FROM && STEPS[step] !== "done", withRx, withRx && rxNew, withRx && rxWorn, withRx && worn, withRx && wornFrame, withRx && wears, withRx && ocr.status]);
+    [store?.id, lines, discount, promoId, promoRef, quotable && reached >= QUOTE_FROM && STEPS[step] !== "done", withRx, withRx && rxNew, withRx && rxWorn, withRx && worn, withRx && wornFrame, withRx && wears, withRx && ocr.status]);
   useEffect(() => {
     if (!quoteBody) { quoteSeq.current += 1; setQ(null); setQStatus("idle"); return undefined; }
     const seq = ++quoteSeq.current;
@@ -635,7 +652,9 @@ export default function PosSale({ me }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteBody]);
   // Un descuento distinto invalida la aprobación pedida para el anterior.
-  useEffect(() => { setApproval(null); }, [discount, lines]);
+  useEffect(() => { setApproval(null); }, [discount, lines, promoId]);
+  // Otra tienda, otras promociones.
+  useEffect(() => { setPromoId(""); setPromoRef(""); }, [storeId]);
 
   // La caja espera la decisión del dueño o un superadmin consultando cada pocos segundos.
   useEffect(() => {
@@ -758,6 +777,7 @@ export default function PosSale({ me }) {
         },
         lines: apiLines(),
         discount_pct: discount || 0,
+        ...promoParams(),
         approval_id: approval?.status === "approved" ? approval.id : null,
         payments: payRows.filter((p) => p.method_code && Number(p.amount) > 0).map(({ method_code, amount, details }) => ({ method_code, amount, details })),
         prescriptions: { new: newBody(), worn: wornBody() },
@@ -827,6 +847,11 @@ export default function PosSale({ me }) {
           {ctx.seller_code && <span className="adm-team-tag code" title={t("adm.profile.f.seller_code")}>{ctx.seller_code}</span>}
         </div>
       </div>
+
+      {/* Fuera del horario de la tienda (Tiendas → Horario): se avisa, nunca se bloquea la venta. */}
+      {afterHours && stepName !== "done" && (
+        <div className="pos-hours-warn" role="status"><Icon name="clock" size={14} />{afterHours.next_open ? t(afterHours.next_open.today ? "adm.hours.pos.closedToday" : "adm.hours.pos.closed", { time: afterHours.next_open.time, date: new Date(`${afterHours.next_open.date}T12:00:00`).toLocaleDateString(lang === "en" ? "en-US" : "es-ES", { weekday: "long", day: "numeric", month: "short" }) }) : t("adm.hours.pos.closedNoNext")}</div>
+      )}
 
       {/* Cabecera pegajosa: pasos + total en curso, siempre a la vista (también con el teclado abierto, compactada). */}
       {stepName !== "done" && (
@@ -1108,13 +1133,32 @@ export default function PosSale({ me }) {
                     ))}
                   </tbody>
                 </table>
+                {(store?.promotions || []).length > 0 && (
+                  <div className="pos-promo">
+                    <label><span><Icon name="tag" size={12} /> {t("adm.promo.pos.label")}</span>
+                      <select value={promoId} onChange={(e) => { setPromoId(e.target.value); setPromoRef(""); }}>
+                        <option value="">{t("adm.promo.pos.none")}</option>
+                        {store.promotions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </label>
+                    {promo && <span className="pos-promo-note"><Icon name="info" size={12} />{promoEffect(promo, t, m)}{promo.min_total ? ` · ${t("adm.promo.minShort", { value: m(promo.min_total) })}` : ""}{promo.description ? ` — ${promo.description}` : ""}</span>}
+                    {promo?.kind === "bogo" && (
+                      <label><span>{t("adm.promo.pos.ref", { n: promo.buy_qty })}</span>
+                        <input maxLength={120} value={promoRef} onChange={(e) => setPromoRef(e.target.value)} placeholder={t("adm.promo.pos.refPh")} autoComplete="off" />
+                      </label>
+                    )}
+                    {promoWaitsRef && <span className="pos-promo-note warn"><Icon name="alert" size={12} />{t("adm.promo.pos.refNeeded")}</span>}
+                    {promo && q?.promotion && !q.promotion.priced && q.promotion.pct ? <span className="pos-promo-note warn"><Icon name="alert" size={12} />{t("adm.promo.pos.discountWins", { d: q.quote.discount_pct, p: q.promotion.pct })}</span> : null}
+                  </div>
+                )}
                 <div className="pos-discount">
                   <label><span>{t("adm.pos.price.discount")}<HelpTip topic="pos.step.price" /></span><input inputMode="decimal" enterKeyHint="done" autoComplete="off" maxLength={5} value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
                   <small className="muted">{ctx.discount_limit_pct == null ? t("adm.pos.price.noLimit") : t("adm.pos.price.limit", { n: ctx.discount_limit_pct })}</small>
                 </div>
                 <dl className="pos-totals">
                   <dt>{t("adm.pos.price.listTotal")}</dt><dd>{m(q.quote.list_cents / 100)}</dd>
-                  {q.quote.discount_cents > 0 && <><dt>{t("adm.pos.price.discountAmt", { n: q.quote.discount_pct })}</dt><dd>−{m(q.quote.discount_cents / 100)}</dd></>}
+                  {q.quote.discount_cents > 0 && <><dt>{q.discount_source === "promotion" && q.promotion ? t("adm.promo.pos.line", { name: q.promotion.name, n: q.quote.discount_pct }) : t("adm.pos.price.discountAmt", { n: q.quote.discount_pct })}</dt><dd>−{m(q.quote.discount_cents / 100)}</dd></>}
+                  {q.promotion && !q.promotion.pct && <><dt>{t("adm.promo.pos.included", { name: q.promotion.name })}</dt><dd>{q.promotion.value_cents ? m(q.promotion.value_cents / 100) : "✓"}</dd></>}
                   {q.quote.tax_cents > 0 && <><dt>{t("adm.pos.price.tax")}</dt><dd>{m(q.quote.tax_cents / 100)}</dd></>}
                   <dt className="big">{t("adm.pos.price.total")}</dt><dd className="big">{m(q.quote.total)}</dd>
                 </dl>

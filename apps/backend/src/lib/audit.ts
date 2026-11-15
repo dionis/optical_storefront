@@ -63,6 +63,11 @@ export const AUDIT_ACTIONS = [
   "tenant.brand",
   // Opening a patient file (docs/PATIENTS.md): who read whose health data. No values stored.
   "patient.view",
+  // Promotions per store (lib/promotions-data.ts): created / edited / switched on or off, removed.
+  "promotion.change",
+  "promotion.delete",
+  // Opening hours of a store (Tiendas → Horario).
+  "store.hours",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
