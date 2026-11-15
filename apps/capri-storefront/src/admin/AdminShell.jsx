@@ -59,6 +59,8 @@ export const NAV_GROUPS = [
     // supervisor sigue configurando LAS SUYAS (navGroupsFor, más abajo).
     { key: "alerts", icon: "bell" },
     { key: "audit", icon: "history" },
+    // Cada escritura en la base de datos, con quién y desde dónde (docs/OPERATION-LOG.md): solo dueño y superadmin.
+    { key: "oplog", icon: "database" },
     { key: "security", icon: "security" },
     // Créditos y consumo de los proveedores de IA: solo dueño y superadmin.
     { key: "aiusage", icon: "sparkles" },

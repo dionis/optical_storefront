@@ -16,6 +16,7 @@ import {
 import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
 import { revokeSessionsAfterPasswordRecovery } from "../lib/session-control";
 import { staffGuard } from "../lib/staff-guard";
+import { opContextMiddleware } from "../lib/operation-log-context";
 import { warmTenantProfile } from "../lib/tenant-profile";
 import { captureCartOrigin, storefrontOriginScope } from "../lib/storefront-origin-http";
 import { webStorePrices } from "../lib/web-pricing-http";
@@ -264,7 +265,9 @@ export default defineMiddlewares({
       // Security headers on every response (HSTS, nosniff, no framing…). See
       // lib/security.ts; the storefront gets its own set from vercel.json.
       matcher: "/*",
-      middlewares: [securityHeaders, tenantProfileWarm],
+      // Security headers first (tests/security.test.ts); then the operation log's context, so every write of the
+      // request carries who and from where (lib/operation-log-context.ts).
+      middlewares: [securityHeaders, opContextMiddleware, tenantProfileWarm],
     },
     {
       // Several storefronts on one backend (lib/storefront-origin.ts): links built

@@ -109,6 +109,8 @@ export const BAR_TABS = {
   storestatus: { store: true, period: false, export: true },
   approvals: { store: true, period: false, export: false },
   audit: { store: true, period: true, export: false },
+  // Registro de operaciones: la tienda y el período de la barra lo filtran, y exporta (PDF, Excel, CSV) lo filtrado.
+  oplog: ALL,
   // Pedidos: la tienda de la barra filtra la lista (una tienda, la tienda online o todas); las fechas son las suyas.
   orders: { store: true, period: false, export: false },
   // «Productos y precios» (Productos + Precios y costos, 6-nov-2026): la tienda

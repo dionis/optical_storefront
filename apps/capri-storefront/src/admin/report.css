@@ -99,6 +99,7 @@ body { font-family: var(--rp-font); color: var(--rp-ink); font-size: 10px; line-
 .rp-table thead { display: table-header-group; }
 .rp-table tfoot { display: table-footer-group; }
 .rp-table th, .rp-table td { padding: 1mm 0.9mm; border-bottom: 1px solid var(--rp-line-2); text-align: left; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-table td.wrap { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; line-height: 1.25; }
 .rp-table th { font-size: 7px; line-height: 1.1; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--rp-muted); border-bottom: 1.5px solid var(--rp-ink); background: #fff; white-space: normal; vertical-align: bottom; }
 .rp-table th.r, .rp-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .rp-table th.c, .rp-table td.c { text-align: center; }
