@@ -216,7 +216,7 @@ function checklist(m) {
         ? `   [ ] pnpm tenant vercel → reescritura ${tenantProxyPath(m.slug)} → ${routed}; commit y PR`
         : "   [!] domains.api falta o no es https: el build fallará hasta corregirlo",
     "9. Catálogo",
-    "   [ ] Proveedor ya en uso: importar el catálogo base compartido (§8.1); nuevo: python -m scraper sync --full",
+    "   [ ] Proveedor ya en uso: CATALOG_SOURCE_URL=<backend origen> CATALOG_SOURCE_KEY=sk_… COPY_CATALOG_CONFIRM=yes npx medusa exec ./src/scripts/copy-catalog.js (solo lee el origen; fotos y vistas por la URL pública de su bucket → VITE_R2_PUBLIC_URL / R2_PUBLIC_URL); nuevo: python -m scraper sync --full",
     "   [ ] pnpm reindex",
     "10. Entrega al dueño",
     `   [ ] Simulacro: ${b.dry}`,
