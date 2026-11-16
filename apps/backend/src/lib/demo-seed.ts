@@ -35,8 +35,16 @@ export function databaseTarget(databaseUrl: string): string {
   return `${u.hostname}${u.port ? `:${u.port}` : ""}/${u.pathname.slice(1)}`;
 }
 
-/** The only databases that may be seeded: the staging project on Supabase. */
-export const STAGING_DATABASES = ["dae9efc426f7950b04a739cb38ee26541d7a30023b8aa496458f8453500a512d"];
+/**
+ * The only databases that may be seeded:
+ *  - the staging project on Supabase;
+ *  - Optica Vista (tenants/optica-vista), the D3E demo optician on the Coolify
+ *    VM (its own Postgres, api.d3e.llc) — added 2026-11-15 for its demo data.
+ */
+export const STAGING_DATABASES = [
+  "dae9efc426f7950b04a739cb38ee26541d7a30023b8aa496458f8453500a512d",
+  "def7a6aa318291d49a91f1a82ee5dbf8258aff10660d3dc978d69b23551c285b",
+];
 
 /** Never, whatever else is configured: the Supabase project that holds real customers' orders. */
 export const FORBIDDEN_DATABASES = ["83d107c093777e8080b9aa14586dfefe31e947dc21a85cd8b37037c75f54e719"];
