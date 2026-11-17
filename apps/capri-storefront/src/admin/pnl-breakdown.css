@@ -1,0 +1,59 @@
+/* Desglose de las tarjetas del resultado (PnlBreakdown.jsx). */
+.sc-kpi.clickable { cursor: pointer; text-align: left; font: inherit; color: inherit; transition: border-color .15s, box-shadow .15s, transform .12s; }
+.sc-kpi.clickable:hover, .sc-kpi.clickable:focus-visible { border-color: var(--adm-accent); box-shadow: 0 0 0 3px var(--adm-accent-soft); outline: none; }
+.sc-kpi.clickable:active { transform: scale(.99); }
+.sc-kpi .sc-kpi-more { font-style: normal; margin-top: 2px; font-size: 10.5px; font-weight: 700; color: var(--adm-accent-ink); display: inline-flex; align-items: center; gap: 4px; }
+.brk-wrap { position: fixed; inset: 0; z-index: 400; display: flex; justify-content: flex-end; }
+.brk-backdrop { position: absolute; inset: 0; background: rgba(15, 18, 30, .38); }
+.brk-panel { position: relative; width: min(640px, 100%); height: 100%; background: var(--adm-surface); box-shadow: -8px 0 28px rgba(0,0,0,.18); display: flex; flex-direction: column; }
+.brk-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 16px 18px 8px; }
+.brk-head small { color: var(--adm-muted); font-weight: 700; font-size: 11.5px; }
+.brk-head h3 { margin: 4px 0 0; font-size: 19px; font-family: var(--adm-display); }
+.brk-x { border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: 8px; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; flex: none; }
+.brk-tabs { display: flex; gap: 4px; padding: 0 14px 8px; border-bottom: 1px solid var(--adm-line); overflow-x: auto; }
+.brk-tabs button { border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--adm-muted); cursor: pointer; white-space: nowrap; min-height: 34px; }
+.brk-tabs button.on { background: var(--adm-accent); border-color: var(--adm-accent); color: #fff; }
+.brk-body { padding: 14px 18px 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.brk-lead { margin: 0; font-size: 13px; color: var(--adm-muted); line-height: 1.45; }
+.brk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.brk-table th, .brk-table td { padding: 7px 4px; border-bottom: 1px solid var(--adm-line-2, var(--adm-line)); vertical-align: top; text-align: left; }
+.brk-table th span { font-weight: 600; }
+.brk-table th small { display: block; font-weight: 400; color: var(--adm-muted); font-size: 11.5px; line-height: 1.35; margin-top: 1px; }
+.brk-table td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.brk-table .neg { color: var(--adm-red-dark, #b42318); }
+.brk-table tr.strong th span, .brk-table tr.strong td { font-weight: 800; }
+.brk-table tr.strong { background: var(--adm-line-2, #f6f7f9); }
+.brk-table tr.sub th { padding-left: 18px; }
+.brk-table tr.sub th span { font-weight: 500; }
+.brk-table tfoot th, .brk-table tfoot td { font-weight: 800; border-top: 2px solid var(--adm-ink, #1a1f2e); border-bottom: 0; font-size: 14px; }
+.brk-table thead th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--adm-muted); }
+.brk-table thead th.num { text-align: right; }
+.brk-stores { margin-top: 4px; }
+.brk-facts { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; }
+.brk-facts b { font-family: var(--adm-display); font-size: 17px; margin-right: 4px; }
+.brk-src { margin: 0; font-size: 12px; color: var(--adm-muted); display: flex; gap: 6px; align-items: flex-start; line-height: 1.4; }
+.brk-verdict { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--adm-accent-soft); color: var(--adm-accent-ink); font-weight: 700; font-size: 13px; }
+.brk-verdict.bad { background: var(--adm-red-soft); color: var(--adm-red-dark, #b42318); }
+.brk-verdict.good { background: var(--adm-green-soft); color: var(--adm-green-dark, #1b7f4c); }
+.brk-formula { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border: 1px dashed var(--adm-line); border-radius: 10px; }
+.brk-formula span { display: flex; flex-direction: column; min-width: 0; }
+.brk-formula small { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--adm-muted); font-weight: 700; }
+.brk-formula b { font-family: var(--adm-display); font-size: 18px; font-variant-numeric: tabular-nums; }
+.brk-formula i { font-style: normal; font-size: 18px; color: var(--adm-muted); }
+.brk-formula .res b { color: var(--adm-accent-ink); }
+
+/* Autocompletar costos (CostNameInput.jsx) y copiar a tiendas. */
+.cst-ac { position: relative; flex: 1; min-width: 0; }
+.cst-ac input { width: 100%; }
+.cst-ac-list { position: absolute; z-index: 60; left: 0; right: 0; top: calc(100% + 2px); background: var(--adm-surface); border: 1px solid var(--adm-line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14); max-height: 280px; overflow-y: auto; padding: 4px; list-style: none; margin: 0; min-width: 260px; }
+.cst-ac-list li button { width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 9px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 13px; display: flex; flex-direction: column; gap: 1px; }
+.cst-ac-list li button:hover, .cst-ac-list li button.on { background: var(--adm-accent-soft); }
+.cst-ac-list li small { color: var(--adm-muted); font-size: 11.5px; }
+.cst-ac-head { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--adm-muted); font-weight: 700; padding: 4px 9px 2px; }
+.cst-stores { border: 1px solid var(--adm-line); border-radius: 10px; padding: 8px 12px; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+.cst-stores legend { font-size: 12px; font-weight: 700; color: var(--adm-muted); padding: 0 4px; }
+.cst-stores label { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; }
+.cst-stores .hint { flex-basis: 100%; font-size: 12px; color: var(--adm-muted); }
+.cst-copy { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 10px; border: 1px dashed var(--adm-accent); border-radius: 8px; font-size: 12.5px; background: var(--adm-accent-soft); }
+.cst-copy label { display: inline-flex; align-items: center; gap: 5px; }
+.cst-copy small { color: var(--adm-muted); }

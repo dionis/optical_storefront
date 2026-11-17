@@ -47,5 +47,6 @@ import webChannel from "./web-channel.js";
 import operationLog from "./operation-log.js";
 import storeHoursPromos from "./store-hours-promos.js";
 import posMissing from "./pos-missing.js";
+import pnlBreakdown from "./pnl-breakdown.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant, saleAdmin, password, wearing, frameModes, webChannel, operationLog, storeHoursPromos, posMissing];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant, saleAdmin, password, wearing, frameModes, webChannel, operationLog, storeHoursPromos, posMissing, pnlBreakdown];

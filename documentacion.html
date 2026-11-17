@@ -128,6 +128,18 @@
 </section>
 
 <section>
+  <h2>17-nov-2026 — Desglose de cada tarjeta del resultado y costos iguales en varias tiendas</h2>
+  <p>El dueño: «en cada card debe aparecer, cuando se dé clic, el desglose económico financiero exacto de esos datos, de dónde sale eso; además, cuando se agrega un costo debe tener autocompletado según los costos que ya se hayan hecho, de tal manera que se puedan poner los mismos costos en todas las tiendas y poder salvar los específicos de determinadas tiendas».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Clic en una tarjeta = su desglose</b> (Resultado por tienda): <b>Ventas netas</b> (cobrado con impuesto − impuesto = neto; caja/web; gravadas/exentas; entrega; ventas y ticket promedio; por tienda), <b>Costos del mes</b> (costo de lo vendido por monturas/lentes/tratamientos/fijos por venta, comisiones del cobro por método, comisión de cada vendedor con su %, y cada partida variable, fija y compartida con su cálculo: «$50 a la semana × 52 ÷ 12», «$3 × 41 ventas», «le toca el 38 % de $600»), <b>Resultado</b> (la cuenta en cascada y por tienda), <b>Margen %</b> (contribución ÷ ventas, «de cada $100 quedan…») y <b>Punto de equilibrio</b> (fijos ÷ margen, cuánto falta y cuánto por día en lo que queda del mes). Siempre suma la tarjeta al centavo: sale del mismo libro.</td><td><span class="tag ok">Listo</span></td><td><code>PnlBreakdown.jsx</code>, <code>GET /admin/store-costs/breakdown</code>, <code>lib/pnl-breakdown.ts</code></td></tr>
+    <tr><td><b>Autocompletado al agregar un costo</b>: al escribir el nombre salen los costos que ya existen (en qué tiendas y por cuánto); elegir uno copia categoría, tipo, importe, frecuencia, proveedor y notas. En Resultado por tienda y en Reglas y comisiones.</td><td><span class="tag ok">Listo</span></td><td><code>CostNameInput.jsx</code>, <code>StoreCosts.jsx</code>, <code>pricing/CostsSection.jsx</code></td></tr>
+    <tr><td><b>El mismo costo en varias tiendas</b>: «Varias tiendas (una copia por tienda)» al agregar; al editar, «Aplicar también en otras tiendas» (la que ya lo tiene se actualiza, la que no lo recibe); en Reglas y comisiones, «Copiar a otras tiendas» en cada partida. Cada copia es una partida propia de esa tienda: se cambia por su lado (una renta distinta en Op2) sin tocar las demás.</td><td><span class="tag ok">Listo</span></td><td><code>StoreCosts.jsx</code>, <code>pricing/CostsSection.jsx</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 105 suites / 1672 (pnl-breakdown). QA local: el desglose cuadra con las tarjetas al centavo en todas las tiendas y en cada una (16 comprobaciones, dos meses); las cinco pestañas en escritorio, Galaxy Tab A7 Lite y teléfono; costo nuevo autocompletado y creado en las tres tiendas, cambio aplicado a otra tienda, y copia desde Reglas y comisiones. <b>Requiere redeploy del backend</b> (ruta nueva; sin migraciones).</p>
+</section>
+
+<section>
   <h2>17-nov-2026 — Registrar la venta aunque falten datos (con avisos)</h2>
   <p>El dueño: «se debe poder registrar la venta aunque falten datos porque luego se puede editar; resuelve esto de tal manera que sea cómodo pero siempre dando warnings en ventanas emergentes y explicando cómo proceder».</p>
   <table>

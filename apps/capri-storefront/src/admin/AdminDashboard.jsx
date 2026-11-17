@@ -748,7 +748,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "pendingbalances" && <PendingBalances me={me} go={go} openSale={salePanel.open} />}
       {salePanel.panel}
       {tab === "cash" && <PosCash me={me} />}
-      {tab === "storecosts" && <StoreCosts me={me} />}
+      {tab === "storecosts" && <StoreCosts me={me} go={go} />}
       {tab === "statement" && <StoreStatement me={me} go={go} />}
       {tab === "storeorders" && <StoreOrders me={me} go={go} params={nav.params} />}
       {tab === "patients" && <Patients me={me} openSale={salePanel.open} params={nav.params} />}
