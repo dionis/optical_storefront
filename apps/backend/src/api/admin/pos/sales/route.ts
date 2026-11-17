@@ -4,6 +4,7 @@ import { ONLINE_KIND } from "../../../../lib/establishments";
 import { tenant } from "../../../../lib/tenant";
 import {
   cleanCustomer,
+  missingCustomerData,
   cleanDiscountPct,
   cleanLines,
   cleanPayments,
@@ -164,9 +165,11 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
     if (till) throw new PosError(till, 403);
 
     // The email is optional at the counter; only a sale in THE online store needs it.
-    const customer = cleanCustomer(body.customer, new Date(), tenant().timezone, { requireEmail: store.kind === ONLINE_KIND });
+    // Lenient (owner, 17-nov-2026): a sale can be recorded with patient data missing — the till
+    // warns and the sale says what is missing until it is completed from its detail.
+    const customer = cleanCustomer(body.customer, new Date(), tenant().timezone, { requireEmail: store.kind === ONLINE_KIND, lenient: true });
     if ("reason" in customer) throw new PosError(customer.reason);
-    if (body.delivery === "ship" && !customer.customer.address) throw new PosError("address_required_to_ship");
+    const missing = missingCustomerData(customer.customer, body.delivery === "ship" ? "ship" : "pickup");
     const lines = cleanLines(body.lines);
     if ("reason" in lines) throw new PosError(lines.reason);
     const discount = cleanDiscountPct(body.discount_pct);
@@ -201,7 +204,8 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
     // A promotion's percentage was set up by the owner: no approval for it.
     const needsApproval = promoted.discount_source === "promotion" ? false : discountNeedsApproval({ isAdmin: scope.is_admin, pct: quote.discount_pct, limitPct, belowMinimum: quote.below_minimum });
 
-    const payments = cleanPayments(body.payments, quote.total_cents, methods, { establishmentId: store.id });
+    // No deposit is allowed: the whole total stays as balance (the till warned).
+    const payments = cleanPayments(body.payments, quote.total_cents, methods, { establishmentId: store.id, allowNone: true });
     if ("reason" in payments) throw new PosError(payments.reason, 422, payments.method ? { method: payments.method } : {});
 
     const key = typeof body.idempotency_key === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(body.idempotency_key) ? body.idempotency_key : null;
@@ -225,6 +229,7 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
       notifySms: body.notify_sms === true,
       rxPending,
       promotion: promoted.promotion,
+      missing,
       idempotencyKey: key,
     });
     res.json({ sale });

@@ -128,6 +128,20 @@
 </section>
 
 <section>
+  <h2>17-nov-2026 — Registrar la venta aunque falten datos (con avisos)</h2>
+  <p>El dueño: «se debe poder registrar la venta aunque falten datos porque luego se puede editar; resuelve esto de tal manera que sea cómodo pero siempre dando warnings en ventanas emergentes y explicando cómo proceder».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Siguiente siempre responde</b>: si falta algo que se puede completar después (apellido, teléfono o nombre —uno de los dos basta—, si usa espejuelos, receta nueva, altura de montaje, anticipo, dirección de envío) sale una ventana con cada dato, qué pasa si se sigue y dos botones: «Seguir sin estos datos» o «Completar ahora». Lo aceptado no se vuelve a preguntar en esa venta.</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code> (<code>stepIssues</code>, <code>askSoft</code>)</td></tr>
+    <tr><td><b>Lo que no se puede dejar, explicado</b>: datos escritos mal, ni nombre ni teléfono, sin montura, sin material, receta fuera de rango u OCR sin confirmar, descuento sin aprobar, cobro de más o línea de cobro incompleta: una ventana dice qué pasa y cómo arreglarlo, y lleva al campo. Con una receta mal escrita ofrece «Dejar la receta pendiente».</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code> (<code>explainHard</code>), <code>i18n/parts/pos-missing.js</code></td></tr>
+    <tr><td><b>Sin receta = graduación pendiente</b> automática (aviso incluido); <b>sin anticipo</b> el total queda como saldo; <b>envío sin dirección</b> se permite y queda pendiente.</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos.ts</code> (<code>cleanCustomer lenient</code>, <code>cleanPayments allowNone</code>)</td></tr>
+    <tr><td><b>Resumen antes de registrar</b>: «La venta se registrará con N dato(s) pendiente(s)», con la lista, «Registrar con datos pendientes» o «Volver y completar».</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code> (<code>tryConfirm</code>)</td></tr>
+    <tr><td><b>La venta recuerda lo que le falta</b> hasta completarlo: al terminar, la caja lo lista con «Completar ahora» (abre la ficha); la ficha lo muestra con «Completar datos»; Ventas de tienda marca «N pendiente(s)». Al corregir los datos, al pasar a recoger en tienda o al cobrar, el aviso se actualiza solo.</td><td><span class="tag ok">Listo</span></td><td><code>pos_sale.missing</code> (migración <code>CreatePos10</code>), <code>saleMissing</code>, <code>MissingData.jsx</code>, <code>SaleDetailPanel.jsx</code>, <code>PosSales.jsx</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 104 suites / 1670 (pos-missing-data). QA local: 12 comprobaciones por la API (sin nombre ni teléfono rechazado, teléfono mal escrito rechazado, solo nombre sin anticipo y envío sin dirección registrada, lo que falta en la venta y la lista, recibo, completar por partes) y el flujo en pantalla en Galaxy Tab A7 Lite, escritorio y teléfono, más las pruebas anteriores de graduación pendiente, pagos y promociones. <b>Requiere redeploy del backend</b> (migración <code>CreatePos10</code>).</p>
+</section>
+
+<section>
   <h2>15-nov-2026 — Horario de las tiendas y promociones por tienda</h2>
   <p>El dueño: «se debe poder editar el horario de apertura y cierre de cada tienda y manejarlo en el panel de admin; además, promociones por tienda, configura algunas 5 y que se puedan habilitar o deshabilitar, agregar otras, editar […] compre 2 lleve 1 gratis, examen de la vista gratis si compra con nosotros […] debe quedar claro qué es descuento y qué es promoción; la promoción se hace por intervalo de tiempo».</p>
   <table>

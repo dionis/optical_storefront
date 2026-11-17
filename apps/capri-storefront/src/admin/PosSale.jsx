@@ -24,6 +24,7 @@ import {
   requestApproval,
   searchCustomers,
   setWearingPhoto,
+  fetchSale,
 } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFrameSearch from "./PosFrameSearch.jsx";
@@ -38,11 +39,13 @@ import { useCatalog } from "../data/catalogStore.js";
 import FieldError from "../components/FieldError.jsx";
 import PosSaleSummary, { PosRunningTotal } from "./PosSaleSummary.jsx";
 import { birthMax, customerProblems, emailProblem, LIMITS, paymentProblem, phoneProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
+import { useSalePanel } from "./SaleDetailPanel.jsx";
+import MissingData from "./MissingData.jsx";
 import "./pos.css";
 import "./pos-tablet.css";
 import RxForm from "./PosRx.jsx";
 import HelpTip from "./HelpTip.jsx";
-import { EMPTY_RX, fromRx, inferType, toRx, validateRx } from "./rxRules.js";
+import { EMPTY_RX, fromRx, hasRxErrors, inferType, toRx, validateRx } from "./rxRules.js";
 import { promoOf } from "./pricing/promo.js";
 import "./pricing/promo.css";
 import { hoursStatus } from "./storeHours.js";
@@ -338,7 +341,7 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx, rxPending = false }
 
 export default function PosSale({ me }) {
   const { t, lang } = useLang();
-  const { toast } = useFeedback();
+  const { toast, dialog, confirm } = useFeedback();
   const [ctx, setCtx] = useState(null);
   const [ctxError, setCtxError] = useState(null);
   const [storeId, setStoreId] = useState("");
@@ -395,6 +398,9 @@ export default function PosSale({ me }) {
   // la venta se termina igual y la receta se agrega desde la venta (backend lib/rx-pending.ts).
   const [rxPending, setRxPending] = useState(false);
   const [rxNew, setRxNew] = useState(EMPTY_RX);
+  // Sin receta escrita y sin marcar nada: la venta sigue como «graduación pendiente» (dueño, 17-nov-2026:
+  // «se debe poder registrar la venta aunque falten datos»). Se avisa al pasar de paso y al registrar.
+  const pendingRx = rxPending || (!noRx && !rxFilled(rxNew));
   const [ocr, setOcr] = useState({ status: "idle", confirmed: true });
   const [rxWorn, setRxWorn] = useState(EMPTY_RX);
   const [worn, setWorn] = useState({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
@@ -588,7 +594,7 @@ export default function PosSale({ me }) {
       const multi = isMulti(rxNew);
       const d = l.selection.design_code;
       // Sin graduación todavía, cualquier diseño vale (lo decide lo que el paciente compra).
-      const fits = d === "frame-only" ? l.kind !== "own_frame" : catalog.DESIGNS.some((x) => x.id === d && (rxPending || (multi ? x.cat !== "sv" : x.cat === "sv")));
+      const fits = d === "frame-only" ? l.kind !== "own_frame" : catalog.DESIGNS.some((x) => x.id === d && (pendingRx || (multi ? x.cat !== "sv" : x.cat === "sv")));
       if (fits && !(l.kind !== "own_frame" && d === "frame-only" && l.touched !== true && !noRx)) return l;
       const first = catalog.DESIGNS.find((x) => (multi ? x.cat === "prog" : x.cat === "sv"));
       const power = maxPower(rxNew);
@@ -610,7 +616,7 @@ export default function PosSale({ me }) {
     } : null,
   } : null);
   // Leída de la foto → `ocr` y verificada solo si el vendedor confirmó la lectura.
-  const newBody = () => (noRx || rxPending ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual", ocr.status !== "done" || ocr.confirmed === true), rx_date: rxNew.rx_date || null });
+  const newBody = () => (noRx || pendingRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual", ocr.status !== "done" || ocr.confirmed === true), rx_date: rxNew.rx_date || null });
 
   // Cotización en curso: se pide al servidor desde que hay montura (paso
   // Montura) y cada vez que cambia algo que afecta al precio, con una espera
@@ -712,28 +718,101 @@ export default function PosSale({ me }) {
   // El correo solo es obligatorio en la tienda online; en el mostrador es opcional.
   const requireEmail = store?.kind === "online";
   const hasEmail = Boolean(customer.email.trim());
-  const custProblems = customerProblems(customer, { requireAddress: delivery === "ship", requireEmail });
-  const canNext = () => canPass(STEPS[step]);
-  function canPass(name) {
+  // Lo que está MAL escrito (o el correo de la tienda online): eso sí hay que corregirlo. Lo que está
+  // VACÍO (nombre, apellido, teléfono, dirección de envío) se avisa y la venta se registra igual.
+  const custProblems = customerProblems(customer, { requireEmail, lenient: true });
+  const needsLensRx = lines.some((l) => l.selection.design_code !== "frame-only");
+  const multiSold = lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; });
+  // Solo falta la altura de montaje (progresivo/bifocal): se avisa; el resto de errores de la receta se corrige.
+  const rxSegOnly = !rxCheck.ok && rxCheck.errors.seg_height === "adm.pos.rx.err.segRequired" && !hasRxErrors({ ...rxCheck.errors, seg_height: null });
+  const W = (key, extra) => ({ key, label: t(`adm.pos.warn.${key}`, extra), how: t(`adm.pos.warn.how.${key}`, extra) });
+
+  /**
+   * Lo que impide pasar de un paso (`hard`: se explica en una ventana y se lleva
+   * al campo) y lo que solo se avisa (`soft`: la persona elige seguir y lo
+   * completa después desde la venta → Editar). Una sola fuente para Siguiente,
+   * los botones de pasos y «Registrar venta».
+   */
+  function stepIssues(name) {
+    const soft = [];
+    let hard = null;
     switch (name) {
-      case "customer": return Object.keys(customerProblems(customer, { requireEmail })).length === 0 && wears !== null
-        && (!wears || wornReady);
-      case "frame": return lines.length > 0;
+      case "customer": {
+        if (Object.keys(custProblems).length) hard = { key: "custBad", focus: true };
+        else if (!customer.first_name.trim() && !customer.phone.trim()) hard = { key: "identity", focus: true };
+        for (const k of ["first_name", "last_name", "phone"]) if (!String(customer[k] || "").trim()) soft.push(W(`miss.${k}`));
+        if (wears === null) soft.push(W("worn.unanswered"));
+        else if (wears && !wornReady) soft.push(W("worn.incomplete"));
+        break;
+      }
+      case "frame": if (!lines.length) hard = { key: "noFrame" }; break;
       case "rx":
-        if (rxPending) return true;
-        if (noRx) return !lines.some((l) => l.kind === "own_frame");
-        if (!rxFilled(rxNew) || !rxCheck.ok || (ocr.status === "done" && !ocr.confirmed)) return false;
-        return true;
-      case "lenses": return lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code)
-        && (rxPending || !lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; }) || num(rxNew.seg_height) !== null);
-      case "price": return Boolean(q) && qStatus !== "error" && (!q.needs_approval || approval?.status === "approved") && q.rx_check?.fulfillable !== false;
-      case "payment": return payState.balance >= 0
-        && (total <= 0 || payState.paid + payState.ins > 0)
-        && !payRows.some(rowProblem)
-        && (delivery === "pickup" || Object.keys(custProblems).length === 0);
-      default: return false;
+        if (noRx) { if (lines.some((l) => l.kind === "own_frame")) hard = { key: "ownFrameNoRx" }; break; }
+        if (pendingRx) { if (!rxPending) soft.push(W("rx.missing")); break; }
+        if (ocr.status === "done" && !ocr.confirmed) { hard = { key: "rxOcr" }; break; }
+        if (rxSegOnly) soft.push(W("rx.seg"));
+        else if (!rxCheck.ok) hard = { key: "rxInvalid", choice: "pending" };
+        break;
+      case "lenses":
+        if (!lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code)) hard = { key: "noMaterial" };
+        else if (!pendingRx && !noRx && multiSold && num(rxNew.seg_height) === null) soft.push(W("rx.seg"));
+        break;
+      case "price":
+        if (!q || qStatus === "error") hard = { key: "noQuote" };
+        else if (q.rx_check?.fulfillable === false) hard = { key: "rxUnfulfillable", choice: "pending" };
+        else if (q.needs_approval && approval?.status !== "approved") hard = { key: "approval" };
+        break;
+      case "payment":
+        if (payState.balance < 0) hard = { key: "overpaid" };
+        else if (payRows.some(rowProblem)) hard = { key: "payRow" };
+        else {
+          if (total > 0 && payState.paid + payState.ins <= 0) soft.push(W("deposit", { total: m(total) }));
+          if (delivery === "ship" && !customer.address_1.trim()) soft.push(W("address"));
+        }
+        break;
+      default: break;
     }
+    return { hard, soft };
   }
+  const canNext = () => canPass(STEPS[step]);
+  function canPass(name) { return !stepIssues(name).hard; }
+  // Avisos ya aceptados («Seguir sin estos datos»), por clave: no se vuelven a preguntar al pasar de paso.
+  const acked = useRef(new Set());
+  // La ficha de la venta recién registrada, para completar lo que faltó sin salir de la caja.
+  const salePanel = useSalePanel({ me, ctx, onChanged: () => {
+    if (!result?.id) return;
+    fetchSale(result.id).then((r) => setResult((cur) => (cur ? { ...cur, missing: r.sale?.missing || [] } : cur))).catch(() => {});
+  } });
+  const issueList = (items) => (
+    <ul className="pos-warn-list">
+      {items.map((i) => <li key={i.key}><b>{i.label}</b><span>{i.how}</span></li>)}
+    </ul>
+  );
+  /** Explica en una ventana por qué no se puede seguir. Con `choice: "pending"` ofrece dejar la receta pendiente. Devuelve true si se resolvió así. */
+  const explainHard = async (h) => {
+    if (h.choice === "pending") {
+      const yes = await confirm({ tone: "warning", title: t(`adm.pos.block.${h.key}.title`), message: t(`adm.pos.block.${h.key}.msg`), detail: <p className="pos-warn-how">{t("adm.pos.block.pendingChoice")}</p>, confirmLabel: t("adm.pos.block.makePending"), cancelLabel: t("adm.pos.block.fix") });
+      if (yes) { setRxPending(true); setNoRx(false); toast({ tone: "warning", title: t("adm.pos.warn.madePending") }); return true; }
+      return false;
+    }
+    await dialog({ tone: "warning", title: t(`adm.pos.block.${h.key}.title`), message: t(`adm.pos.block.${h.key}.msg`), confirmLabel: t("adm.pos.block.ok") });
+    return false;
+  };
+  /** Avisa lo que falta en un paso y deja elegir: seguir (se completa luego) o completarlo ahora. */
+  const askSoft = async (name, soft) => {
+    const fresh = soft.filter((i) => !acked.current.has(i.key));
+    if (!fresh.length) return true;
+    const yes = await confirm({
+      tone: "warning",
+      title: t("adm.pos.warn.stepTitle", { step: t(`adm.pos.step.${name}`) }),
+      message: t("adm.pos.warn.stepMsg"),
+      detail: issueList(fresh),
+      confirmLabel: t("adm.pos.warn.continue"),
+      cancelLabel: t("adm.pos.warn.completeNow"),
+    });
+    if (yes) fresh.forEach((i) => acked.current.add(i.key));
+    return yes;
+  };
 
   // Saltar entre pasos ya visitados (dueño, 15-nov-2026: «que tú puedas saltarte de ventana en ventana»):
   // hacia atrás siempre; hacia delante hasta el más lejano al que se llegó, y si algo de en medio
@@ -746,20 +825,67 @@ export default function PosSale({ me }) {
     setStep(i);
   };
 
-  // Bloqueado en el primer paso: en vez de un botón mudo, marca qué falta y lleva hasta ahí.
-  const next = () => {
-    if (canNext()) { setShowCustErrors(false); setStep((s) => s + 1); return; }
+  // Siguiente: lo que impide seguir se explica en una ventana; lo que falta se avisa y se elige.
+  const next = async () => {
     // Montura escrita a mano sin «Añadir»: Siguiente la añade si está completa, o marca en rojo lo que falta.
-    if (stepName === "frame" && !lines.length) {
-      if (frameMode !== "catalog") { if (addOwn()) setStep((s) => s + 1); }
-      else setOwnTried(true);
+    if (stepName === "frame" && !lines.length && frameMode !== "catalog") { if (addOwn()) setStep((s) => s + 1); return; }
+    const { hard, soft } = stepIssues(stepName);
+    if (hard) {
+      if (stepName === "frame") setOwnTried(true);
+      if (hard.focus) {
+        setShowCustErrors(true);
+        const fields = Object.keys(custProblems);
+        if (fields.some((k) => ["address_1", "city", "state", "postal_code"].includes(k)) && addressRef.current) addressRef.current.open = true;
+      }
+      const solved = await explainHard(hard);
+      if (!solved) {
+        if (hard.focus) requestAnimationFrame(() => document.querySelector('.pos-card [aria-invalid="true"], .pos-card input[name="first_name"]')?.focus());
+        return;
+      }
+    }
+    if (!(await askSoft(stepName, soft))) {
+      setShowCustErrors(true);
       return;
     }
-    if (stepName !== "customer") return;
-    setShowCustErrors(true);
-    const fields = Object.keys(customerProblems(customer, { requireEmail }));
-    if (fields.some((k) => ["address_1", "city", "state", "postal_code"].includes(k)) && addressRef.current) addressRef.current.open = true;
-    requestAnimationFrame(() => document.querySelector('.pos-card [aria-invalid="true"]')?.focus());
+    // «Sin receta» aceptado: se marca de verdad como pendiente (los lentes ofrecen todos los diseños).
+    if (stepName === "rx" && soft.some((i) => i.key === "rx.missing")) setRxPending(true);
+    setShowCustErrors(false);
+    setStep((s) => s + 1);
+  };
+
+  /** Todo lo que la venta lleva pendiente, de todos los pasos (para el aviso final). */
+  const allSoft = () => {
+    const seen = new Set();
+    // La graduación pendiente marcada a mano también se recuerda al registrar.
+    const rxItem = pendingRx && !noRx && needsLensRx ? [W("rx.missing")] : [];
+    return [...["customer", "rx", "lenses", "payment"].flatMap((n) => stepIssues(n).soft), ...rxItem]
+      .filter((i) => (seen.has(i.key) ? false : (seen.add(i.key), true)))
+      .filter((i) => i.key !== "rx.missing" || needsLensRx);
+  };
+
+  /** Registrar: primero lo que lo impide (y en qué paso), luego el resumen de lo pendiente. */
+  const tryConfirm = async () => {
+    if (busy) return;
+    for (const n of STEPS.slice(0, -1)) {
+      const { hard } = stepIssues(n);
+      if (!hard) continue;
+      if (n !== stepName) setStep(STEPS.indexOf(n));
+      const solved = await explainHard(hard);
+      if (!solved) return;
+    }
+    const pending = allSoft();
+    if (pending.length) {
+      const yes = await confirm({
+        tone: "warning",
+        title: t("adm.pos.warn.finalTitle", { n: pending.length }),
+        message: t("adm.pos.warn.finalMsg"),
+        detail: issueList(pending),
+        confirmLabel: t("adm.pos.warn.finalYes"),
+        cancelLabel: t("adm.pos.warn.finalNo"),
+      });
+      if (!yes) return;
+    }
+    confirmSale();
   };
 
   const confirmSale = async () => {
@@ -786,7 +912,7 @@ export default function PosSale({ me }) {
         notify_sms: notifySms,
         receipt_detail: notifyEmail && hasEmail && receiptDetail,
         idempotency_key: idem.current,
-        rx_pending: rxPending && !noRx,
+        rx_pending: pendingRx && !noRx,
       });
       // Las fotos de la montura escrita a mano se quedan en esta pantalla: si el
       // servidor no pudo guardarlas, el recibo de ahora las imprime igual.
@@ -806,6 +932,7 @@ export default function PosSale({ me }) {
 
   const reset = () => {
     idem.current = null;
+    acked.current.clear();
     setStep(0); setMaxStep(0); setTouched({}); setShowCustErrors(false); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
     setLines([]); setOwn(EMPTY_OWN); setFrameMode("catalog"); setOwnTried(false); setNoRx(false); setRxPending(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
@@ -1104,10 +1231,10 @@ export default function PosSale({ me }) {
                   <b>{l.kind === "frame" ? `${l.title} · ${l.variant_title || ""}` : `${t(l.kind === "store_frame" ? "adm.pos.store.tag" : "adm.pos.own.tag")} · ${l.title || l.description}`}</b>
                 </div>
                 {l.kind === "own_frame" && !noRx && <LensPresets line={l} catalog={catalog} rxForm={rxNew} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />}
-                <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} rxPending={rxPending} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
+                <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} rxPending={pendingRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
               </li>
             ))}
-            {!noRx && !rxPending && isMulti(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
+            {!noRx && !pendingRx && isMulti(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
           </ul>
           {!catalog.live && <small className="muted pos-lens-offline" title={t("adm.pos.lens.offlineListHint")}>{t("adm.pos.lens.offlineList")}</small>}
           </>
@@ -1183,7 +1310,7 @@ export default function PosSale({ me }) {
 
         {stepName === "payment" && q && (
           <>
-            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} rxPending={rxPending} approval={approval} delivery={delivery} notifyEmail={notifyEmail && hasEmail} notifySms={notifySms} receiptDetail={receiptDetail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
+            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} rxPending={pendingRx} approval={approval} delivery={delivery} notifyEmail={notifyEmail && hasEmail} notifySms={notifySms} receiptDetail={receiptDetail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
             <dl className="pos-totals">
               <dt className="big">{t("adm.pos.price.total")}</dt><dd className="big">{m(total)}</dd>
             </dl>
@@ -1276,6 +1403,8 @@ export default function PosSale({ me }) {
                 <Icon name="alert" size={14} /> {t("adm.pos.own.photoNotSaved")}
               </p>
             )}
+            {/* Registrada con datos pendientes: qué falta, cómo completarlo, y el botón para hacerlo ya. */}
+            <MissingData missing={result.missing} onComplete={() => salePanel.open(result.id)} />
             <OpticalChange change={result.optical_change} />
             <SaleDocuments saleId={result.id} printer={terminal?.printer} localPhotos={result.frame_photos} rxPending={result.rx_pending === true} />
             <button type="button" className="btn-sm primary" onClick={reset}><Icon name="plus" size={14} /> {t("adm.pos.done.new")}</button>
@@ -1287,16 +1416,17 @@ export default function PosSale({ me }) {
         <div className="pos-nav pos-nav-sticky">
           <button type="button" className="btn-sm" disabled={step === 0 || busy} onClick={() => setStep((s) => s - 1)}><Icon name="chevronLeft" size={14} /> {t("adm.pos.back")}</button>
           {stepName === "payment" ? (
-            <button type="button" className="btn-sm primary big" disabled={!canNext() || busy} onClick={confirmSale}>
+            <button type="button" className={`btn-sm primary big ${canNext() ? "" : "is-blocked"}`} disabled={busy} onClick={tryConfirm}>
               {busy ? t("adm.pos.confirming") : t("adm.pos.confirm", { total: m(total) })}
             </button>
           ) : (
-            <button type="button" className={`btn-sm primary ${canNext() ? "" : "is-blocked"}`} disabled={stepName !== "customer" && !(stepName === "frame" && !lines.length) && !canNext()} onClick={next}>{t("adm.pos.next")} <Icon name="chevronRight" size={14} /></button>
+            <button type="button" className={`btn-sm primary ${canNext() ? "" : "is-blocked"}`} disabled={busy} onClick={next}>{t("adm.pos.next")} <Icon name="chevronRight" size={14} /></button>
           )}
         </div>
       )}
       {terminal && <p className="muted pos-foot">{terminal.code} · {me?.email || ""}</p>}
       {cardProduct && <AdminFrameCard product={cardProduct} onClose={() => setCardProduct(null)} />}
+      {salePanel.panel}
     </div>
   );
 }

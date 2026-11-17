@@ -22,6 +22,7 @@
 // = POST /admin/order-board/:id/stage con una de `next_stages`. Costo, comisión y
 // ganancia nunca se piden aquí: llegan en `economics` desde la lista que ya los
 // tenía (y solo si el servidor los dio).
+import MissingData from "./MissingData.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -734,6 +735,13 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                   )}
                 </div>
               )}
+              {/* Registrada con datos pendientes (backend lib/pos.ts saleMissing): qué falta y cómo completarlo.
+                  La receta pendiente tiene su propio aviso arriba; el anticipo se cobra en Pagos. */}
+              {s.status !== "voided" && mode !== "edit" && (() => {
+                const shown = (s.missing || []).filter((k) => k !== "prescription");
+                const data = shown.filter((k) => ["first_name", "last_name", "phone", "address"].includes(k));
+                return <MissingData missing={shown} compact onComplete={perms.can_edit && data.length ? () => { setEditRx(false); setMode("edit"); } : null} completeLabel={t("adm.pos.missing.completeData")} />;
+              })()}
               {mode === "edit" && (
                 <SaleEditForm
                   sale={s}
