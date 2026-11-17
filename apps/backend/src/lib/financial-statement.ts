@@ -5,7 +5,7 @@ import { STORE_COST_MODULE } from "../modules/store-cost";
 import type StoreCostModuleService from "../modules/store-cost/service";
 import { localParts } from "./alerts";
 import { commissionResolverOf } from "./commission-pct";
-import { computeCostSheet, isPaymentFeeRule, lineGroup, lineKind, listCostRules, type CostOrderLike, type CostRule } from "./costing";
+import { computeCostSheet, conceptKey, isPaymentFeeRule, lineGroup, lineKind, listCostRules, type CostOrderLike, type CostRule } from "./costing";
 import { listEstablishments, type EstablishmentRow } from "./establishments";
 import { pickOnlineStore } from "./online-store";
 import { loadProductMetadata } from "./frame-specs";
@@ -119,8 +119,9 @@ export interface SellerCommission {
  * `pctOf` is the SAME precedence lib/sales-insights.ts uses
  * (lib/commission-pct.ts: profile, seller record, default), so a referral-only
  * seller with no panel user still earns in the store result, instead of
- * earning in Ejecutivo and nowhere else. Amounts in cents; the base is the NET
- * (total − sales tax), never the gross; rounded per line.
+ * earning in Ejecutivo and nowhere else. The base is the NET (total − sales
+ * tax), never the gross; rounded per line. `byStore` is in CENTS; each
+ * seller's `net_sales` and `commission` are in DOLLARS (cents ÷ 100 once).
  */
 export function commissionsOf(
   facts: readonly CommissionFactLike[],
@@ -240,6 +241,14 @@ export interface EntityMonth {
   payment_fees: number;
   commissions: number;
   costs: CostCharge[];
+  /**
+   * The cost of goods by concept (lib/costing.ts `conceptKey`: a frame model or
+   * brand, a lens design, a material, a treatment, each per-sale rule such as
+   * «Laboratorio»), in cents. Σ of a `line` = that `cogs` field, to the cent
+   * (same rounding). Read by the accounting report by category
+   * (lib/category-report.ts); nothing else needs it. Absent = nothing sold.
+   */
+  cogs_lines?: Record<string, { label: string; line: keyof Omit<CogsCents, "total">; cents: number }>;
 }
 
 export interface LedgerMonth {
@@ -382,8 +391,15 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
       for (const l of sheet.lines) {
         if (lineGroup(l) !== "material") continue;
         const cents = Math.round(Number(l.subtotal) * 100);
-        ent.cogs[cogsLineOf(lineKind(l))] += cents;
+        const cogsLine = cogsLineOf(lineKind(l));
+        ent.cogs[cogsLine] += cents;
         ent.cogs.total += cents;
+        if (cents) {
+          const lines = (ent.cogs_lines ??= {});
+          const key = conceptKey(l);
+          const row = (lines[key] ??= { label: String(l.label ?? key), line: cogsLine, cents: 0 });
+          row.cents += cents;
+        }
       }
       const gross = group.reduce((s, l) => s + l.total_cents, 0);
       ent.gross_sales += gross;
@@ -684,6 +700,8 @@ export interface LoadedLedger {
   rules: CostRule[];
   /** THE online store, when the owner has one: the web's orders are booked on it. */
   onlineStoreId: string | null;
+  /** The live cost items the ledger charged from (descriptions, vendors, owners for the reports). */
+  items: LedgerItem[];
 }
 
 export interface ShippingRow {
@@ -857,7 +875,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
       return Boolean(e && (e.net_sales || e.shipping_income || e.cogs.total || e.payment_fees || e.commissions || e.sales_count || e.costs.some((c) => c.cents)));
     });
   const shownStores = inView.filter((s) => s.is_active || hasFigures(s.id));
-  return { ledger, stores: everyStore, shownStores, rules, onlineStoreId: online };
+  return { ledger, stores: everyStore, shownStores, rules, onlineStoreId: online, items: liveItems };
 }
 
 /** The statement document for a span, a store selection and a grouping (cents). */

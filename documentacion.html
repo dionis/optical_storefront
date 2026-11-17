@@ -128,6 +128,20 @@
 </section>
 
 <section>
+  <h2>17-nov-2026 — Informe contable por categorías (con filtros y PDF)</h2>
+  <p>El dueño: «debe salir algún reporte con filtro para ver toda la contabilidad y las finanzas por categorías de costo y se debe poder exportar a PDF».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Menú Tiendas → «Contabilidad por categorías»</b> (solo dueño y superadmin): ingresos (tienda, en línea, entrega), costo de lo vendido (monturas, lentes, tratamientos, fijos por venta como el laboratorio, otros) y gastos de operación por categoría fiscal (renta, servicios, nómina, software…, comisiones del cobro y de vendedores), con subtotales, utilidad bruta, utilidad neta y margen; % de los ingresos en cada fila. Indicadores arriba y «Reparto de los costos» en barras (clic = abre esa categoría).</td><td><span class="tag ok">Listo</span></td><td><code>FinanceReport.jsx</code>, <code>finance/categoryReport.js</code>, <code>finance-report.css</code></td></tr>
+    <tr><td><b>Cada categoría se abre en sus partidas</b>: los conceptos del costo de mercancía (cada montura/marca, cada lente, cada regla por venta), cada partida de costo con tienda, proveedor, frecuencia y tipo (fijo/variable/compartido), y cada vendedor con sus ventas netas. Cuadra al centavo con la línea.</td><td><span class="tag ok">Listo</span></td><td><code>GET /admin/finance/category-report</code>, <code>lib/category-report.ts</code>; el libro guarda <code>cogs_lines</code></td></tr>
+    <tr><td><b>Filtros</b>: tienda y período de la barra global (meses completos), agrupar por mes/trimestre/año, columnas por período o por tienda, categorías en chips con atajos (Todas · Solo costos · Solo gastos · Ninguna), buscar partida/proveedor/vendedor, ver partidas y mostrar ceros. Con un filtro la vista lo dice y en vez de la utilidad da «Total de los costos elegidos».</td><td><span class="tag ok">Listo</span></td><td><code>FinanceReport.jsx</code></td></tr>
+    <tr><td><b>PDF, Excel y CSV</b> desde la barra global: lo que se ve es lo que sale (membrete, indicadores, tabla por categoría con las partidas abiertas y el reparto de los costos). El Excel/CSV lleva además la hoja «Partidas» con todas las partidas de las categorías elegidas. Sin «versión para compartir»: es la contabilidad del dueño.</td><td><span class="tag ok">Listo</span></td><td><code>ReportDoc</code> (filas <code>frp-*</code> en <code>report.css</code>)</td></tr>
+    <tr><td><b>Corregido</b>: en el desglose de «Costos del mes» (parche anterior) la comisión de cada vendedor salía dividida entre 100 dos veces ($909.90 se veía como $9.10). El total de comisiones siempre estuvo bien.</td><td><span class="tag ok">Listo</span></td><td><code>lib/pnl-breakdown.ts</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 105 suites / 1676 (las piezas suman su línea del estado por mes, trimestre, año y tienda); <code>scripts/test-category-report.mjs</code> 8 casos. QA local: 60 comprobaciones contra el estado de resultados y las tarjetas del resultado (todas las tiendas, cada tienda, la web, por trimestre), un vendedor recibe 403; pantalla en escritorio, Galaxy Tab A7 Lite y teléfono; PDF carta apaisado de 2 páginas y Excel de 4 hojas. <b>Requiere redeploy del backend</b> (ruta nueva; sin migraciones).</p>
+</section>
+
+<section>
   <h2>17-nov-2026 — Desglose de cada tarjeta del resultado y costos iguales en varias tiendas</h2>
   <p>El dueño: «en cada card debe aparecer, cuando se dé clic, el desglose económico financiero exacto de esos datos, de dónde sale eso; además, cuando se agrega un costo debe tener autocompletado según los costos que ya se hayan hecho, de tal manera que se puedan poner los mismos costos en todas las tiendas y poder salvar los específicos de determinadas tiendas».</p>
   <table>

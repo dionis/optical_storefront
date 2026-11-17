@@ -53,6 +53,7 @@ const TAB_IMPORTS = {
   mysales: () => import("./MySales.jsx"),
   cash: () => import("./PosCash.jsx"),
   storecosts: () => import("./StoreCosts.jsx"),
+  finreport: () => import("./FinanceReport.jsx"),
   statement: () => import("./StoreStatement.jsx"),
   storeorders: () => import("./StoreOrders.jsx"),
   pendingbalances: () => import("./PendingBalances.jsx"),
@@ -89,6 +90,7 @@ const StoreStatus = lazy(TAB_IMPORTS.storestatus);
 const MySales = lazy(TAB_IMPORTS.mysales);
 const PosCash = lazy(TAB_IMPORTS.cash);
 const StoreCosts = lazy(TAB_IMPORTS.storecosts);
+const FinanceReport = lazy(TAB_IMPORTS.finreport);
 const StoreStatement = lazy(TAB_IMPORTS.statement);
 const StoreOrders = lazy(TAB_IMPORTS.storeorders);
 const PendingBalances = lazy(TAB_IMPORTS.pendingbalances);
@@ -749,6 +751,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {salePanel.panel}
       {tab === "cash" && <PosCash me={me} />}
       {tab === "storecosts" && <StoreCosts me={me} go={go} />}
+      {tab === "finreport" && <FinanceReport me={me} />}
       {tab === "statement" && <StoreStatement me={me} go={go} />}
       {tab === "storeorders" && <StoreOrders me={me} go={go} params={nav.params} />}
       {tab === "patients" && <Patients me={me} openSale={salePanel.open} params={nav.params} />}

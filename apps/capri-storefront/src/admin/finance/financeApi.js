@@ -78,4 +78,6 @@ export const saveSalesTax = (ratePct) => call("/admin/pricing/taxes", { method: 
 export const importRules = (payload, apply = false) => call("/admin/finance/rules/import", { method: "POST", body: { ...payload, apply } }, "adm.err.fin.import_failed");
 
 /** Estado de resultados: from/to YYYY-MM-DD, store id|web|all, group month|quarter|year. */
+/** Informe contable por categorías (FinanceReport.jsx): el estado del período con las piezas de cada línea. */
+export const fetchCategoryReport = ({ from, to, store = "all", group = "month" }) => call("/admin/finance/category-report", { query: { from, to, store, group } }, "adm.err.fin.load_failed");
 export const fetchStatement = ({ from, to, store = "all", group = "month" }) => call("/admin/finance/statement", { query: { from, to, store, group } }, "adm.err.fin.load_failed");

@@ -63,7 +63,7 @@ import "./empty-period.css";
  * ── PESTAÑA POR PESTAÑA ────────────────────────────────────────────────────
  * Con las tres piezas (dinero por tienda y período, y un informe que sacar):
  *   exec, salesboard, storeorders, possales, pendingbalances, cash, statement,
- *   sellers, storecosts, mysales.
+ *   sellers, storecosts, finreport, mysales.
  * Casos con matiz:
  *   pricing      un precio no es un informe → sin período; la tienda SÍ (decide
  *                qué variación se edita sobre el maestro).
@@ -102,6 +102,8 @@ export const BAR_TABS = {
   statement: ALL,
   sellers: ALL,
   storecosts: ALL,
+  // Contabilidad por categorías: tienda y período de la barra (meses completos), PDF/Excel/CSV de lo que se ve.
+  finreport: ALL,
   mysales: ALL,
   // ── Con matiz ──
   pricing: { store: true, period: false, export: true },

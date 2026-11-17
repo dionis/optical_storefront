@@ -30,6 +30,8 @@ export const NAV_GROUPS = [
   { key: "stores", icon: "store", items: [
     { key: "stores", icon: "store" },
     { key: "storecosts", icon: "costs" },
+    // Toda la contabilidad del período por categorías, con cada partida y PDF (solo dueño y superadmin).
+    { key: "finreport", icon: "layers" },
     { key: "statement", icon: "clipboard" },
     { key: "posconfig", icon: "settings" },
   ] },

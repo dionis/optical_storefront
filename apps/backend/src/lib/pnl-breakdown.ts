@@ -225,7 +225,8 @@ export async function pnlBreakdown(container: MedusaContainer, month: string, st
     },
     cogs: { frames: d(e.cogs.frames), lenses: d(e.cogs.lenses), treatments: d(e.cogs.treatments), per_order: d(e.cogs.per_order), total: d(e.cogs.total) },
     fees: { total: d(e.payment_fees), by_method: methods, web: d(Math.max(0, e.payment_fees - tillFees)) },
-    commissions: { total: d(e.commissions), sellers: lm.sellers.map((s) => ({ seller_code: s.seller_code, net_sales: d(s.net_sales), pct: s.pct, commission: d(s.commission) })).filter((s) => s.commission || s.net_sales) },
+    // `lm.sellers` is already in dollars (commissionsOf divides once): never d() again.
+    commissions: { total: d(e.commissions), sellers: lm.sellers.map((s) => ({ seller_code: s.seller_code, net_sales: s.net_sales, pct: s.pct, commission: s.commission })).filter((s) => s.commission || s.net_sales) },
     items,
     totals: {
       ...totals,

@@ -143,3 +143,13 @@ body { font-family: var(--rp-font); color: var(--rp-ink); font-size: 10px; line-
   .rp-doc.portrait { width: 215.9mm; min-height: 279.4mm; }
   .rp-foot { position: absolute; }
 }
+
+/* Informe contable por categorías (FinanceReport.jsx → rowCls "frp-<tipo>"):
+   banda de sección, categoría en negrita, partidas sangradas y en gris,
+   subtotal con raya y la utilidad neta con doble raya. */
+.rp-table tbody tr.frp-sec td { background: #EEF2F8; color: #1F2A44; font-weight: 800; font-size: 7.5px; letter-spacing: .06em; text-transform: uppercase; padding-top: 1.6mm; }
+.rp-table tbody tr.frp-cat td { font-weight: 700; }
+.rp-table tbody tr.frp-det td { color: #4B5563; font-size: 7.6px; }
+.rp-table tbody tr.frp-det td:first-child { padding-left: 4mm; }
+.rp-table tbody tr.frp-sum td { font-weight: 800; border-top: 1px solid var(--rp-ink); background: #fff; }
+.rp-table tbody tr.frp-res td { font-weight: 800; background: #F6F3EA; border-top: 1px solid var(--rp-ink); }
