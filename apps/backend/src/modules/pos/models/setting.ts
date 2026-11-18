@@ -9,5 +9,7 @@ export const PosSetting = model.define("pos_setting", {
   id: model.id().primaryKey(),
   discount_limits: model.json().nullable(),
   optical_thresholds: model.json().nullable(),
+  /** Lab surcharges for high powers (lib/lab-surcharge.ts); null = the defaults. */
+  lab_surcharges: model.json().nullable(),
   updated_by: model.text().nullable(),
 });

@@ -51,5 +51,6 @@ import pnlBreakdown from "./pnl-breakdown.js";
 import financeReport from "./finance-report.js";
 import saleDate from "./sale-date.js";
 import visualAcuity from "./visual-acuity.js";
+import labSurcharges from "./lab-surcharges.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant, saleAdmin, password, wearing, frameModes, webChannel, operationLog, storeHoursPromos, posMissing, pnlBreakdown, financeReport, saleDate, visualAcuity];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant, saleAdmin, password, wearing, frameModes, webChannel, operationLog, storeHoursPromos, posMissing, pnlBreakdown, financeReport, saleDate, visualAcuity, labSurcharges];

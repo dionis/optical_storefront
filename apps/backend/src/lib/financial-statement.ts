@@ -275,6 +275,8 @@ export interface LedgerFact {
   lens_ar: string | null;
   lens_finish: string | null;
   sold_date_local: string;
+  /** Lab surcharge of the line for a high power (lib/lab-surcharge.ts), cents; part of the lenses' cost. */
+  lab_surcharge_cents?: number;
 }
 
 export interface LedgerItem extends CostItemLike {
@@ -415,6 +417,15 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
           const row = (lines[key] ??= { label: String(l.label ?? key), line: cogsLine, cents: 0 });
           row.cents += cents;
         }
+      }
+      // High-power lab surcharges of the order's lens jobs (lib/lab-surcharge.ts): lenses' cost.
+      const surcharge = group.reduce((a, l) => a + (Number(l.lab_surcharge_cents) || 0), 0);
+      if (surcharge) {
+        ent.cogs.lenses += surcharge;
+        ent.cogs.total += surcharge;
+        const lines = (ent.cogs_lines ??= {});
+        const row = (lines["lab_surcharge"] ??= { label: "Recargo de laboratorio (graduación alta)", line: "lenses", cents: 0 });
+        row.cents += surcharge;
       }
       const gross = group.reduce((s, l) => s + l.total_cents, 0);
       ent.gross_sales += gross;
@@ -791,7 +802,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     })
     .where("sold_date_local", ">=", first)
     .where("sold_date_local", "<=", last)
-    .select("order_id", "channel", "establishment_id", "seller_id", "seller_code", "product_id", "sku", "qty", "total_cents", "tax_cents", "lens_design", "lens_material", "lens_photo", "lens_ar", "lens_finish", "sold_date_local")) as Array<Record<string, unknown>>;
+    .select("order_id", "channel", "establishment_id", "seller_id", "seller_code", "product_id", "sku", "qty", "total_cents", "tax_cents", "lens_design", "lens_material", "lens_photo", "lens_ar", "lens_finish", "sold_date_local", "lab_surcharge_cents")) as Array<Record<string, unknown>>;
   const lines: LedgerFact[] = facts.map((f) => ({
     order_id: String(f.order_id),
     channel: String(f.channel),
@@ -809,6 +820,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     lens_ar: (f.lens_ar as string | null) ?? null,
     lens_finish: (f.lens_finish as string | null) ?? null,
     sold_date_local: String(f.sold_date_local),
+    lab_surcharge_cents: Number(f.lab_surcharge_cents) || 0,
   }));
 
   // Delivery charged on the web's orders (the order's shipping lines of its

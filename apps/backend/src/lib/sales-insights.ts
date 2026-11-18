@@ -69,6 +69,8 @@ export interface InsightLine {
   lens_ar: string | null;
   /** Stock or surfaced lens; null on rows projected before finishes existed (the design's default). */
   lens_finish?: string | null;
+  /** Lab surcharge for a high power (lib/lab-surcharge.ts), cents; part of the line's material cost. */
+  lab_surcharge_cents?: number;
   payment_methods: string[] | null;
   qty: number;
   total_cents: number;
@@ -278,7 +280,8 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
   return lines.map((l, i) => {
     const net = nets[i];
     const material = materialCost(l);
-    const cost = material.cost + fixedOf[i];
+    // A high power's lab surcharge (lib/lab-surcharge.ts) is part of the lenses' cost, as in the books.
+    const cost = material.cost + fixedOf[i] + (Number(l.lab_surcharge_cents) || 0);
     const fee = feeOf[i];
     const commission = Math.round((net * (ctx.commissionPct(l) ?? 0)) / 100);
     return { net, cost, fee, commission, profit: net - cost - fee - commission, paid: paidOf[i], balance: balanceOf[i], missing_cost: material.missing };
@@ -724,7 +727,7 @@ export function linesQuery(pg: Knex, f: AnalyticsFilter, tz: string): Knex.Query
       "sale_fact.order_id", "sale_fact.sale_id", "sale_fact.channel", "sale_fact.establishment_id", "sale_fact.terminal_id",
       "sale_fact.seller_id", "sale_fact.seller_code", "sale_fact.product_id", "sale_fact.sku", "sale_fact.title", "sale_fact.brand",
       "sale_fact.category", "sale_fact.lens_design", "sale_fact.lens_material", "sale_fact.lens_photo", "sale_fact.lens_ar", "sale_fact.lens_finish",
-      "sale_fact.payment_methods", "sale_fact.qty", "sale_fact.total_cents", "sale_fact.tax_cents", "sale_fact.sold_date_local",
+      "sale_fact.payment_methods", "sale_fact.qty", "sale_fact.total_cents", "sale_fact.tax_cents", "sale_fact.sold_date_local", "sale_fact.lab_surcharge_cents",
       pg.raw("EXTRACT(HOUR FROM sale_fact.sold_at AT TIME ZONE ?)::int AS hour", [tz])
     )
     .orderBy("sale_fact.sold_at", "desc")
@@ -771,6 +774,7 @@ async function loadLines(pg: Knex, f: AnalyticsFilter, tz: string, orderIds?: st
         qty: Number(r.qty),
         total_cents: Number(r.total_cents),
         tax_cents: Number(r.tax_cents),
+        lab_surcharge_cents: Number(r.lab_surcharge_cents) || 0,
         hour: Number(r.hour),
       };
     }),

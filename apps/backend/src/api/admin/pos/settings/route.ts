@@ -4,6 +4,7 @@ import { PosError } from "../../../../lib/pos-data";
 import { posHandler, posScope } from "../../../../lib/pos-route";
 import { DEFAULT_DISCOUNT_LIMITS, getPosSettings, MAX_DISCOUNT_LIMIT, savePosSettings, settingsDenied } from "../../../../lib/pos-settings";
 import { DEFAULT_THRESHOLDS } from "../../../../lib/optical-change";
+import { DEFAULT_LAB_SURCHARGES } from "../../../../lib/lab-surcharge";
 
 /**
  * AJUSTES DEL PUNTO DE VENTA.
@@ -18,7 +19,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     await posScope(req);
     res.json({
       settings: await getPosSettings(req.scope),
-      defaults: { discount_limits: DEFAULT_DISCOUNT_LIMITS, optical_thresholds: DEFAULT_THRESHOLDS, max_discount_limit: MAX_DISCOUNT_LIMIT },
+      defaults: { discount_limits: DEFAULT_DISCOUNT_LIMITS, optical_thresholds: DEFAULT_THRESHOLDS, max_discount_limit: MAX_DISCOUNT_LIMIT, lab_surcharges: DEFAULT_LAB_SURCHARGES },
     });
   });
 }
@@ -26,6 +27,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
 interface Body {
   discount_limits?: unknown;
   optical_thresholds?: unknown;
+  /** Lab surcharges for high powers (lib/lab-surcharge.ts): the whole list as it must stay. */
+  lab_surcharges?: unknown;
 }
 
 export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaResponse): Promise<void> {
@@ -41,8 +44,8 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
       action: "settings.change",
       entity: "pos_setting",
       entityId: "default",
-      before: { discount_limits: before.discount_limits, optical_thresholds: before.optical_thresholds },
-      after: { discount_limits: after.discount_limits, optical_thresholds: after.optical_thresholds },
+      before: { discount_limits: before.discount_limits, optical_thresholds: before.optical_thresholds, lab_surcharges: before.lab_surcharges },
+      after: { discount_limits: after.discount_limits, optical_thresholds: after.optical_thresholds, lab_surcharges: after.lab_surcharges },
     });
     res.json({ settings: after });
   });

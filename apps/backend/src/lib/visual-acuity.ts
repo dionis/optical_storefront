@@ -17,7 +17,7 @@
  * usual convention), so «how much better with glasses» is a number of lines.
  *
  * Stored on the prescription (`prescription.clinical`, migration
- * AddClinicalToPrescription4): { va: { sc: { od, os, ou }, cc: { od, os, ou } },
+ * CreatePrescription4Clinical): { va: { sc: { od, os, ou }, cc: { od, os, ou } },
  * dominant_eye: "od" | "os" | null }. sc = sin corrección (without glasses),
  * cc = con corrección (with this prescription). Everything is optional.
  */

@@ -128,12 +128,23 @@
 </section>
 
 <section>
+  <h2>18-nov-2026 — Recargos de laboratorio por graduación alta</h2>
+  <p>El dueño: «cuando la base positiva es por encima de +6 el costo de laboratorio aumenta en 30; debe poder configurarse en la app, según referencias internacionales».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Configuración del POS → «Recargos de laboratorio por graduación»</b>: tabla editable (nombre, potencia, cuándo, límite, costo extra, activo). Viene con «Base positiva alta (más de +6.00) → +$30» encendida y los escalones habituales apagados para que les ponga precio: positiva > +8, negativa > −6 y > −10, cilindro > 4.00, adición > +3.00, prisma. «Valores sugeridos» los restaura.</td><td><span class="tag ok">Listo</span></td><td><code>LabSurcharges.jsx</code>, <code>lib/lab-surcharge.ts</code></td></tr>
+    <tr><td><b>Dónde cuenta</b>: sube el costo de los lentes de esa venta en el resultado, el estado de resultados, el informe por categorías («Recargo de laboratorio (graduación alta)») y el Ejecutivo. El precio al paciente no cambia. Una vez por trabajo; en la misma potencia solo el escalón más alto.</td><td><span class="tag ok">Listo</span></td><td><code>sale_fact.lab_surcharge_cents</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: <code>tests/lab-surcharge.test.ts</code>; suite completa 108 / 1691. QA local: venta +6.50 con recargo $30, +5.00 sin recargo, el desglose cuadra con la tarjeta, el informe por categorías lo muestra. Requiere redeploy del backend (migraciones <code>CreatePos2LabSurcharges</code>, <code>ExtendSaleFactSurcharge3</code>; además la de agudeza visual pasa a llamarse <code>CreatePrescription4Clinical</code>).</p>
+</section>
+
+<section>
   <h2>18-nov-2026 — Agudeza visual con y sin lentes, y ojo dominante</h2>
   <p>El dueño: «la receta debe tener la agudeza visual bajo los estándares optométricos, con cristales y sin cristales, por ojos… y el ojo dominante, fácil de insertar».</p>
   <table>
     <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
     <tr><td><b>Receta nueva → «Agudeza visual (lejos)»</b>: OD, OI y AO sin lentes (sc) y con lentes (cc). Se escribe como en la hoja («20», «100-2», «cd», «pl») y queda en notación de Snellen (20/20, 20/100-2, CF…); también acepta 6/x y decimal. Debajo: «Mejora con lentes: OD +7 líneas». Ojo dominante con dos botones OD / OI.</td><td><span class="tag ok">Listo</span></td><td><code>VisualAcuityCard.jsx</code>, <code>lib/visual-acuity.ts</code></td></tr>
-    <tr><td>Se guarda con la receta; se ve en la ficha de la venta, se corrige desde «Corregir receta» y sale en la evolución de la graduación del paciente. La ficha de laboratorio impresa lleva el ojo dominante.</td><td><span class="tag ok">Listo</span></td><td>migración <code>AddClinicalToPrescription4</code></td></tr>
+    <tr><td>Se guarda con la receta; se ve en la ficha de la venta, se corrige desde «Corregir receta» y sale en la evolución de la graduación del paciente. La ficha de laboratorio impresa lleva el ojo dominante.</td><td><span class="tag ok">Listo</span></td><td>migración <code>CreatePrescription4Clinical</code></td></tr>
   </table>
   <p class="muted">Pruebas: <code>tests/visual-acuity.test.ts</code> y <code>scripts/test-visual-acuity.mjs</code> (mismos casos); QA local: venta con agudeza, rechazo de una no válida, ficha de laboratorio, corrección y ficha del paciente; tarjeta en Galaxy Tab A7 Lite. Requiere redeploy del backend (migración).</p>
 </section>

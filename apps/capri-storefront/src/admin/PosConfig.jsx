@@ -4,6 +4,7 @@
 //  · Formas de pago: dueño, superadmin o el privilegio «Gestionar formas de pago» (HU-111/112).
 //  · Límites de descuento y umbrales del daño óptico: dueño y superadmin (HU-16, HU-123).
 //  · Lo que deben las aseguradoras: dueño y encargados (HU-114).
+import LabSurcharges from "./LabSurcharges.jsx";
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
@@ -237,6 +238,7 @@ export default function PosConfig() {
           privilegio solo se ven las propias y se quitaría sin querer de las demás. */}
       {payments && <Methods stores={ctx.stores} canEditStores={admin} />}
       {admin && <Limits />}
+      {admin && <LabSurcharges />}
       {(admin || manager) && <Claims stores={ctx.stores} />}
     </div>
   );

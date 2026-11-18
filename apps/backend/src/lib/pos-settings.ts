@@ -2,6 +2,7 @@ import type { MedusaContainer } from "@medusajs/framework/types";
 import { POS_MODULE } from "../modules/pos";
 import type PosModuleService from "../modules/pos/service";
 import { DEFAULT_THRESHOLDS, type Thresholds } from "./optical-change";
+import { normalizeSurcharges, surchargesDenied, type LabSurcharge } from "./lab-surcharge";
 
 /**
  * Point-of-sale settings set by the owner or a superadmin (single row).
@@ -25,6 +26,8 @@ export const MAX_DISCOUNT_LIMIT = 50;
 export interface PosSettings {
   discount_limits: DiscountLimits;
   optical_thresholds: Thresholds;
+  /** Lab surcharges for high powers (lib/lab-surcharge.ts). */
+  lab_surcharges: LabSurcharge[];
   updated_by: string | null;
 }
 
@@ -52,7 +55,11 @@ export function normalizeThresholds(raw: unknown): Thresholds {
 }
 
 /** Validation of an owner's edit; returns a reason code or null. */
-export function settingsDenied(body: { discount_limits?: unknown; optical_thresholds?: unknown }): string | null {
+export function settingsDenied(body: { discount_limits?: unknown; optical_thresholds?: unknown; lab_surcharges?: unknown }): string | null {
+  if (body.lab_surcharges !== undefined) {
+    const bad = surchargesDenied(body.lab_surcharges);
+    if (bad) return bad;
+  }
   if (body.discount_limits !== undefined) {
     const r = body.discount_limits as Record<string, unknown> | null;
     if (!r || typeof r !== "object") return "bad_limits";
@@ -95,19 +102,21 @@ export async function getPosSettings(container: MedusaContainer): Promise<PosSet
   return {
     discount_limits: normalizeLimits(row?.discount_limits),
     optical_thresholds: normalizeThresholds(row?.optical_thresholds),
+    lab_surcharges: normalizeSurcharges((row as { lab_surcharges?: unknown } | undefined)?.lab_surcharges),
     updated_by: (row?.updated_by as string | null) ?? null,
   };
 }
 
 export async function savePosSettings(
   container: MedusaContainer,
-  patch: { discount_limits?: unknown; optical_thresholds?: unknown },
+  patch: { discount_limits?: unknown; optical_thresholds?: unknown; lab_surcharges?: unknown },
   actorId: string | null
 ): Promise<{ before: PosSettings; after: PosSettings }> {
   const before = await getPosSettings(container);
   const after: PosSettings = {
     discount_limits: patch.discount_limits !== undefined ? normalizeLimits({ ...before.discount_limits, ...(patch.discount_limits as object) }) : before.discount_limits,
     optical_thresholds: patch.optical_thresholds !== undefined ? normalizeThresholds({ ...before.optical_thresholds, ...(patch.optical_thresholds as object) }) : before.optical_thresholds,
+    lab_surcharges: patch.lab_surcharges !== undefined ? normalizeSurcharges(patch.lab_surcharges) : before.lab_surcharges,
     updated_by: actorId,
   };
   const s = svc(container);
@@ -115,6 +124,7 @@ export async function savePosSettings(
   const data = {
     discount_limits: after.discount_limits as unknown as Record<string, unknown>,
     optical_thresholds: after.optical_thresholds as unknown as Record<string, unknown>,
+    lab_surcharges: after.lab_surcharges as unknown as Record<string, unknown>,
     updated_by: actorId,
   };
   if (row) await s.updatePosSettings({ id: SETTING_ID, ...data });

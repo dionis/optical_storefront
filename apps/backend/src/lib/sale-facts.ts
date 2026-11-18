@@ -1,3 +1,5 @@
+import { surchargeFor } from "./lab-surcharge";
+import { getPosSettings } from "./pos-settings";
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
@@ -34,6 +36,8 @@ export interface LineContext {
   soldAt: Date;
   status: "active" | "voided";
   tz: string;
+  /** Lab surcharge (cents) of each lens line by its prescription id (lib/lab-surcharge.ts). */
+  surchargeByRx?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -93,12 +97,36 @@ export function factFromLine(item: Record<string, unknown>, productMeta: Record<
     tax_cents: tax,
     frame_cents: cents(md.frame_price) * qty,
     lenses_cents: cents(md.lens_addon) * qty,
+    // A high power's lab surcharge, once per lens job (lib/lab-surcharge.ts).
+    lab_surcharge_cents: withLenses && md.prescription_id ? ctx.surchargeByRx?.get(String(md.prescription_id)) ?? 0 : 0,
     total_cents: total,
     payment_methods: ctx.paymentMethods as unknown as Record<string, unknown>,
     status: ctx.status,
     sold_at: ctx.soldAt,
     sold_date_local: localParts(ctx.soldAt, ctx.tz).date,
   };
+}
+
+/**
+ * The lab surcharge of each prescription the order's lens lines are cut to,
+ * with the owner's current rules (lib/lab-surcharge.ts). Read when the order is
+ * projected: at the sale, and again when the sale's prescription is corrected.
+ */
+async function surchargesOf(container: MedusaContainer, items: Array<Record<string, unknown>>): Promise<Map<string, number>> {
+  const ids = [...new Set(items.map((i) => String(((i.metadata ?? {}) as Record<string, unknown>).prescription_id ?? "")).filter(Boolean))];
+  const out = new Map<string, number>();
+  if (!ids.length) return out;
+  const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+  const [rows, settings] = await Promise.all([
+    pg("prescription").whereIn("id", ids).select("id", "od_sph", "od_cyl", "od_add", "od_prism", "os_sph", "os_cyl", "os_add", "os_prism") as Promise<Array<Record<string, unknown>>>,
+    getPosSettings(container),
+  ]);
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  for (const r of rows) {
+    const { cents: c } = surchargeFor({ od: { sph: num(r.od_sph), cyl: num(r.od_cyl), add: num(r.od_add), prism: num(r.od_prism) }, os: { sph: num(r.os_sph), cyl: num(r.os_cyl), add: num(r.os_add), prism: num(r.os_prism) } }, settings.lab_surcharges);
+    out.set(String(r.id), c);
+  }
+  return out;
 }
 
 /** (Re)writes the facts of one order. Idempotent: an order's rows are replaced. */
@@ -139,6 +167,7 @@ export async function projectOrder(container: MedusaContainer, orderId: string):
       tz: tenant().timezone,
     };
     const items = order.items ?? [];
+    ctx.surchargeByRx = await surchargesOf(container, items).catch(() => new Map<string, number>());
     const meta = await loadProductMetadata(container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION), items.map((i) => String(i.product_id ?? "")).filter(Boolean));
     const rows = items.map((it) => factFromLine(it, meta.get(String(it.product_id ?? "")) ?? {}, ctx));
     const svc = container.resolve<SalesAnalyticsModuleService>(SALES_ANALYTICS_MODULE);
