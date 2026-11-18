@@ -1143,6 +1143,17 @@ export async function saveStoredSheet(
   await orders.updateOrders([{ id: orderId, metadata: next }]);
 }
 
+/**
+ * The rules that count in a store: the ones it has not switched off
+ * («Se cobra», pricing panel → Reglas y comisiones). No store (a chain-wide
+ * view) or no toggles = every rule. The books (lib/financial-statement.ts), the
+ * Executive (lib/sales-insights.ts) and the order sheet all filter with this.
+ */
+export function rulesInStore(rules: CostRule[], storeId: string | null | undefined, toggles: readonly CostToggleRow[] = []): CostRule[] {
+  if (!storeId || !toggles.length) return rules;
+  return rules.filter((r) => isEnabled(r.id ?? `${r.kind}:${r.match_key}`, storeId, toggles as CostToggleRow[]));
+}
+
 /** Sheet of a projected board order (rules + seller + stored override). Best effort on the seller lookup. */
 export async function costSheetForOrder(
   container: MedusaContainer,
@@ -1156,7 +1167,7 @@ export async function costSheetForOrder(
   const stored = readStoredSheet(metadata);
   // A store may switch a cost rule off for itself (pricing panel → Costos).
   // Without toggles every rule counts, which is what the chain-wide views want.
-  const live = rules.filter((r) => isEnabled(r.id ?? `${r.kind}:${r.match_key}`, order.establishment_id, toggles));
+  const live = rulesInStore(rules, order.establishment_id, toggles);
   return computeCostSheet(
     {
       total: order.total,

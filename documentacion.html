@@ -128,6 +128,17 @@
 </section>
 
 <section>
+  <h2>18-nov-2026 — «Costos por venta» y «Se cobra» por tienda</h2>
+  <p>El dueño preguntó por qué «Costos por venta» de Op3 decía $494: eran $4 de Op3 + $10 de laboratorio × 49 ventas de todas las tiendas.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Encabezado de «Costos por venta»</b>: con una tienda elegida usa sus ventas y solo las reglas que esa tienda cobra. La fila de una regla apagada en la tienda dice $0.</td><td><span class="tag ok">Listo</span></td><td><code>pricing/CostsSection.jsx</code></td></tr>
+    <tr><td><b>«Se cobra» ahora cuenta en los libros</b>: una regla apagada en una tienda (p. ej. laboratorio) ya no se carga a las ventas de esa tienda en el resultado, el estado de resultados, el informe por categorías ni el Ejecutivo. Antes solo lo respetaba la hoja de Google.</td><td><span class="tag ok">Listo</span></td><td><code>lib/costing.ts rulesInStore</code>, <code>financial-statement.ts</code>, <code>sales-insights.ts</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: libro y Ejecutivo con una regla apagada en una tienda dan la misma respuesta. Requiere redeploy del backend (sin migraciones).</p>
+</section>
+
+<section>
   <h2>18-nov-2026 — Venta con fecha retroactiva</h2>
   <p>El dueño: «cuando se registre una venta se debe poder poner fecha retroactiva».</p>
   <table>

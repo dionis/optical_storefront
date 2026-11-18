@@ -5,14 +5,14 @@ import { STORE_COST_MODULE } from "../modules/store-cost";
 import type StoreCostModuleService from "../modules/store-cost/service";
 import { localParts } from "./alerts";
 import { commissionResolverOf } from "./commission-pct";
-import { computeCostSheet, conceptKey, isPaymentFeeRule, lineGroup, lineKind, listCostRules, type CostOrderLike, type CostRule } from "./costing";
+import { computeCostSheet, conceptKey, isPaymentFeeRule, lineGroup, lineKind, listCostRules, rulesInStore, type CostOrderLike, type CostRule } from "./costing";
 import { listEstablishments, type EstablishmentRow } from "./establishments";
 import { pickOnlineStore } from "./online-store";
 import { loadProductMetadata } from "./frame-specs";
 import { parseLensFinish } from "./lens-finish";
 import { listSellers } from "./sellers";
 import { profilesByUser } from "./staff-profile-data";
-import { loadDefaultCommissionPct } from "./store-cost-toggle";
+import { loadCostToggles, loadDefaultCommissionPct, type CostToggleRow } from "./store-cost-toggle";
 import { allocateShared, monthlyCharge, perSaleCharge, taxCategoryOf, TAX_CATEGORIES, type CostItemLike, type TaxCategory } from "./store-costs";
 import { tenant } from "./tenant";
 
@@ -286,6 +286,12 @@ export interface LedgerInput {
   facts: readonly LedgerFact[];
   pays: readonly FeeRowLike[];
   rules: CostRule[];
+  /**
+   * The stores' «Se cobra» switches (lib/store-cost-toggle.ts): a rule a store
+   * switched off is not part of ITS sales' cost (lib/costing.ts rulesInStore).
+   * Absent = every rule everywhere.
+   */
+  toggles?: readonly CostToggleRow[];
   items: readonly LedgerItem[];
   /** brand slug (or collection slug) of each product id. */
   brandOf: (productId: string | null) => string | null;
@@ -341,6 +347,15 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
   const gatewayPct = active.filter(isPaymentFeeRule).reduce((s, r) => s + r.amount, 0);
   const gatewayFixed = active.filter((r) => r.kind === "payment_fixed").reduce((s, r) => s + Math.round(r.amount * 100), 0);
 
+  // Each store's rules, once: the ones it has not switched off.
+  const byStore = new Map<string, CostRule[]>();
+  const rulesOf = (storeId: string | null): CostRule[] => {
+    if (!storeId || !input.toggles?.length) return rules;
+    let r = byStore.get(storeId);
+    if (!r) byStore.set(storeId, (r = rulesInStore(rules, storeId, input.toggles)));
+    return r;
+  };
+
   const out: LedgerMonth[] = [];
   for (const month of months) {
     const entities = new Map<string, EntityMonth>();
@@ -387,7 +402,7 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
           lens: l.lens_design ? { design_code: l.lens_design, material_code: l.lens_material, photo_code: l.lens_photo, ar_code: l.lens_ar, finish: parseLensFinish(l.lens_finish) } : null,
         })),
       };
-      const sheet = computeCostSheet(order, rules, null, null, null);
+      const sheet = computeCostSheet(order, rulesOf(order.establishment_id ?? null), null, null, null);
       for (const l of sheet.lines) {
         if (lineGroup(l) !== "material") continue;
         const cents = Math.round(Number(l.subtotal) * 100);
@@ -806,7 +821,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
   const winFrom = new Date(Date.parse(`${first}T00:00:00Z`) - 2 * 86400_000);
   const winTo = new Date(Date.parse(`${last}T00:00:00Z`) + 3 * 86400_000);
   const sellerIds = [...new Set(lines.map((l) => l.seller_id).filter((v): v is string => Boolean(v)))];
-  const [rules, meta, pays, items, profiles, sellerRows, defaultPct] = await Promise.all([
+  const [rules, meta, pays, items, profiles, sellerRows, defaultPct, toggles] = await Promise.all([
     listCostRules(container),
     loadProductMetadata(pg, [...new Set(lines.map((l) => String(l.product_id ?? "")).filter(Boolean))]),
     pg("pos_sale_payment as p")
@@ -819,6 +834,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     profilesByUser(container, sellerIds),
     listSellers(container).catch(() => []),
     loadDefaultCommissionPct(container),
+    loadCostToggles(container).catch(() => [] as CostToggleRow[]),
   ]);
   const sellerByCode = new Map(sellerRows.map((s) => [s.code, { commission_pct: s.commission_pct }]));
   const pctOf = commissionResolverOf(profiles, sellerByCode, defaultPct);
@@ -852,6 +868,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     facts: lines,
     pays: pays as unknown as FeeRowLike[],
     rules,
+    toggles,
     items: liveItems.map((it) => ({ ...it, amount_cents: Number(it.amount_cents) })),
     brandOf: (id) => {
       const m = meta.get(String(id ?? "")) ?? {};

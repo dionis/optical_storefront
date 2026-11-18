@@ -428,3 +428,25 @@ describe("category report: every detail adds up to its statement line", () => {
     expect(one.items.every((i) => Object.keys(i.by_entity).every((k) => k === "est_2"))).toBe(true);
   });
 });
+
+// ── 4. «Se cobra» por tienda en los libros y en el Ejecutivo (18-nov-2026) ──
+
+describe("a rule a store switched off is not part of its sales' cost", () => {
+  const toggles = [{ id: "t1", establishment_id: "est_2", ref_kind: "rule", ref_id: "order_fixed:lab", enabled: false }] as never;
+  it("ledger: est_2 carries no lab; est_1 still does", () => {
+    const on = ledgerOf(input())[0];
+    const off = ledgerOf(input({ toggles }))[0];
+    expect(on.entities.get("est_2")!.cogs.per_order).toBe(100);
+    expect(off.entities.get("est_2")!.cogs.per_order).toBe(0);
+    expect(off.entities.get("est_1")!.cogs.per_order).toBe(on.entities.get("est_1")!.cogs.per_order);
+  });
+  it("Executive: the same answer as the ledger", () => {
+    const facts = FACTS.filter((f) => f.order_id === "o4");
+    const lines: InsightLine[] = facts.map((f) => ({ ...f, sale_id: "s_o4", terminal_id: null, title: null, brand: null, brand_slug: "flexure", category: "frame", payment_methods: null, hour: 12 }));
+    const orders = new Map([["o4", { gross: 9000, net: 9000, lines: 1 }]]);
+    const base = { rules: RULES, orders, saleFees: new Map([["s_o4", 0]]), commissionPct: () => null };
+    const withLab = lineEconomics(lines, base)[0].cost;
+    const noLab = lineEconomics(lines, { ...base, toggles })[0].cost;
+    expect(withLab - noLab).toBe(100);
+  });
+});

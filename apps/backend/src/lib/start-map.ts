@@ -572,6 +572,7 @@ async function loadEconomics(container: MedusaContainer, f: AnalyticsFilter, acc
   const commissionPct = commissionResolverOf(profiles, costing.sellerByCode, defaultPct);
   const econ = lineEconomics(cur.lines, {
     rules: costing.rules,
+    toggles: costing.toggles,
     orders: new Map(orderRows.map((r) => [String(r.order_id), { gross: Number(r.gross), net: Number(r.net), lines: Number(r.lines) }])),
     saleFees: new Map(feeRows.map((r) => [String(r.sale_id), Number(r.fee)])),
     commissionPct,

@@ -448,7 +448,7 @@ function RuleTable({ rules, store, isStore, salesCount, onSaved, onError }) {
               <span className="fin-unit">{r.unit === "percent" ? "%" : "$"}</span>
             </span>
             <span className="fin-c monthly num muted" data-label={t("adm.fin.col.monthly")} title={t("adm.fin.rules.estHint")}>
-              {r.kind === "order_fixed" ? m(round2(r.amount * totalSales)) : r.unit === "percent" ? t("adm.fin.rules.ofSale") : t("adm.fin.rules.perPayment")}
+              {r.kind === "order_fixed" ? m(isStore && r.enabled === false ? 0 : round2(r.amount * totalSales)) : r.unit === "percent" ? t("adm.fin.rules.ofSale") : t("adm.fin.rules.perPayment")}
             </span>
             <span className="fin-c flag" data-label={t("adm.fin.col.active")}>
               <Toggle on={r.active} label={r.active ? t("adm.fin.on") : t("adm.fin.off")} disabled={busy.has(r.id)} onChange={(v) => save(r, { active: v })} />
@@ -564,7 +564,11 @@ export default function CostsAccordions({ data, scopeStore, open, onToggle, onSa
   );
 
   const rules = data.rules || [];
-  const perSaleRulesTotal = rules.filter((r) => r.active && r.kind === "order_fixed").reduce((a, r) => a + r.amount * chainSales, 0);
+  // Fijos por venta del encabezado: con una tienda elegida, SUS ventas y solo las reglas que esa tienda
+  // cobra («Se cobra»); antes multiplicaba por las ventas de toda la cadena (dueño, 17-nov-2026: «por qué
+  // sale el 494»: $4 de Op3 + $10 × 49 ventas de todas las tiendas). Igual que el libro (lib/financial-statement.ts).
+  const scopedSales = scopeStore ? Number(data.sales_count?.[scopeStore] ?? 0) : chainSales;
+  const perSaleRulesTotal = rules.filter((r) => r.active && r.kind === "order_fixed" && (!scopeStore || r.enabled !== false)).reduce((a, r) => a + r.amount * scopedSales, 0);
   const pnlShown = (k) => (scopeStore ? Number(pnlStore(scopeStore)?.[k]) || 0 : Number(data.pnl?.total?.[k]) || 0);
 
   return (
