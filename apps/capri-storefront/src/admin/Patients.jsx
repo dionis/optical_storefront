@@ -7,6 +7,7 @@
 // totales los calcula el servidor (sale_fact, POS + web, sin anuladas).
 // La receta es dato de salud: la ficha no se exporta ni se imprime desde aquí,
 // y cada apertura queda en Auditoría (`patient.view`).
+import { VisualAcuityView } from "./VisualAcuityCard.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Accordion from "./Accordion.jsx";
@@ -213,6 +214,7 @@ function PatientFile({ id, stores, openSale, onBack }) {
                     <RxEye eye={h.os} side="os" t={t} />
                   </tbody>
                 </table>
+                <VisualAcuityView clinical={h.clinical} />
                 {(h.pd || h.pd_od) && <small className="pt-rx-pd">{t("adm.pt.rx.pd")}: {h.pd ?? "—"}{h.pd_od ? ` (${h.pd_od} / ${h.pd_os ?? "—"})` : ""}{h.seg_height ? ` · ${t("adm.pt.rx.seg")} ${h.seg_height}` : ""}</small>}
               </div>
             ))}

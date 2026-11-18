@@ -179,7 +179,8 @@ export function jobHtml(doc, copyKey = null) {
           <td>${e.prism == null ? "—" : `${fmtRx(e.prism, 2, false)}${e.base ? ` ${esc(e.base)}` : ""}`}</td>
           <td>${fmtRx(tk.rx?.seg_height, 2, false)}</td><td>${fmtRx(tk.rx?.[`pd_${eye}`], 2, false)}</td></tr>`;
       }).join("")}
-    </tbody></table>`;
+    </tbody></table>
+    ${tk.rx?.clinical?.dominant_eye ? `<p class="muted"><b>${esc(t("adm.va.dominant"))}:</b> ${esc(t(`adm.va.eye.${tk.rx.clinical.dominant_eye}`))}</p>` : ""}`;
   return doc.tickets.map((tk) => {
     const l = tk.line;
     const handling = l.handling === "patient_own_frame" ? t("adm.doc.job.handling.own") : t("adm.doc.job.handling.supplied");

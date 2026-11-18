@@ -1,3 +1,4 @@
+import type { Clinical } from "./visual-acuity";
 import { backdateRecord, type Backdate, type BackdateRecord } from "./sale-date";
 import { saleMissing, type MissingKey } from "./pos";
 import type { AppliedPromotion } from "./promotions";
@@ -378,6 +379,8 @@ export interface RxMeta {
   rx_date: string | null;
   rx_date_approx: boolean;
   worn_source: WornSource | null;
+  /** Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts). */
+  clinical?: Clinical | null;
 }
 
 export interface StoredRx {
@@ -394,6 +397,8 @@ export interface StoredRx {
   pd_od: number | null;
   pd_os: number | null;
   seg_height: number | null;
+  /** Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts); null = not recorded. */
+  clinical: Clinical | null;
 }
 
 const n = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
@@ -417,6 +422,7 @@ function toStoredRx(r: Record<string, unknown>): StoredRx {
     pd_od: n(r.pd_od),
     pd_os: n(r.pd_os),
     seg_height: n(r.seg_height),
+    clinical: r.clinical && typeof r.clinical === "object" ? (r.clinical as Clinical) : null,
   };
 }
 
@@ -540,6 +546,7 @@ async function insertPrescriptions(
     worn_source: kind === "worn" ? m.worn_source : null,
     previous_prescription_id: previous,
     rx_number: number,
+    clinical: m.clinical ? JSON.stringify(m.clinical) : null,
   });
   let wornId: string | null = null;
   if (input.worn && meta.worn) {
@@ -556,8 +563,8 @@ async function insertPrescriptions(
  * The NEW prescription of a sale whose prescription came later (lib/rx-pending.ts):
  * the same row the till writes, with the next Rx number. Returns its id and number.
  */
-export async function insertLatePrescription(container: MedusaContainer, customerId: string, rx: Prescription, rxDate: string | null): Promise<{ id: string; rxNumber: string }> {
-  const out = await insertPrescriptions(container, { new: { rx }, worn: null }, { new: { rx_date: rxDate, rx_date_approx: false, worn_source: null }, worn: null }, customerId);
+export async function insertLatePrescription(container: MedusaContainer, customerId: string, rx: Prescription, rxDate: string | null, clinical: Clinical | null = null): Promise<{ id: string; rxNumber: string }> {
+  const out = await insertPrescriptions(container, { new: { rx }, worn: null }, { new: { rx_date: rxDate, rx_date_approx: false, worn_source: null, clinical }, worn: null }, customerId);
   if (!out.newId || !out.rxNumber) throw new PosError("save_failed", 500);
   return { id: out.newId, rxNumber: out.rxNumber };
 }

@@ -435,6 +435,10 @@ export async function buildSaleDocument(
               pd_od: nn(r.pd_od) ?? (pd === null ? null : pd / 2),
               pd_os: nn(r.pd_os) ?? (pd === null ? null : pd / 2),
               seg_height: nn(r.seg_height),
+              // Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts): the panel shows them with
+              // the prescription; the printed ticket carries only the dominant eye (the lab needs it for
+              // progressives and monovision, not the acuity).
+              clinical: r.clinical && typeof r.clinical === "object" ? r.clinical : null,
             }
           : null,
       };

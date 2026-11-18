@@ -25,6 +25,7 @@
  * This file holds that last step; lib/pos-sale-admin.ts updateSaleDetails
  * calls it when the sale has no prescription yet.
  */
+import type { Clinical } from "./visual-acuity";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
@@ -52,10 +53,10 @@ export function waitingForRx(items: ReadonlyArray<{ metadata?: Record<string, un
  */
 export async function attachLatePrescription(
   container: MedusaContainer,
-  args: { saleId: string; orderId: string; customerId: string | null; rx: Prescription; rxDate: string | null }
+  args: { saleId: string; orderId: string; customerId: string | null; rx: Prescription; rxDate: string | null; clinical?: Clinical | null }
 ): Promise<{ prescriptionId: string; rxNumber: string; lines: number }> {
   if (!args.customerId) throw new PosError("customer_not_found", 404);
-  const { id, rxNumber } = await insertLatePrescription(container, args.customerId, args.rx, args.rxDate);
+  const { id, rxNumber } = await insertLatePrescription(container, args.customerId, args.rx, args.rxDate, args.clinical ?? null);
   const pg = pgOf(container);
   const res = (await pg.raw(
     `UPDATE order_line_item li

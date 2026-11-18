@@ -25,6 +25,7 @@
  *                       the money was received: the cash is in that store's
  *                       drawer, and moving the rows would break its register.
  */
+import { cleanClinical, type Clinical } from "./visual-acuity";
 import type { ICustomerModuleService, IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
@@ -94,7 +95,7 @@ export interface SaleDetailsPatch {
   /** Free text, or null/"" to clear. */
   internal_note?: unknown;
   /** New values of the sale's new prescription (same shape as at the till). */
-  prescription?: { rx?: Prescription & Record<string, unknown>; rx_date?: unknown } | null;
+  prescription?: { rx?: Prescription & Record<string, unknown>; rx_date?: unknown; clinical?: unknown } | null;
 }
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -130,7 +131,14 @@ export function cleanDetailsPatch(body: SaleDetailsPatch): { reason: string } | 
     if (!rx || typeof rx !== "object" || !rx.od || !rx.os) return { reason: "prescription_required" };
     const d = body.prescription.rx_date;
     if (d !== undefined && d !== null && d !== "" && !(typeof d === "string" && realDay(d))) return { reason: "bad_rx_date" };
-    patch.prescription = { rx, rx_date: typeof d === "string" && d ? d : null };
+    // Visual acuity and dominant eye (lib/visual-acuity.ts): absent = keep what the prescription has.
+    let clinical: Clinical | null | undefined;
+    if (body.prescription.clinical !== undefined) {
+      const c = cleanClinical(body.prescription.clinical);
+      if (c && "reason" in c) return { reason: c.reason };
+      clinical = c;
+    }
+    patch.prescription = { rx, rx_date: typeof d === "string" && d ? d : null, ...(clinical !== undefined ? { clinical } : {}) };
   }
   if (!Object.keys(patch).length) return { reason: "nothing_to_change" };
   return { patch };
@@ -141,7 +149,7 @@ interface CleanPatch {
   delivery?: "pickup" | "ship";
   promised_on?: string | null;
   internal_note?: string | null;
-  prescription?: { rx: Prescription & Record<string, unknown>; rx_date: string | null };
+  prescription?: { rx: Prescription & Record<string, unknown>; rx_date: string | null; clinical?: Clinical | null };
 }
 
 interface OrderForEdit {
@@ -245,12 +253,13 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
         source: p.prescription.rx.source === "ocr" ? "ocr" : "manual",
         verified_by_user: storedVerifiedByUser(p.prescription.rx),
         ...(p.prescription.rx_date ? { rx_date: new Date(`${p.prescription.rx_date}T12:00:00Z`) } : {}),
+        ...(p.prescription.clinical !== undefined ? { clinical: p.prescription.clinical ? JSON.stringify(p.prescription.clinical) : null } : {}),
         updated_at: new Date(),
       });
     changed.push("prescription");
   } else if (p.prescription && order) {
     // The prescription that was pending: a new record with its Rx number, linked to the lens lines.
-    await attachLatePrescription(container, { saleId: sale.id, orderId: order.id, customerId: sale.customer_id, rx: p.prescription.rx, rxDate: p.prescription.rx_date });
+    await attachLatePrescription(container, { saleId: sale.id, orderId: order.id, customerId: sale.customer_id, rx: p.prescription.rx, rxDate: p.prescription.rx_date, clinical: p.prescription.clinical ?? null });
     changed.push("prescription");
   }
   const salePatch: Record<string, unknown> = {};

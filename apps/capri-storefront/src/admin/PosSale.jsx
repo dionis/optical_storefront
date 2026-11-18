@@ -41,6 +41,8 @@ import PosSaleSummary, { PosRunningTotal } from "./PosSaleSummary.jsx";
 import { birthMax, customerProblems, emailProblem, LIMITS, paymentProblem, phoneProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
 import MissingData from "./MissingData.jsx";
+import VisualAcuityCard from "./VisualAcuityCard.jsx";
+import { clinicalBody, clinicalProblem, EMPTY_CLINICAL } from "./visualAcuity.js";
 import SaleDateCard, { EMPTY_SOLD_ON, soldOnBody, soldOnProblem, todayIn } from "./SaleDateCard.jsx";
 import "./pos.css";
 import "./pos-tablet.css";
@@ -399,6 +401,8 @@ export default function PosSale({ me }) {
   // la venta se termina igual y la receta se agrega desde la venta (backend lib/rx-pending.ts).
   const [rxPending, setRxPending] = useState(false);
   const [rxNew, setRxNew] = useState(EMPTY_RX);
+  // Agudeza visual sin/con lentes y ojo dominante de la receta nueva (VisualAcuityCard.jsx).
+  const [clinical, setClinical] = useState(EMPTY_CLINICAL);
   // Sin receta escrita y sin marcar nada: la venta sigue como «graduación pendiente» (dueño, 17-nov-2026:
   // «se debe poder registrar la venta aunque falten datos»). Se avisa al pasar de paso y al registrar.
   const pendingRx = rxPending || (!noRx && !rxFilled(rxNew));
@@ -619,7 +623,7 @@ export default function PosSale({ me }) {
     } : null,
   } : null);
   // Leída de la foto → `ocr` y verificada solo si el vendedor confirmó la lectura.
-  const newBody = () => (noRx || pendingRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual", ocr.status !== "done" || ocr.confirmed === true), rx_date: rxNew.rx_date || null });
+  const newBody = () => (noRx || pendingRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual", ocr.status !== "done" || ocr.confirmed === true), rx_date: rxNew.rx_date || null, clinical: clinicalBody(clinical) });
 
   // Cotización en curso: se pide al servidor desde que hay montura (paso
   // Montura) y cada vez que cambia algo que afecta al precio, con una espera
@@ -869,6 +873,11 @@ export default function PosSale({ me }) {
   /** Registrar: primero lo que lo impide (y en qué paso), luego el resumen de lo pendiente. */
   const tryConfirm = async () => {
     if (busy) return;
+    if (!noRx && !pendingRx && clinicalProblem(clinical)) {
+      setStep(STEPS.indexOf("rx"));
+      await dialog({ tone: "warning", title: t("adm.va.title"), message: t("adm.va.badLong"), confirmLabel: t("adm.sdt.fix") });
+      return;
+    }
     const dateProblem = soldOnProblem(soldOn, todayIn(ctx?.timezone), ctx?.backdate_max_days ?? 7);
     if (dateProblem) {
       await dialog({ tone: "warning", title: t("adm.sdt.title"), message: t(dateProblem, { max: ctx?.backdate_max_days ?? 7, min: "" }), confirmLabel: t("adm.sdt.fix") });
@@ -955,7 +964,7 @@ export default function PosSale({ me }) {
     idem.current = null;
     acked.current.clear();
     setStep(0); setMaxStep(0); setTouched({}); setShowCustErrors(false); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
-    setLines([]); setOwn(EMPTY_OWN); setFrameMode("catalog"); setOwnTried(false); setNoRx(false); setRxPending(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
+    setLines([]); setOwn(EMPTY_OWN); setFrameMode("catalog"); setOwnTried(false); setNoRx(false); setRxPending(false); setRxNew(EMPTY_RX); setClinical(EMPTY_CLINICAL); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
     setDiscount(""); setQ(null); setQStatus("idle"); setApproval(null); setReason("");
     setDup({ phone: null, email: null }); dupDismissed.current = { phone: new Set(), email: new Set() };
@@ -1236,6 +1245,7 @@ export default function PosSale({ me }) {
                   )}
                   <RxForm mode="new" idp="new" value={rxNew} onChange={setRxNew} type={rxNew.type} errors={rxCheck.errors} warnings={rxCheck.warnings}
                     showErrors={rxFilled(rxNew)} source={ocr.status === "done" ? "ocr" : "manual"} disabled={ocr.status === "loading"} />
+                  <VisualAcuityCard value={clinical} onChange={setClinical} disabled={ocr.status === "loading"} idp="new-va" />
                 </div>
               </div>
             )}

@@ -22,6 +22,8 @@
 // = POST /admin/order-board/:id/stage con una de `next_stages`. Costo, comisión y
 // ganancia nunca se piden aquí: llegan en `economics` desde la lista que ya los
 // tenía (y solo si el servidor los dio).
+import VisualAcuityCard, { VisualAcuityView } from "./VisualAcuityCard.jsx";
+import { clinicalBody, clinicalForm, clinicalProblem } from "./visualAcuity.js";
 import MissingData from "./MissingData.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -104,6 +106,7 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
   // «Graduación pendiente» (backend lib/rx-pending.ts): la receta se escribe aquí por primera vez.
   const rxPending = sale.rx_pending === true && !rx;
   const { t } = useLang();
+  const { toast } = useFeedback();
   const initCust = useMemo(() => ({
     first_name: customer?.first_name || "", last_name: customer?.last_name || "", email: customer?.email || "", phone: customer?.phone || "", birth_date: customer?.birth_date || "",
     address_1: address?.address_1 || "", city: address?.city || "", province: address?.province || "", postal_code: address?.postal_code || "",
@@ -119,6 +122,10 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
   const [rxForm, setRxForm] = useState(initRx);
   useEffect(() => setRxForm(initRx), [initRx]);
   const [showRxErrors, setShowRxErrors] = useState(false);
+  // Agudeza visual y ojo dominante de esa receta (VisualAcuityCard.jsx).
+  const initClinical = rx?.clinical || null;
+  const [vaForm, setVaForm] = useState(() => clinicalForm(initClinical));
+  useEffect(() => setVaForm(clinicalForm(initClinical)), [initClinical]);
 
   const custChanged = Boolean(customer) && JSON.stringify(cust) !== JSON.stringify(initCust);
   const rxChanged = rxOpen && Boolean(rxForm) && JSON.stringify(rxForm) !== JSON.stringify(initRx);
@@ -134,12 +141,14 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
     if (delivery !== (sale.delivery === "ship" ? "ship" : "pickup")) b.delivery = delivery;
     if ((promised || null) !== (sale.promised_on || null)) b.promised_on = promised || null;
     if (note.trim() !== (sale.internal_note || "").trim()) b.internal_note = note.trim() || null;
-    if (rxChanged) b.prescription = { rx: toRx(rxForm), rx_date: rxForm.rx_date || null };
+    const clinicalChanged = rxOpen && JSON.stringify(clinicalBody(vaForm)) !== JSON.stringify(clinicalBody(clinicalForm(initClinical)));
+    if (rxChanged || clinicalChanged) b.prescription = { rx: toRx(rxForm), rx_date: rxForm.rx_date || null, clinical: clinicalBody(vaForm) };
     return b;
   };
   const changes = Object.keys(body()).length;
   const save = () => {
     if (rxChanged && hasRxErrors(validateRx(rxForm, rxForm.type || inferType(rxForm)).errors)) { setShowRxErrors(true); return; }
+    if (rxOpen && clinicalProblem(vaForm)) { toast({ tone: "error", title: t("adm.va.badLong") }); return; }
     // La receta que estaba pendiente necesita al menos la esfera de los dos ojos.
     if (rxPending && rxOpen && (num(rxForm?.od?.sph) === null || num(rxForm?.os?.sph) === null)) { setShowRxErrors(true); return; }
     onSave(body());
@@ -188,6 +197,7 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
           ) : (
             <>
               <RxForm value={rxForm} onChange={setRxForm} mode="new" disabled={busy} showErrors={showRxErrors} idp="sd-edit-rx" />
+              <VisualAcuityCard value={vaForm} onChange={setVaForm} disabled={busy} idp="sd-edit-va" />
               <small className="sd-hint">{t(rxPending ? "adm.sd.edit.rxAddHint" : "adm.sd.edit.rxHint")}</small>
             </>
           )}
@@ -832,6 +842,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                               <>
                                 <div className="sd-rx-head">{rx.rx_number && <span>{t("adm.sd.rxNumber")} <b>{rx.rx_number}</b></span>}{rx.seg_height != null && <span className="sd-muted">{t("adm.sd.rx.seg")}: {fmtRx(rx.seg_height, 2, false)}</span>}</div>
                                 <RxGrid rx={rx} />
+                                <VisualAcuityView clinical={rx.clinical} />
                                 {perms.can_edit && mode !== "edit" && (
                                   <button type="button" className="btn-sm sd-rx-edit adm-noprint" disabled={busy} onClick={() => { setEditRx(true); setMode("edit"); panelRef.current?.querySelector(".sd-body")?.scrollTo({ top: 0, behavior: "smooth" }); }}>
                                     <Icon name="edit" size={13} /> {t("adm.sd.edit.rxEdit")}

@@ -5,6 +5,7 @@
  * Every validator returns a reason code (the panel shows
  * `adm.err.pos.<reason>`) or the cleaned value — never prose.
  */
+import { cleanClinical, type Clinical } from "./visual-acuity";
 import { FIELD_LIMITS, isValidEmail, isValidName, isValidPhone, isValidUsZip } from "./field-rules";
 import { parseLensFinish, type LensFinish } from "./lens-finish";
 
@@ -632,10 +633,14 @@ export type WornSource = (typeof WORN_SOURCES)[number];
  * here, flagged as approximate.
  */
 export function cleanRxMeta(
-  input: { rx_date?: unknown; approx_months_ago?: unknown; worn_source?: unknown } | null | undefined,
+  input: { rx_date?: unknown; approx_months_ago?: unknown; worn_source?: unknown; clinical?: unknown } | null | undefined,
   now = new Date()
-): { reason: string } | { rx_date: string | null; rx_date_approx: boolean; worn_source: WornSource | null } {
+): { reason: string; field?: string } | { rx_date: string | null; rx_date_approx: boolean; worn_source: WornSource | null; clinical?: Clinical | null } {
   const i = input ?? {};
+  // Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts), optional.
+  const clinical = cleanClinical(i.clinical);
+  if (clinical && "reason" in clinical) return clinical;
+  const withClinical = <T extends object>(o: T) => (clinical ? { ...o, clinical } : o);
   const source = i.worn_source == null || i.worn_source === "" ? null : String(i.worn_source);
   if (source !== null && !(WORN_SOURCES as readonly string[]).includes(source)) return { reason: "bad_worn_source" };
   const worn_source = source as WornSource | null;
@@ -644,13 +649,13 @@ export function cleanRxMeta(
     const months = Number(i.approx_months_ago);
     if (!Number.isInteger(months) || months < 0 || months > 600) return { reason: "bad_rx_date" };
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1));
-    return { rx_date: d.toISOString().slice(0, 10), rx_date_approx: true, worn_source };
+    return withClinical({ rx_date: d.toISOString().slice(0, 10), rx_date_approx: true, worn_source });
   }
   const raw = i.rx_date == null || i.rx_date === "" ? null : String(i.rx_date);
-  if (raw === null) return { rx_date: null, rx_date_approx: false, worn_source };
+  if (raw === null) return withClinical({ rx_date: null, rx_date_approx: false, worn_source });
   const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00Z`) : null;
   if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== raw || d > now) return { reason: "bad_rx_date" };
-  return { rx_date: raw, rx_date_approx: false, worn_source };
+  return withClinical({ rx_date: raw, rx_date_approx: false, worn_source });
 }
 
 /** RX-2026-00812 */
