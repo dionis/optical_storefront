@@ -641,10 +641,10 @@ export default function PosSale({ me }) {
   // Lentes, o el material quitado) no tiene precio posible: no se pregunta.
   const quotable = lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code);
   const quoteBody = useMemo(() => (store && lines.length && quotable && reached >= QUOTE_FROM && STEPS[step] !== "done"
-    ? JSON.stringify({ store: store.id, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, ...promoParams(), prescription: withRx ? newBody() : null, worn: withRx ? wornBody() : null })
+    ? JSON.stringify({ store: store.id, customer_id: customerId || null, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, ...promoParams(), prescription: withRx ? newBody() : null, worn: withRx ? wornBody() : null })
     : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store?.id, lines, discount, promoId, promoRef, quotable && reached >= QUOTE_FROM && STEPS[step] !== "done", withRx, withRx && rxNew, withRx && rxWorn, withRx && worn, withRx && wornFrame, withRx && wears, withRx && ocr.status]);
+    [store?.id, customerId, lines, discount, promoId, promoRef, quotable && reached >= QUOTE_FROM && STEPS[step] !== "done", withRx, withRx && rxNew, withRx && rxWorn, withRx && worn, withRx && wornFrame, withRx && wears, withRx && ocr.status]);
   useEffect(() => {
     if (!quoteBody) { quoteSeq.current += 1; setQ(null); setQStatus("idle"); return undefined; }
     const seq = ++quoteSeq.current;
@@ -1084,7 +1084,14 @@ export default function PosSale({ me }) {
               {customerId && (
                 <div className="pos-picked">
                   <Icon name="user" size={14} /> {t("adm.pos.cust.existing")}
-                  {custInfo?.sales?.length ? ` · ${t("adm.pos.cust.purchases", { n: custInfo.sales.length })}` : ""}
+                  {/* Historial de compras (backend lib/patient-purchases.ts): todas las tiendas y la web. */}
+                  {custInfo?.purchase_summary?.purchases ? (
+                    <span className={`pos-repeat tier-${custInfo.purchase_summary.tier}`} title={t("adm.pos.repeat.hint")}>
+                      {t(`adm.pos.repeat.tier.${custInfo.purchase_summary.tier}`)} · {t("adm.pos.repeat.count", { n: custInfo.purchase_summary.purchases })}
+                      {custInfo.purchase_summary.last_at ? ` · ${t("adm.pos.repeat.last", { date: String(custInfo.purchase_summary.last_at).slice(0, 10) })}` : ""}
+                      {` · ${t("adm.pos.repeat.total", { v: m(custInfo.purchase_summary.total) })}`}
+                    </span>
+                  ) : custInfo?.sales?.length ? ` · ${t("adm.pos.cust.purchases", { n: custInfo.sales.length })}` : ` · ${t("adm.pos.repeat.first")}`}
                   <button type="button" className="btn-xs" onClick={newCustomer}>{t("adm.pos.cust.new")}</button>
                 </div>
               )}
@@ -1296,7 +1303,12 @@ export default function PosSale({ me }) {
                     <label><span><Icon name="tag" size={12} /> {t("adm.promo.pos.label")}</span>
                       <select value={promoId} onChange={(e) => { setPromoId(e.target.value); setPromoRef(""); }}>
                         <option value="">{t("adm.promo.pos.none")}</option>
-                        {store.promotions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        {store.promotions.map((p) => {
+                          // «Desde la N.ª compra»: esta venta sería la compra n.º (compras previas + 1).
+                          const nth = (custInfo?.purchase_summary?.purchases || 0) + 1;
+                          const short = p.min_purchases && nth < p.min_purchases;
+                          return <option key={p.id} value={p.id} disabled={short}>{p.name}{p.min_purchases ? ` (${t("adm.promo.fromNth", { n: p.min_purchases })})` : ""}{short ? ` — ${t("adm.promo.pos.notYet")}` : ""}</option>;
+                        })}
                       </select>
                     </label>
                     {promo && <span className="pos-promo-note"><Icon name="info" size={12} />{promoEffect(promo, t, m)}{promo.min_total ? ` · ${t("adm.promo.minShort", { value: m(promo.min_total) })}` : ""}{promo.description ? ` — ${promo.description}` : ""}</span>}

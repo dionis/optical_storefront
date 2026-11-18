@@ -42,7 +42,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
         // The promotions running in this store today (lib/promotions.ts): the seller picks one for the sale.
         promotions: (await livePromotions(req.scope, s.id)).map((p) => ({
           id: p.id, name: p.name, description: p.description, kind: p.kind, pct: p.pct, buy_qty: p.buy_qty, get_qty: p.get_qty,
-          min_total: p.min_total_cents === null ? null : p.min_total_cents / 100, value: p.value_cents === null ? null : p.value_cents / 100, ends_on: p.ends_on,
+          min_total: p.min_total_cents === null ? null : p.min_total_cents / 100, min_purchases: p.min_purchases, value: p.value_cents === null ? null : p.value_cents / 100, ends_on: p.ends_on,
         })),
       });
     }

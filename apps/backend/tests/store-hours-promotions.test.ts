@@ -58,7 +58,7 @@ describe("store hours", () => {
 
 const promo = (over: Partial<Promotion> = {}): Promotion => ({
   id: "promo_1", name: "Compre 2, lleve 1", description: null, kind: "bogo", establishment_ids: null, starts_on: null, ends_on: null,
-  is_active: true, pct: 100, buy_qty: 2, get_qty: 1, min_total_cents: null, value_cents: null, sort: 1, ...over,
+  is_active: true, pct: 100, buy_qty: 2, get_qty: 1, min_total_cents: null, min_purchases: null, value_cents: null, sort: 1, ...over,
 });
 
 describe("promotions", () => {
@@ -113,5 +113,20 @@ describe("promotions", () => {
       expect("promo" in c).toBe(true);
     }
     expect(new Set(SEED_PROMOTIONS.map((s) => s.kind))).toEqual(new Set(["bogo", "free_service", "gift", "percent"]));
+  });
+});
+
+describe("promotion for returning patients («desde la N.ª compra», 18-nov-2026)", () => {
+  const second = promo({ kind: "percent", pct: 10, buy_qty: null, get_qty: null, min_purchases: 2 });
+  it("the first purchase does not qualify; from the second it does", () => {
+    expect(applyPromotion(second, { listCents: 10000, priorPurchases: 0 })).toEqual({ reason: "promo_min_purchases", min: 2 });
+    expect(applyPromotion(second, { listCents: 10000, priorPurchases: 1 })).toHaveProperty("applied");
+    expect(applyPromotion(second, { listCents: 10000 })).toEqual({ reason: "promo_min_purchases", min: 2 });
+  });
+  it("cleanPromotion takes min_purchases 2–50", () => {
+    const base = { name: "Cliente frecuente", kind: "percent", pct: 10 };
+    expect(cleanPromotion({ ...base, min_purchases: 3 }, [])).toMatchObject({ promo: { min_purchases: 3 } });
+    expect(cleanPromotion({ ...base, min_purchases: 1 }, [])).toEqual({ reason: "bad_promo_min_purchases" });
+    expect(cleanPromotion({ ...base }, [])).toMatchObject({ promo: { min_purchases: null } });
   });
 });

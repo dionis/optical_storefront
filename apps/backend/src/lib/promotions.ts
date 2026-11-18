@@ -52,6 +52,8 @@ export interface Promotion {
   get_qty: number | null;
   /** Minimum list amount of the sale for it to apply (cents); null = none. */
   min_total_cents: number | null;
+  /** The purchase it starts at («desde la 2.ª compra» = 2): the patient must already have N − 1; null = everyone. */
+  min_purchases: number | null;
   /** free_service / gift: what it is worth, printed on the receipt (cents); null = not said. */
   value_cents: number | null;
   sort: number;
@@ -113,6 +115,8 @@ export function cleanPromotion(raw: Record<string, unknown>, stores: readonly st
   }
   const min_total_cents = moneyCents(raw.min_total);
   if (Number.isNaN(min_total_cents)) return { reason: "bad_promo_min" };
+  const min_purchases = intIn(raw.min_purchases, 2, 50);
+  if (Number.isNaN(min_purchases)) return { reason: "bad_promo_min_purchases" };
   const value_cents = kind === "free_service" || kind === "gift" ? moneyCents(raw.value) : null;
   if (Number.isNaN(value_cents)) return { reason: "bad_promo_value" };
   const sort = intIn(raw.sort, 0, 9999);
@@ -130,6 +134,7 @@ export function cleanPromotion(raw: Record<string, unknown>, stores: readonly st
       buy_qty,
       get_qty,
       min_total_cents,
+      min_purchases,
       value_cents,
       ...(sort !== null && !Number.isNaN(sort) ? { sort } : {}),
     },
@@ -164,8 +169,10 @@ export interface AppliedPromotion {
  * Applying a promotion to a sale whose list amount (before any discount) is
  * `listCents`. `ref` = the paid sales of a «compre N, lleve M». Pure.
  */
-export function applyPromotion(p: Promotion, input: { listCents: number; ref?: unknown }): { applied: Omit<AppliedPromotion, "priced"> } | { reason: string; min?: number } {
+export function applyPromotion(p: Promotion, input: { listCents: number; ref?: unknown; priorPurchases?: number }): { applied: Omit<AppliedPromotion, "priced"> } | { reason: string; min?: number } {
   if (p.min_total_cents !== null && input.listCents < p.min_total_cents) return { reason: "promo_min_total", min: p.min_total_cents / 100 };
+  // For returning patients: this sale must be at least the N-th purchase (lib/patient-purchases.ts).
+  if (p.min_purchases && (input.priorPurchases ?? 0) + 1 < p.min_purchases) return { reason: "promo_min_purchases", min: p.min_purchases };
   const ref = text(input.ref, 120);
   if (p.kind === "bogo" && !ref) return { reason: "promo_ref_required" };
   return { applied: { id: p.id, name: p.name, kind: p.kind, pct: MONEY_KINDS.includes(p.kind) ? p.pct : null, buy_qty: p.buy_qty, get_qty: p.get_qty, value_cents: p.value_cents, ref: p.kind === "bogo" ? ref : null } };
@@ -188,9 +195,9 @@ export function saleDiscountPct(manualPct: number, promoPct: number | null): { p
  * and sets their dates. Examples of each kind.
  */
 export const SEED_PROMOTIONS: Array<Omit<PromotionInput, "establishment_ids" | "starts_on" | "ends_on" | "is_active"> & { sort: number }> = [
-  { name: "Compre 2, lleve 1 gratis", description: "Al comprar dos espejuelos completos, el tercero (el de menor precio) va gratis. Se aplica en la venta del par gratis, con los números de las dos ventas pagadas.", kind: "bogo", pct: 100, buy_qty: 2, get_qty: 1, min_total_cents: null, value_cents: null, sort: 1 },
-  { name: "Examen de la vista gratis con tu compra", description: "El examen de la vista no se cobra si el paciente compra sus espejuelos con nosotros.", kind: "free_service", pct: null, buy_qty: null, get_qty: null, min_total_cents: null, value_cents: 5000, sort: 2 },
-  { name: "Segundo par al 50 %", description: "Al comprar unos espejuelos, el segundo par sale a mitad de precio. Se aplica en la venta del segundo par, con el número de la venta del primero.", kind: "bogo", pct: 50, buy_qty: 1, get_qty: 1, min_total_cents: null, value_cents: null, sort: 3 },
-  { name: "Estuche y limpiador de regalo", description: "En compras desde $150, el paciente se lleva un estuche y un limpiador sin costo.", kind: "gift", pct: null, buy_qty: null, get_qty: null, min_total_cents: 15000, value_cents: 2500, sort: 4 },
-  { name: "Temporada escolar: 15 % en toda la compra", description: "15 % de descuento en toda la compra durante la temporada escolar.", kind: "percent", pct: 15, buy_qty: null, get_qty: null, min_total_cents: null, value_cents: null, sort: 5 },
+  { name: "Compre 2, lleve 1 gratis", description: "Al comprar dos espejuelos completos, el tercero (el de menor precio) va gratis. Se aplica en la venta del par gratis, con los números de las dos ventas pagadas.", kind: "bogo", pct: 100, buy_qty: 2, get_qty: 1, min_total_cents: null, min_purchases: null, value_cents: null, sort: 1 },
+  { name: "Examen de la vista gratis con tu compra", description: "El examen de la vista no se cobra si el paciente compra sus espejuelos con nosotros.", kind: "free_service", pct: null, buy_qty: null, get_qty: null, min_total_cents: null, min_purchases: null, value_cents: 5000, sort: 2 },
+  { name: "Segundo par al 50 %", description: "Al comprar unos espejuelos, el segundo par sale a mitad de precio. Se aplica en la venta del segundo par, con el número de la venta del primero.", kind: "bogo", pct: 50, buy_qty: 1, get_qty: 1, min_total_cents: null, min_purchases: null, value_cents: null, sort: 3 },
+  { name: "Estuche y limpiador de regalo", description: "En compras desde $150, el paciente se lleva un estuche y un limpiador sin costo.", kind: "gift", pct: null, buy_qty: null, get_qty: null, min_total_cents: 15000, min_purchases: null, value_cents: 2500, sort: 4 },
+  { name: "Temporada escolar: 15 % en toda la compra", description: "15 % de descuento en toda la compra durante la temporada escolar.", kind: "percent", pct: 15, buy_qty: null, get_qty: null, min_total_cents: null, min_purchases: null, value_cents: null, sort: 5 },
 ];

@@ -22,7 +22,7 @@ import "./promotions.css";
 const KINDS = ["bogo", "percent", "free_service", "gift"];
 const KIND_ICON = { bogo: "copy", percent: "percent", free_service: "eye", gift: "box" };
 const STATE_TONE = { live: "ok", off: "neutral", scheduled: "gold", ended: "warn" };
-const EMPTY = { name: "", kind: "bogo", description: "", pct: 100, buy_qty: 2, get_qty: 1, min_total: "", value: "", establishment_ids: [], starts_on: "", ends_on: "", is_active: true };
+const EMPTY = { name: "", kind: "bogo", description: "", pct: 100, buy_qty: 2, get_qty: 1, min_total: "", min_purchases: "", value: "", establishment_ids: [], starts_on: "", ends_on: "", is_active: true };
 
 const toForm = (p) => ({
   name: p.name,
@@ -32,6 +32,7 @@ const toForm = (p) => ({
   buy_qty: p.buy_qty ?? 2,
   get_qty: p.get_qty ?? 1,
   min_total: p.min_total_cents == null ? "" : p.min_total_cents / 100,
+  min_purchases: p.min_purchases == null ? "" : p.min_purchases,
   value: p.value_cents == null ? "" : p.value_cents / 100,
   establishment_ids: p.establishment_ids || [],
   starts_on: p.starts_on || "",
@@ -46,6 +47,7 @@ const toBody = (f) => ({
   buy_qty: f.kind === "bogo" ? Number(f.buy_qty) : null,
   get_qty: f.kind === "bogo" ? Number(f.get_qty) : null,
   min_total: f.min_total === "" ? null : Number(f.min_total),
+  min_purchases: f.min_purchases === "" ? null : Number(f.min_purchases),
   value: f.kind === "free_service" || f.kind === "gift" ? (f.value === "" ? null : Number(f.value)) : null,
   establishment_ids: f.establishment_ids.length ? f.establishment_ids : null,
   starts_on: f.starts_on || null,
@@ -80,6 +82,8 @@ function PromoForm({ initial, stores, onCancel, onSave, busy }) {
         )}
         {money$ && <label className="adm-field">{t("adm.promo.f.value")}<input className="adm-input" type="number" min="0" step="0.01" value={f.value} onChange={(e) => set({ value: e.target.value })} placeholder="0.00" /></label>}
         <label className="adm-field">{t("adm.promo.f.min")}<input className="adm-input" type="number" min="0" step="0.01" value={f.min_total} onChange={(e) => set({ min_total: e.target.value })} placeholder={t("adm.promo.f.minPh")} /></label>
+        {/* Para pacientes que repiten: desde la compra n.º N (backend lib/patient-purchases.ts). */}
+        <label className="adm-field">{t("adm.promo.f.minPurchases")}<input className="adm-input" type="number" min="2" max="50" step="1" value={f.min_purchases} onChange={(e) => set({ min_purchases: e.target.value })} placeholder={t("adm.promo.f.minPurchasesPh")} /></label>
         <label className="adm-field">{t("adm.promo.f.starts")}<input className="adm-input" type="date" value={f.starts_on} onChange={(e) => set({ starts_on: e.target.value })} /></label>
         <label className="adm-field">{t("adm.promo.f.ends")}<input className="adm-input" type="date" value={f.ends_on} min={f.starts_on || undefined} onChange={(e) => set({ ends_on: e.target.value })} /></label>
         <label className="adm-field wide">{t("adm.promo.f.description")}<textarea className="adm-input" rows={2} maxLength={300} value={f.description} onChange={(e) => set({ description: e.target.value })} placeholder={t("adm.promo.f.descriptionPh")} /></label>
@@ -192,6 +196,7 @@ export default function Promotions() {
                 <span><Icon name="calendar" size={12} />{dates(p)}</span>
                 <span><Icon name="store" size={12} />{p.establishment_ids ? p.establishment_ids.map((id) => storeCode[id] || "?").join(" · ") : t("adm.promo.allStores")}</span>
                 {p.min_total_cents != null && <span><Icon name="dollar" size={12} />{t("adm.promo.minShort", { value: m(p.min_total_cents / 100) })}</span>}
+                {p.min_purchases != null && <span><Icon name="user" size={12} />{t("adm.promo.fromNth", { n: p.min_purchases })}</span>}
                 <span className="muted"><Icon name={KIND_ICON[p.kind] || "tag"} size={12} />{t(`adm.promo.kind.${p.kind}`)}</span>
               </div>
               <div className="adm-actions pr-actions">

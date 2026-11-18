@@ -23,6 +23,8 @@ interface Body {
   /** A promotion of the store (lib/promotions.ts) and, for «compre N, lleve M», the paid sale(s). */
   promotion_id?: string | null;
   promotion_ref?: string | null;
+  /** The patient, when picked: a promotion «desde la N.ª compra» counts their purchases. */
+  customer_id?: string | null;
   prescription?: RxInput | null;
   worn?: RxInput | null;
 }
@@ -38,7 +40,7 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     if ("reason" in discount) throw new PosError(discount.reason);
 
     const [promoted, settings] = await Promise.all([
-      quoteWithPromotion(req.scope, store.id, cleaned.lines, discount.pct, body.promotion_id, body.promotion_ref),
+      quoteWithPromotion(req.scope, store.id, cleaned.lines, discount.pct, body.promotion_id, body.promotion_ref, typeof body.customer_id === "string" && body.customer_id ? body.customer_id : null),
       getPosSettings(req.scope),
     ]);
     const { quote } = promoted;

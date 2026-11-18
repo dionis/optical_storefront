@@ -128,6 +128,18 @@
 </section>
 
 <section>
+  <h2>18-nov-2026 — Historial de compras del paciente y promociones para quien repite</h2>
+  <p>El dueño: «saber cuándo un cliente hace más de una compra, un historial de compra por cliente para poder hacer promociones y descuentos».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>En la caja</b>, al elegir un paciente existente: «Recurrente · 3 compras · última 2026-10-02 · total $612.00» (todas las tiendas y la web). Si es nuevo: «primera compra».</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code>, <code>lib/patient-purchases.ts</code></td></tr>
+    <tr><td><b>Promociones «desde la N.ª compra»</b>: en Comercial → Promociones, campo «Desde la compra n.º». En la caja la promoción sale marcada y no se puede elegir si al paciente aún no le toca; el servidor lo comprueba otra vez.</td><td><span class="tag ok">Listo</span></td><td><code>Promotions.jsx</code>, migración <code>CreateStorePromotion8MinPurchases</code></td></tr>
+    <tr><td>Cambiar una venta a otro paciente y unir pacientes duplicados.</td><td><span class="tag">Pendiente</span></td><td>—</td></tr>
+  </table>
+  <p class="muted">Pruebas: <code>tests/store-hours-promotions.test.ts</code>; QA local: promoción del 10 % desde la 2.ª compra rechazada sin paciente y aplicada a un paciente con 2 compras. Requiere redeploy del backend (migración).</p>
+</section>
+
+<section>
   <h2>18-nov-2026 — Recargos de laboratorio por graduación alta</h2>
   <p>El dueño: «cuando la base positiva es por encima de +6 el costo de laboratorio aumenta en 30; debe poder configurarse en la app, según referencias internacionales».</p>
   <table>

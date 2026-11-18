@@ -3,6 +3,7 @@
  * this so both price it the same way. Without a promotion it is just
  * quoteSale with the seller's discount.
  */
+import { purchaseSummary } from "./patient-purchases";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { PosError, quoteSale, type Quote } from "./pos-data";
 import type { PosLine } from "./pos";
@@ -22,7 +23,9 @@ export async function quoteWithPromotion(
   lines: PosLine[],
   manualPct: number,
   promotionId: unknown,
-  ref: unknown
+  ref: unknown,
+  /** The patient of the sale: a promotion «desde la N.ª compra» counts their purchases. */
+  customerId: string | null = null
 ): Promise<PromotedQuote> {
   const id = typeof promotionId === "string" && promotionId.trim() ? promotionId.trim() : null;
   const first = await quoteSale(container, establishmentId, lines, manualPct);
@@ -30,7 +33,8 @@ export async function quoteWithPromotion(
   const promo = await livePromotion(container, id, establishmentId);
   // Switched off, out of its dates or not for this store since the screen loaded.
   if (!promo) throw new PosError("promo_not_available", 409);
-  const a = applyPromotion(promo, { listCents: first.list_cents, ref });
+  const prior = promo.min_purchases ? (await purchaseSummary(container, customerId)).purchases : 0;
+  const a = applyPromotion(promo, { listCents: first.list_cents, ref, priorPurchases: prior });
   if ("reason" in a) throw new PosError(a.reason, 422, a.min !== undefined ? { min: a.min } : {});
   const { pct, source } = saleDiscountPct(manualPct, a.applied.pct);
   const quote = pct === manualPct ? first : await quoteSale(container, establishmentId, lines, pct);

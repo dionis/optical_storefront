@@ -31,6 +31,7 @@ export const rowToPromotion = (r: Record<string, unknown>): Promotion => ({
   buy_qty: intOrNull(r.buy_qty),
   get_qty: intOrNull(r.get_qty),
   min_total_cents: intOrNull(r.min_total_cents),
+  min_purchases: intOrNull(r.min_purchases),
   value_cents: intOrNull(r.value_cents),
   sort: Number(r.sort ?? 0),
 });
@@ -75,6 +76,7 @@ const columns = (p: PromotionInput) => ({
   buy_qty: p.buy_qty,
   get_qty: p.get_qty,
   min_total_cents: p.min_total_cents,
+  min_purchases: p.min_purchases ?? null,
   value_cents: p.value_cents,
 });
 

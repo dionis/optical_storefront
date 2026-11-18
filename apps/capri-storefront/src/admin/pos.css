@@ -85,3 +85,9 @@
 .pos-missing .btn-sm { align-self: flex-start; }
 .pos-missing.compact { margin: 6px 0; padding: 8px 10px; }
 .pos-flag-missing { color: var(--adm-amber-dark, #8a5a00); font-weight: 700; }
+
+/* Paciente que repite (PosSale.jsx → pos-picked; backend lib/patient-purchases.ts). */
+.pos-picked { flex-wrap: wrap; }
+.pos-repeat { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--adm-surface); color: var(--adm-ink); border: 1px solid var(--adm-line); }
+.pos-repeat.tier-returning { border-color: var(--adm-accent, var(--adm-blue)); }
+.pos-repeat.tier-vip { border-color: var(--adm-gold, #B8862B); background: var(--adm-gold-soft, rgba(184, 134, 43, .12)); }

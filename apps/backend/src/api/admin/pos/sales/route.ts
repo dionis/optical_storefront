@@ -201,7 +201,7 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
     }
 
     const [promoted, settings, methods] = await Promise.all([
-      quoteWithPromotion(req.scope, store.id, lines.lines, discount.pct, body.promotion_id, body.promotion_ref),
+      quoteWithPromotion(req.scope, store.id, lines.lines, discount.pct, body.promotion_id, body.promotion_ref, typeof body.customer_id === "string" && body.customer_id ? body.customer_id : null),
       getPosSettings(req.scope),
       listPaymentMethods(req.scope),
     ]);

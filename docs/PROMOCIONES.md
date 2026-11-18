@@ -32,8 +32,11 @@ cuál fue (`discount_source`, `promotion.priced`). Con empate gana la promoción
 
 Todas: `establishment_ids` (NULL = todas las tiendas), `starts_on`/`ends_on`
 (fechas de la tienda, inclusivas; NULL = sin límite), `is_active`,
-`min_total_cents` (compra mínima sobre el precio de lista), `description`
-(condiciones que lee el vendedor).
+`min_total_cents` (compra mínima sobre el precio de lista), `min_purchases`
+(«desde la N.ª compra»: el paciente ya compró N − 1 veces en cualquier tienda o
+en la web, `lib/patient-purchases.ts`; NULL = para todos; migración
+`CreateStorePromotion8MinPurchases`), `description` (condiciones que lee el
+vendedor). Error `promo_min_purchases` (422, `min`).
 
 Estado de hoy (`promoState`): `live` · `off` (apagada) · `scheduled` (empieza
 más adelante) · `ended`.
