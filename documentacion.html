@@ -128,6 +128,17 @@
 </section>
 
 <section>
+  <h2>18-nov-2026 — Venta con fecha retroactiva</h2>
+  <p>El dueño: «cuando se registre una venta se debe poder poner fecha retroactiva».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Nueva venta → Pago → «Fecha de la venta»</b>: Hoy por defecto; «Otra fecha» con Ayer/Anteayer, día, hora opcional y motivo. Explica que la venta cuenta ese día en informes, resultado, tableros y recibo; que el cobro de ahora entra en la caja de hoy; que precios y promociones son los de hoy. Antes de registrar pide confirmación.</td><td><span class="tag ok">Listo</span></td><td><code>SaleDateCard.jsx</code>, <code>PosSale.jsx</code></td></tr>
+    <tr><td><b>Reglas</b>: nunca una fecha futura; vendedor hasta 7 días, encargado y supervisor 31, dueño y superadmin 1 año. La venta y su pedido quedan con esa fecha; se guarda cuándo se registró de verdad, quién y el motivo (auditoría «Venta con fecha retroactiva»). En la ficha de la venta y en Ventas de tienda se ve marcada.</td><td><span class="tag ok">Listo</span></td><td><code>lib/sale-date.ts</code>, <code>pos-data.ts backdateSale</code>, migración <code>CreatePos11</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: <code>tests/sale-date.test.ts</code> (límites por rol, horario de verano, cambio de día); QA local 17 comprobaciones (venta, pedido, tableros, recibo, cobro en la caja de hoy, auditoría, límites de vendedor y dueño) y la caja en Galaxy Tab A7 Lite. <b>Requiere redeploy del backend</b> (migración <code>CreatePos11</code>).</p>
+</section>
+
+<section>
   <h2>17-nov-2026 — Informe contable por categorías (con filtros y PDF)</h2>
   <p>El dueño: «debe salir algún reporte con filtro para ver toda la contabilidad y las finanzas por categorías de costo y se debe poder exportar a PDF».</p>
   <table>

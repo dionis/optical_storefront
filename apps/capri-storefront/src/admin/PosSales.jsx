@@ -298,6 +298,8 @@ export default function PosSales({ me, params }) {
           {s.void_requested_at && s.status !== "voided" ? <small className="pos-flag"> {t("adm.pos.sales.st.voidAsked")}</small> : null}
           {/* Registrada con datos pendientes (sin contar el saldo, que tiene su columna). */}
           {pendingOf(s).length ? <small className="pos-flag pos-flag-missing" title={pendingOf(s).map((k) => t(`adm.pos.missing.${k}`)).join(" · ")}> {t("adm.pos.missing.flag", { n: pendingOf(s).length })}</small> : null}
+          {/* Registrada después, con la fecha del día en que se vendió (lib/sale-date.ts). */}
+          {s.backdate ? <small className="pos-flag" title={t("adm.sdt.flagHint", { recorded: String(s.backdate.recorded_at).slice(0, 10) })}> {t("adm.sdt.flag")}</small> : null}
         </>
       ),
       text: (s) => `${statusText(s)}${s.void_requested_at && s.status !== "voided" ? ` · ${t("adm.pos.sales.st.voidAsked")}` : ""}${pendingOf(s).length ? ` · ${t("adm.pos.missing.flag", { n: pendingOf(s).length })}` : ""}`,

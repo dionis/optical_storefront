@@ -68,6 +68,8 @@ export const AUDIT_ACTIONS = [
   "promotion.delete",
   // Opening hours of a store (Tiendas → Horario).
   "store.hours",
+  // A sale recorded with an earlier date (lib/sale-date.ts): the day chosen, the real day, the note.
+  "sale.backdate",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

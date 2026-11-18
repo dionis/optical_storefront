@@ -726,6 +726,13 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
               {/* The free text of the request travels with the sale (void_note): the
                   person who confirms reads WHY the seller asked, not just the category. */}
               {s.void_requested_at && s.status !== "voided" && <div className="sd-banner warn">{t("adm.pos.sales.voidPending", { reason: t(`adm.pos.void.${s.void_reason}`) })}{s.void_note ? <><br /><small>{t("adm.pos.sales.voidNote", { note: s.void_note })}</small></> : null}</div>}
+              {/* Registrada con otra fecha (lib/sale-date.ts): el día que cuenta y cuándo se registró de verdad. */}
+              {s.backdate && (
+                <div className="sd-banner info sd-backdate">
+                  <Icon name="calendar" size={14} /> {t("adm.sdt.detail", { date: s.backdate.date, time: s.backdate.time, recorded: new Date(s.backdate.recorded_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) })}
+                  {s.backdate.note ? <><br /><small>{t("adm.sdt.detailNote", { note: s.backdate.note })}</small></> : null}
+                </div>
+              )}
               {s.internal_note && <div className="sd-banner info"><b>{t("adm.sd.note")}:</b> <span className="sd-note-text">{s.internal_note}</span></div>}
               {s.rx_pending && s.status !== "voided" && (
                 <div className="sd-banner warn sd-rx-pending">

@@ -1,3 +1,4 @@
+import { backdateRecord, type Backdate, type BackdateRecord } from "./sale-date";
 import { saleMissing, type MissingKey } from "./pos";
 import type { AppliedPromotion } from "./promotions";
 import type { ICustomerModuleService, IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
@@ -1199,12 +1200,16 @@ export interface CreateSaleInput {
   promotion?: AppliedPromotion | null;
   /** Patient data recorded as missing (lib/pos.ts missingCustomerData). */
   missing?: MissingKey[];
+  /** The sale happened on an earlier day (lib/sale-date.ts); null/absent = now. */
+  backdate?: Backdate | null;
   idempotencyKey: string | null;
 }
 
 export interface CreatedSale {
   id: string;
   number: string;
+  /** The day it was recorded as, when backdated (lib/sale-date.ts). */
+  sold_on?: string | null;
   order_id: string;
   display_id: number | null;
   total: number;
@@ -1381,6 +1386,7 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     promised_on: promisedOn,
     optical_change: change,
     rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true,
+    sold_on: input.backdate?.date ?? null,
     missing: saleMissing(input.missing, { rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true, paid: p.paid_cents / 100, insurance: p.insurance_cents / 100, total: quote.total }),
     ...(framePhotoFailed ? { frame_photo_failed: true } : {}),
   };
@@ -1550,7 +1556,8 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
   const withLenses = quote.lines.some((l) => l.lens_category);
   // Counted on the store's calendar: a sale at 7 pm in Texas is still "today"
   // there although the UTC date has already moved on (lib/pos.ts promisedDate).
-  const promisedOn = promisedDate(new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
+  // A backdated sale was promised from the day it happened (lib/sale-date.ts).
+  const promisedOn = promisedDate(input.backdate?.soldAt ?? new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
   const p = input.payments;
   const sale = await pos(container).createPosSales({
     number,
@@ -1580,7 +1587,22 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
     promotion: (input.promotion ?? null) as unknown as Record<string, unknown> | null,
     missing: (input.missing?.length ? input.missing : null) as unknown as Record<string, unknown> | null,
   });
+  if (input.backdate) await backdateSale(container, sale.id, orderId, input.backdate, input.sellerId);
   return { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed };
+}
+
+/**
+ * The sale happened on an earlier day (lib/sale-date.ts): its row and its
+ * Medusa order carry THAT instant as their date — every report, the receipt and
+ * the dashboards (projected right after, from `pos_sale.created_at`) read it
+ * from there — and the row keeps when it was really recorded. The payments keep
+ * their own time: the money is taken now, into today's open register.
+ */
+async function backdateSale(container: MedusaContainer, saleId: string, orderId: string, b: Backdate, actorId: string | null): Promise<void> {
+  const pg = pgOf(container);
+  const record = backdateRecord(b, new Date(), actorId);
+  await pg("pos_sale").where({ id: saleId }).update({ created_at: b.soldAt, backdate: JSON.stringify(record) });
+  await pg("order").where({ id: orderId }).update({ created_at: b.soldAt });
 }
 
 export async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {
@@ -1713,6 +1735,8 @@ export interface SaleRow {
   promotion: AppliedPromotion | null;
   /** What is still to complete (lib/pos.ts saleMissing): patient data, prescription, deposit. [] = complete. */
   missing: MissingKey[];
+  /** Recorded with an earlier date: when it was really recorded and the day chosen (lib/sale-date.ts); null = that day. */
+  backdate: BackdateRecord | null;
   /**
    * The live payment rows. `id` and `details` are what the payment correction
    * (lib/payment-correction.ts) sends back for a row it keeps; `corrected_at`
@@ -1780,6 +1804,7 @@ export function toSale(s: Record<string, unknown>, payments: Array<Record<string
     rx_pending: s.rx_pending === true,
     promotion: s.promotion && typeof s.promotion === "object" ? (s.promotion as AppliedPromotion) : null,
     missing: saleMissing(s.missing, { rx_pending: s.rx_pending === true, paid: Number(s.paid_cents ?? 0) / 100, insurance: Number(s.insurance_cents ?? 0) / 100, total: Number(s.total_cents ?? 0) / 100, status: String(s.status) }),
+    backdate: s.backdate && typeof s.backdate === "object" ? (s.backdate as BackdateRecord) : null,
     payments: payments
       .filter((p) => p.sale_id === s.id)
       .map((p) => ({

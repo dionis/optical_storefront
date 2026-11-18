@@ -1,3 +1,4 @@
+import { maxBackdateDays } from "../../../../lib/sale-date";
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { listEstablishments } from "../../../../lib/establishments";
 import { acceptedAt, sellableStores, sellerTillProblem } from "../../../../lib/pos";
@@ -59,6 +60,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       void_reasons: VOID_REASONS,
       optical_thresholds: settings.optical_thresholds,
       timezone: tenant().timezone,
+      // How many days back this person may date a sale (lib/sale-date.ts); the server checks it again.
+      backdate_max_days: maxBackdateDays(scope.role),
     });
   });
 }

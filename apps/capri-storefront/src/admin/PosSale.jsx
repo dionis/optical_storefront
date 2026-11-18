@@ -41,6 +41,7 @@ import PosSaleSummary, { PosRunningTotal } from "./PosSaleSummary.jsx";
 import { birthMax, customerProblems, emailProblem, LIMITS, paymentProblem, phoneProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
 import MissingData from "./MissingData.jsx";
+import SaleDateCard, { EMPTY_SOLD_ON, soldOnBody, soldOnProblem, todayIn } from "./SaleDateCard.jsx";
 import "./pos.css";
 import "./pos-tablet.css";
 import RxForm from "./PosRx.jsx";
@@ -428,6 +429,8 @@ export default function PosSale({ me }) {
   // Foto del paciente con la montura puesta (opcional, se queda en la tienda; WearingPhoto.jsx).
   const [wear, setWear] = useState({ consent: false, photo: null });
   const [wearSaved, setWearSaved] = useState(null);
+  // Fecha de la venta: hoy, o un día anterior (SaleDateCard.jsx, lib/sale-date.ts).
+  const [soldOn, setSoldOn] = useState(EMPTY_SOLD_ON);
   const [result, setResult] = useState(null);
   const idem = useRef(null);
 
@@ -866,6 +869,11 @@ export default function PosSale({ me }) {
   /** Registrar: primero lo que lo impide (y en qué paso), luego el resumen de lo pendiente. */
   const tryConfirm = async () => {
     if (busy) return;
+    const dateProblem = soldOnProblem(soldOn, todayIn(ctx?.timezone), ctx?.backdate_max_days ?? 7);
+    if (dateProblem) {
+      await dialog({ tone: "warning", title: t("adm.sdt.title"), message: t(dateProblem, { max: ctx?.backdate_max_days ?? 7, min: "" }), confirmLabel: t("adm.sdt.fix") });
+      return;
+    }
     for (const n of STEPS.slice(0, -1)) {
       const { hard } = stepIssues(n);
       if (!hard) continue;
@@ -884,6 +892,18 @@ export default function PosSale({ me }) {
         cancelLabel: t("adm.pos.warn.finalNo"),
       });
       if (!yes) return;
+    }
+    // Con otra fecha, se confirma a la vista (el día cuenta en informes y recibo; el cobro, hoy).
+    const back = soldOnBody(soldOn, todayIn(ctx?.timezone));
+    if (back) {
+      const ok = await confirm({
+        tone: "warning",
+        title: t("adm.sdt.confirmTitle"),
+        message: t("adm.sdt.confirmMsg", { date: back.date, time: back.time || "12:00" }),
+        confirmLabel: t("adm.sdt.confirmYes"),
+        cancelLabel: t("adm.sdt.confirmNo"),
+      });
+      if (!ok) return;
     }
     confirmSale();
   };
@@ -913,6 +933,7 @@ export default function PosSale({ me }) {
         receipt_detail: notifyEmail && hasEmail && receiptDetail,
         idempotency_key: idem.current,
         rx_pending: pendingRx && !noRx,
+        sold_on: soldOnBody(soldOn, todayIn(ctx?.timezone)),
       });
       // Las fotos de la montura escrita a mano se quedan en esta pantalla: si el
       // servidor no pudo guardarlas, el recibo de ahora las imprime igual.
@@ -939,7 +960,7 @@ export default function PosSale({ me }) {
     setDiscount(""); setQ(null); setQStatus("idle"); setApproval(null); setReason("");
     setDup({ phone: null, email: null }); dupDismissed.current = { phone: new Set(), email: new Set() };
     setPayments([EMPTY_PAYMENT]); setDelivery("pickup"); setNotifyEmail(true); setReceiptDetail(false); setResult(null);
-    setWear({ consent: false, photo: null }); setWearSaved(null);
+    setWear({ consent: false, photo: null }); setWearSaved(null); setSoldOn(EMPTY_SOLD_ON);
   };
 
   if (ctxError) return <div className="adm-section"><div className="adm-demo-banner">{t(ctxError)}</div></div>;
@@ -1357,6 +1378,7 @@ export default function PosSale({ me }) {
               <label><input type="radio" checked={delivery === "ship"} onChange={() => setDelivery("ship")} /> {t("adm.pos.pay.ship")}</label>
             </fieldset>
             {delivery === "ship" && !(customer.address_1 && customer.city && customer.postal_code) && <div className="adm-demo-banner">{t("adm.err.pos.address_required_to_ship")}</div>}
+            <SaleDateCard value={soldOn} onChange={setSoldOn} timeZone={ctx?.timezone} maxDays={ctx?.backdate_max_days ?? 7} disabled={busy} />
             <WearingCaptureCard value={wear} onChange={setWear} busy={busy} />
             {/* Avisos al paciente: un interruptor por canal, para no saturar su correo ni su teléfono. */}
             <fieldset className="pos-notify">
@@ -1383,6 +1405,7 @@ export default function PosSale({ me }) {
           <div className="pos-done">
             <Icon name="checkCircle" size={40} />
             <h3>{t("adm.pos.done.title", { n: result.number })}</h3>
+            {result.sold_on && <p className="pos-wear-status"><Icon name="calendar" size={14} /> {t("adm.sdt.doneAs", { date: result.sold_on })}</p>}
             <dl className="pos-totals">
               <dt>{t("adm.pos.price.total")}</dt><dd>{m(result.total)}</dd>
               <dt>{t("adm.pos.pay.paid")}</dt><dd>{m(result.paid)}</dd>

@@ -88,4 +88,6 @@ export const PosSale = model.define("pos_sale", {
   promotion: model.json().nullable(),
   /** Patient data the sale was recorded without, still to complete (lib/pos.ts missingCustomerData); null = none. */
   missing: model.json().nullable(),
+  /** Recorded with an earlier date (lib/sale-date.ts): when it was really recorded, by whom, the day chosen; null = recorded that day. */
+  backdate: model.json().nullable(),
 });

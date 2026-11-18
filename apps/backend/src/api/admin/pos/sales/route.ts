@@ -1,3 +1,6 @@
+import { localParts } from "../../../../lib/alerts";
+import { recordAudit } from "../../../../lib/audit";
+import { cleanSoldOn } from "../../../../lib/sale-date";
 import { quoteWithPromotion } from "../../../../lib/pos-promotion";
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ONLINE_KIND } from "../../../../lib/establishments";
@@ -151,6 +154,12 @@ interface SaleBody {
    * nothing sold needs one.
    */
   rx_pending?: boolean;
+  /**
+   * The sale happened on an earlier day of the store's calendar
+   * (lib/sale-date.ts): { date: "YYYY-MM-DD", time?: "HH:MM", note? }. Absent
+   * or today = now. How far back depends on the role.
+   */
+  sold_on?: { date?: string; time?: string | null; note?: string | null } | null;
 }
 
 export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: MedusaResponse): Promise<void> {
@@ -170,6 +179,8 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
     const customer = cleanCustomer(body.customer, new Date(), tenant().timezone, { requireEmail: store.kind === ONLINE_KIND, lenient: true });
     if ("reason" in customer) throw new PosError(customer.reason);
     const missing = missingCustomerData(customer.customer, body.delivery === "ship" ? "ship" : "pickup");
+    const backdate = cleanSoldOn(body.sold_on, new Date(), tenant().timezone, scope.role);
+    if (backdate && "reason" in backdate) throw new PosError(backdate.reason, 422, backdate.max ? { max: backdate.max } : {});
     const lines = cleanLines(body.lines);
     if ("reason" in lines) throw new PosError(lines.reason);
     const discount = cleanDiscountPct(body.discount_pct);
@@ -230,9 +241,13 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
       rxPending,
       promotion: promoted.promotion,
       missing,
+      backdate,
       idempotencyKey: key,
     });
     res.json({ sale });
+    if (backdate && !sale.replayed) {
+      void recordAudit(req.scope, { actorId: scope.user_id, action: "sale.backdate", entity: "pos_sale", entityId: sale.id, establishmentId: store.id, before: { recorded_on: localParts(new Date(), tenant().timezone).date }, after: { number: sale.number, sold_on: backdate.date, time: backdate.time, days: backdate.days, note: backdate.note } }).catch(() => {});
+    }
     // The sale is recorded and the till answered: emails go out without holding it.
     if (!sale.replayed) {
       void runAfterSale(req.scope, {
