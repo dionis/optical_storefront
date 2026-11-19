@@ -79,7 +79,12 @@ const FALLBACK_RATES: Record<string, Array<[string, number, number]>> = {
     ["gemini-2.5-flash-image", 0.3, 30],
     ["gemini-2.5-flash", 0.3, 2.5],
     ["gemini-2.5-pro", 1.25, 10],
-    ["gemini-3-flash", 0.3, 2.5],
+    // Re-checked 2026-11-18 (ai.google.dev pricing page of 2026-10-30). 3.6/3.8 Flash
+    // are introductory until 2026-12-31; $1.50 / $7.50 from 2027-01-01.
+    ["gemini-3-flash", 0.5, 3],
+    ["gemini-3.1-flash-lite", 0.25, 1.5],
+    ["gemini-3.6-flash", 0.75, 3.75],
+    ["gemini-3.8-flash", 0.75, 3.75],
     // Prescription OCR fallback (lib/ocr-gemini.ts); under 200k prompt tokens.
     ["gemini-3.1-pro", 2, 12],
   ],

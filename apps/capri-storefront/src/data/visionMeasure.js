@@ -55,6 +55,22 @@ export async function frameImageDataUrl(url) {
   } catch { return null; }
 }
 
+// Proveedor y modelos de IA: NO se fijan en el código. Por defecto la tienda no manda
+// ninguno y el servicio vision-measure decide con sus variables de entorno
+// (VISION_DEFAULT_PROVIDER, VISION_<PROVEEDOR>_MODEL, VISION_DEFAULT_IMAGE_ENGINE,
+// VISION_<PROVEEDOR>_IMAGE_MODEL — ver apps/vision-measure/.env.example), así que
+// cambiar de modelo es tocar una variable en Coolify y reiniciar, sin redesplegar la
+// tienda. Las VITE_VISION_* de abajo solo existen para forzar otro modelo en UN build
+// concreto (p. ej. una vista previa de Vercel); requieren redesplegar.
+const ENV = (import.meta.env) || {};
+const pick = (v) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+const AI_CHOICE = {
+  provider: pick(ENV.VITE_VISION_PROVIDER),
+  model: pick(ENV.VITE_VISION_MODEL),
+  imageEngine: pick(ENV.VITE_VISION_IMAGE_ENGINE),
+  imageModel: pick(ENV.VITE_VISION_IMAGE_MODEL),
+};
+
 const CARD_HINT =
   "El paciente sostiene una tarjeta tipo ID-1 (85.60 mm de ancho × 53.98 mm de alto, " +
   "tamaño tarjeta bancaria/carné) junto a la mejilla en la foto frontal. Detéctala y " +
@@ -101,9 +117,9 @@ async function shrink(dataUrl, max = 800, quality = 0.82) {
 
 // Ejecuta la medición. faceImage y sideImage son data URLs de la cámara/subida.
 //
-// Rendimiento: usamos el modelo RÁPIDO (gemini-flash-lite) y NO pedimos la imagen generada
-// por IA (renderTryOn:false). Generar la foto con la montura tarda 30-60 s y hacía que el
-// gateway cortara con 502; medir con las dos fotos + la montura tarda ~12 s. El reporte
+// Rendimiento: NO pedimos la imagen generada por IA (renderTryOn:false). Generar la foto
+// con la montura tarda 30-60 s y hacía que el gateway cortara con 502; medir con las dos
+// fotos + la montura tarda ~12 s con un modelo Flash. El reporte
 // muestra las fotos REALES del cliente con las cotas encima (PD en la frontal, altura de
 // corredor en la lateral). La montura ya se ve puesta en el propio probador.
 export async function runMeasurement({
@@ -137,10 +153,9 @@ export async function runMeasurement({
     // permite medir el marco; el render de IA sigue apagado (ahí estaba el 502).
     glassesImage: glassesSmall || TINY_PX,
     sideImage: sideSmall || undefined,
-    provider: "gemini",
-    // Modelo rápido y estable para medición: ~12 s típico devolviendo DIP + altura de
-    // corredor completas (vs. ~40-60 s de flash/flash-preview). Sin render de IA.
-    model: "gemini-flash-lite-latest",
+    // Proveedor/modelo: los del servidor salvo que el build fuerce otros (AI_CHOICE).
+    provider: AI_CHOICE.provider,
+    model: AI_CHOICE.model,
     strategy: "A",
     lang,
     renderTryOn: false,
@@ -249,17 +264,19 @@ export async function startMeasurementJob({
     glassesImage: glassesSmall || framesSmall[0] || TINY_PX,
     glassesImages: framesSmall.length ? framesSmall : undefined,
     sideImage: sideSmall || undefined,
-    provider: "gemini",
-    // Números con el modelo rápido; la IMAGEN con el modelo de imagen por defecto del
-    // backend (máxima calidad). Como es asíncrono, el tiempo del render no importa.
-    model: "gemini-flash-lite-latest",
+    // Proveedor y modelos de medición e imagen: los del servidor (variables VISION_* de
+    // vision-measure) salvo que el build fuerce otros (AI_CHOICE, arriba).
+    provider: AI_CHOICE.provider,
+    model: AI_CHOICE.model,
+    imageModel: AI_CHOICE.imageModel,
     strategy: "A",
     lang,
     renderTryOn: render,
     // Perfil deshabilitado: no hay foto lateral del paciente, así que cualquier
     // perfil sería una invención del modelo, no una prueba de nada.
     renderProfile: false,
-    // Motor de IMAGEN: Gemini (edición multimodal de la foto real).
+    // Motor de IMAGEN: el del servidor (VISION_DEFAULT_IMAGE_ENGINE, Gemini si no se
+    // configura) salvo que el build fuerce otro con VITE_VISION_IMAGE_ENGINE.
     //
     // HISTORIA, para que nadie repita el error: este valor estuvo un tiempo en
     // "local" porque un comentario decía que Gemini "generaba una cara nueva".
@@ -274,7 +291,7 @@ export async function startMeasurementJob({
     // si la IA falla (cuota, congestión, timeout): pega la montura sobre la foto
     // real. Fiel al rostro, pero visiblemente peor — una foto de catálogo en
     // ángulo pegada sobre una cara frontal nunca se ve natural.
-    imageEngine: "gemini",
+    imageEngine: AI_CHOICE.imageEngine,
     // Pupilas + escala medidas en el navegador: es lo que necesita el respaldo
     // local para saber DÓNDE y A QUÉ TAMAÑO pegar la montura. Se envía siempre,
     // aunque el motor principal sea la IA, para que el respaldo esté disponible.

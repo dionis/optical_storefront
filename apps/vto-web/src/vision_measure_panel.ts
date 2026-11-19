@@ -351,6 +351,15 @@ export class VisionMeasurePanel {
         .join('');
     }
 
+    // Start on the provider the server is configured to use (VISION_DEFAULT_PROVIDER); a
+    // saved preference, restored below, still wins. The render engine is NOT preselected
+    // the same way: here it stays on the free local composite unless the operator picks
+    // a paid one.
+    const { defaultProvider } = this.catalog;
+    if (this.providerSelect && defaultProvider && this.catalog.providers.some((p) => p.id === defaultProvider)) {
+      this.providerSelect.value = defaultProvider;
+    }
+
     // A service older than this page produces symptoms that look exactly like bugs.
     // Say which it is, before the operator spends a run finding out.
     const missing = missingServiceFeatures(this.catalog.build);
