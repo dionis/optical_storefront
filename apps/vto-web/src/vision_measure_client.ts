@@ -49,6 +49,9 @@ export interface ProviderCatalog {
   strategies: StrategyInfo[];
   build?: ServiceBuild;
   imageEngines: ImageEngineInfo[];
+  /** Provider / render engine the server uses when a request names none (VISION_DEFAULT_*). */
+  defaultProvider?: string;
+  defaultImageEngine?: string;
 }
 
 export interface FacialResult {

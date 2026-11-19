@@ -15,7 +15,7 @@ longest-first, so "gpt-5-mini" wins over "gpt-5".
 from typing import Any, Dict, List, Optional, Tuple
 
 # Update this whenever the numbers below are checked against the vendors' pricing pages.
-RATES_CHECKED_ON = "2026-08-21"
+RATES_CHECKED_ON = "2026-08-21"  # Gemini rows re-checked 2026-11-18 (see below)
 
 RATE_SOURCES: Dict[str, str] = {
     "openai": "https://openai.com/api/pricing/",
@@ -49,8 +49,14 @@ RATES: Dict[str, Tuple[Tuple[str, float, float], ...]] = {
         ("claude-haiku", 1.00, 5.00),
     ),
     "gemini": (
+        # ai.google.dev/gemini-api/docs/pricing, page dated 2026-10-30. The 3.6/3.8 Flash
+        # rates are an introductory price "through December 31, 2026"; from 2027-01-01
+        # Google lists $1.50 / $7.50 — update these two lines then.
         ("gemini-3.1-pro", 2.00, 12.00),
-        ("gemini-3-flash", 0.30, 2.50),
+        ("gemini-3.8-flash", 0.75, 3.75),
+        ("gemini-3.6-flash", 0.75, 3.75),
+        ("gemini-3.1-flash-lite", 0.25, 1.50),
+        ("gemini-3-flash", 0.50, 3.00),
         ("gemini-2.5-pro", 1.25, 10.00),
         ("gemini-2.5-flash", 0.30, 2.50),
         ("gemini-2.0-flash", 0.10, 0.40),
