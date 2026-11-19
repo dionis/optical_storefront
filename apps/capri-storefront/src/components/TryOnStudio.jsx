@@ -1265,6 +1265,45 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     if (typeof onAddPrescription === "function") onAddPrescription(payload);
   }
 
+  // "Añadir receta sin medir": la medición con IA es un EXTRA, no un paso previo
+  // obligatorio. Desde la captura, la revisión o con los intentos agotados, el
+  // cliente puede ir a la receta sin medidas. No guarda nada por producto (pisaría
+  // una medición anterior buena) ni manda las fotos crudas de la cámara: solo el
+  // color y, si ya lo eligió en la revisión, para quién son.
+  function skipToRx() {
+    if (mAbort.current) { mAbort.current.abort(); mAbort.current = null; }
+    const chosenWho = Boolean(frontImg && sideImg);
+    onAddPrescription({
+      productId: product?.id, productSku: product?.sku, productName: product?.name,
+      colorName: color?.name, colorIndex: ci,
+      forWhom: chosenWho ? forWhom : null,
+      otherName: chosenWho && forWhom === "other" ? (otherName || "").trim() : "",
+    });
+  }
+
+  // Salida a la receta / solo marco mientras no hay resultado. Sin callback (no
+  // debería pasar: los tres sitios que abren el probador lo pasan) no se pinta.
+  function skipActions() {
+    if (typeof onAddPrescription !== "function") return null;
+    return (
+      <div className="vm-skip">
+        <p className="vm-skip-hint">{t("vm.skip.hint")}</p>
+        <div className="vm-addrx-row">
+          <button type="button" className="vm-buyframe vm-skip-rx" onClick={skipToRx}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h4" /></svg>
+            {t("vm.skip.rx")}
+          </button>
+          {typeof onBuyFrameOnly === "function" && (
+            <button type="button" className="vm-buyframe" onClick={buyFrameOnly} title={t("vm.buyFrame")}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
+              {t("vm.buyFrame")}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // "Comprar solo el marco": lleva directo al RESUMEN del pedido (solo montura, sin
   // lentes) en la pantalla de la receta, sin pasar por la configuración de lentes.
   function buyFrameOnly() {
@@ -1505,7 +1544,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     return (
       <div className="vm-result vm-review-2col ts2-cap2col">
         <div className="vm-review-cols">
-          <div className="vm-review-c1">{captureStage()}</div>
+          <div className="vm-review-c1">{captureStage()}{skipActions()}</div>
           <div className="vm-review-c2">
             {factsStrip()}
             {colorsStrip()}
@@ -1682,7 +1721,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       /* ts2-cap2col: comparte las reglas móviles de "una sola vista" (ETAPAs 120/121). */
       <div className="vm-result vm-review-2col ts2-cap2col ts2-rvlayout">
         <div className="vm-review-cols">
-          <div className="vm-review-c1">{captureReview()}</div>
+          <div className="vm-review-c1">{captureReview()}{skipActions()}</div>
           <div className="vm-review-c2">
             {factsStrip()}
             {colorsStrip()}

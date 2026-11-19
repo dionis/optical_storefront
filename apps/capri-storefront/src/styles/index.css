@@ -3524,17 +3524,6 @@ video.zlx-float-img { background: #000; object-fit: contain; }
 .card-add-cart:disabled { opacity: .5; cursor: not-allowed; }
 .card-add-cart svg { display: block; }
 
-/* Atajo "Comprar con receta →" en las tarjetas: enlace discreto bajo los
-   botones que lleva directo al flujo de lentes graduados sin pasar por el
-   probador ni por la ficha (PDP). Mismo estilo que .pdp-lensflow. */
-.card-lensflow {
-  display: block; width: 100%; text-align: center; margin-top: 7px;
-  background: none; border: none; cursor: pointer; padding: 3px 0;
-  color: var(--blue, #0E5AD0); font-size: 12.5px; font-weight: 700;
-  text-decoration: underline; text-underline-offset: 3px;
-  transition: color var(--dur-2), transform var(--dur-1) var(--ease);
-}
-.card-lensflow:hover { color: var(--blue-dark, #0a47a8); transform: translateX(2px); }
 
 /* ---- Responsive: 2 monturas por fila SIEMPRE en móvil, con aire ---- */
 @media (max-width: 640px) {
@@ -3544,7 +3533,6 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .card-price { font-size: 16px; }
   .card-tryon { height: 42px; font-size: 12.5px; gap: 6px; }
   .card-add-cart { height: 40px; font-size: 12.5px; }
-  .card-lensflow { font-size: 11.5px; margin-top: 5px; }
   .card-colors-n { display: none; }
 }
 @media (max-width: 380px) {
@@ -7181,6 +7169,25 @@ button.card-genre {
   .vm-buyframe { width: 100%; padding: 12px 16px; }
 }
 
+/* Salida a la receta SIN medir, en captura y revisión del probador: medirse con
+   IA es opcional. Va bajo la columna de fotos; en escritorio la columna tiene alto
+   fijo, así que pasa a flex y la captura/revisión cede el espacio. */
+.vm-skip { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.vm-skip-hint { margin: 0; font-size: 12.5px; color: var(--muted, #5b6b82); text-align: center; }
+.vm-skip .vm-buyframe { flex: 1 1 0; min-height: 40px; }
+@media (min-width: 940px) {
+  .vm-review-2col .vm-review-c1:has(> .vm-skip) { display: flex; flex-direction: column; }
+  .vm-review-2col .vm-review-c1:has(> .vm-skip) > .ts2-step { flex: 1 1 auto; height: auto; min-height: 0; }
+  .vm-review-2col .vm-review-c1 > .vm-skip { flex: 0 0 auto; }
+}
+
+/* "Comprar con receta" en tarjeta y ficha: mismo botón de cristal que el probador,
+   justo debajo de él (no un enlace de texto). */
+.card .card-tryon.btn-glass.card-rxflow { margin: 4px 0 2px; }
+.product-grid.list .card-tryon.card-rxflow { margin-top: 6px; }
+.card-rxflow-ic, .pdp-rxflow-ic { width: 17px; height: 17px; flex: 0 0 auto; }
+@media (max-width: 640px) { .card-rxflow-ic { width: 14px; height: 14px; } }
+
 
 /* ===================================================================
    ETAPA 97 - Resumen final (ya con material + tratamiento), vista web:
@@ -7395,13 +7402,6 @@ button.card-genre {
 .pdp-price.sale { color: var(--red); }
 .pdp-price-old { font-size: 17px; color: var(--muted); text-decoration: line-through; }
 .pdp-price-note { font-size: 12.5px; color: var(--muted); }
-.pdp-lensflow {
-  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
-  background: none; border: none; cursor: pointer; padding: 4px 0;
-  color: var(--blue); font-size: 14px; font-weight: 700; text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.pdp-lensflow:hover { color: var(--blue-dark); }
 
 /* ===================================================================
    ETAPA 103 - Resumen final en MÓVIL (pendiente aplazado): la ficha de la
@@ -7639,8 +7639,6 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
   background: var(--blue); transition: right var(--dur-2) var(--ease);
 }
 .pdp-tab.on::after, .pdp-tab:hover::after { right: 0; }
-.pdp-lensflow { transition: color var(--dur-2), transform var(--dur-1) var(--ease); }
-.pdp-lensflow:hover { transform: translateX(2px); }
 
 /* ── Ventanas emergentes del flujo de receta (src/pages/LensProcess.jsx ·
    ZlxPop) y modales estandarizados (Feedback.jsx) ───────────────────────── */

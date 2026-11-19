@@ -17,7 +17,7 @@ import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
 import { frameMatEdu } from "../data/lensEducation.js";
-import { IconMontura } from "../components/LensGraphics.jsx";
+import { IconMontura, IconReceta } from "../components/LensGraphics.jsx";
 import { IconMaterial, IconMeasures, IconGender, IconFemale, IconUnisex, IconKids, IconCamera, IconCart, Icon360 } from "../components/UiIcons.jsx";
 import { DISCOUNTS_ENABLED } from "../config/features.js";
 import GlassesLoader from "../components/GlassesLoader.jsx";
@@ -597,6 +597,17 @@ export default function ProductDetail() {
                 </span>
               </button>
             )}
+            {/* Receta directa, al mismo nivel que el probador: probárselos es
+                opcional. Antes era un enlace de texto bajo el carrito y parecía que
+                había que pasar por la cámara para poder poner la receta. */}
+            <button type="button" className="btn btn-primary big pdp-cta btn-glass pdp-rxflow"
+                    aria-label={t("card.lensFlow")} title={t("card.lensFlow")}
+                    onClick={() => navigate(`/recetas/${product.slug}?color=${active}`)}>
+              <span className="btn-glass-fb">
+                <IconReceta className="pdp-rxflow-ic" aria-hidden="true" />
+                {t("card.lensFlow")}
+              </span>
+            </button>
             <button type="button" className="btn btn-outline big pdp-cta btn-glass"
                     disabled={!color?.variantId}
                     aria-label={t("card.addToCart")} title={t("card.addToCart")}
@@ -608,10 +619,6 @@ export default function ProductDetail() {
               </span>
             </button>
           </div>
-          <button type="button" className="pdp-lensflow"
-                  onClick={() => navigate(`/recetas/${product.slug}?color=${active}`)}>
-            {t("pdp.lensFlow")} →
-          </button>
         </div>
       </div>
 
@@ -691,7 +698,7 @@ export default function ProductDetail() {
                    corridor: p.corridor, segHeight: p.segHeight,
                    bifocal: p.bifocal, suitable: p.suitable,
                  };
-                 navigate(`/recetas/${product.slug}`, { state: { openRxOcr: true, tryOnMeasurement: light } });
+                 navigate(`/recetas/${product.slug}?color=${p.colorIndex ?? active}`, { state: { openRxOcr: true, tryOnMeasurement: light } });
                }}
                onBuyFrameOnly={(p) => {
                  setTryOnSlug(null);
