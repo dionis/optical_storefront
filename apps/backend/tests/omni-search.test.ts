@@ -47,6 +47,7 @@ const store = (id: string, code: string, name: string, is_active = true): Establ
   color: "#000000",
   kind: "own",
   receipt_note: null,
+  hours: null,
   settlement_pct: null,
   is_active,
   created_at: "2026-01-01T00:00:00.000Z",

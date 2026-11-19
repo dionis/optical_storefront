@@ -87,6 +87,9 @@ export function useSaleDetails(sales, { store = "", enabled = true } = {}) {
  * respaldo, lo descriptivo que la venta no traiga — una venta de la web o
  * cualquier fila sin esos campos.
  */
+/** Lo que la venta tiene pendiente de completar, sin el anticipo (el saldo ya tiene su columna). */
+const pendingOf = (s) => (s.status === "voided" ? [] : (s.missing || []).filter((k) => k !== "deposit"));
+
 export function mergeSaleDetails(s, d) {
   const pick = (mine, theirs) => (mine === undefined || mine === null ? theirs ?? null : mine);
   const row = {
@@ -262,7 +265,7 @@ export default function PosSales({ me, params }) {
     { key: "store", header: t("adm.tbl.store"), get: storeCode, hiddenByDefault: !isAll, width: 8 },
     { key: "terminal", header: t("adm.pos.terminal"), get: (s) => termById.get(s.terminal_id)?.code || "", hiddenByDefault: true, width: 8 },
     { key: "seller_code", header: t("adm.pos.sales.seller"), essential: true, width: 8 },
-    { key: "customer", header: t("adm.tbl.customer"), essential: true, width: 22 },
+    { key: "customer", header: t("adm.tbl.customer"), essential: true, width: 22, render: (s) => s.customer || <span className="muted">{t("adm.pos.missing.noName")}</span> },
     { key: "customer_phone", header: t("adm.tbl.phone"), hiddenByDefault: true, width: 14 },
     { key: "frame_brand", header: t("adm.rpt.col.brand"), get: (s) => s.frame_brand || (s.own_frame ? t("adm.rpt.ownFrame") : ""), essential: true, width: 14 },
     { key: "frame_model", header: t("adm.rpt.col.model"), essential: true, width: 18 },
@@ -293,9 +296,13 @@ export default function PosSales({ me, params }) {
         <>
           <span className={`adm-chip ${s.status === "voided" ? "bad" : s.delivered_at ? "ok" : "neutral"}`}>{statusText(s)}</span>
           {s.void_requested_at && s.status !== "voided" ? <small className="pos-flag"> {t("adm.pos.sales.st.voidAsked")}</small> : null}
+          {/* Registrada con datos pendientes (sin contar el saldo, que tiene su columna). */}
+          {pendingOf(s).length ? <small className="pos-flag pos-flag-missing" title={pendingOf(s).map((k) => t(`adm.pos.missing.${k}`)).join(" · ")}> {t("adm.pos.missing.flag", { n: pendingOf(s).length })}</small> : null}
+          {/* Registrada después, con la fecha del día en que se vendió (lib/sale-date.ts). */}
+          {s.backdate ? <small className="pos-flag" title={t("adm.sdt.flagHint", { recorded: String(s.backdate.recorded_at).slice(0, 10) })}> {t("adm.sdt.flag")}</small> : null}
         </>
       ),
-      text: (s) => `${statusText(s)}${s.void_requested_at && s.status !== "voided" ? ` · ${t("adm.pos.sales.st.voidAsked")}` : ""}`,
+      text: (s) => `${statusText(s)}${s.void_requested_at && s.status !== "voided" ? ` · ${t("adm.pos.sales.st.voidAsked")}` : ""}${pendingOf(s).length ? ` · ${t("adm.pos.missing.flag", { n: pendingOf(s).length })}` : ""}`,
     },
   ], [t, lang, isAll, termById, storeById, hasEcon, hasCommission]); // eslint-disable-line react-hooks/exhaustive-deps
   const columns = useColumns("pos-sales", cols);

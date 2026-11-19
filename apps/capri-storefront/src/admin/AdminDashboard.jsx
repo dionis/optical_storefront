@@ -46,11 +46,14 @@ const TAB_IMPORTS = {
   posconfig: () => import("./PosConfig.jsx"),
   alerts: () => import("./AlertRules.jsx"),
   aiusage: () => import("./AiUsage.jsx"),
+  oplog: () => import("./OperationLog.jsx"),
+  promotions: () => import("./Promotions.jsx"),
   salesboard: () => import("./SalesBoard.jsx"),
   storestatus: () => import("./StoreStatus.jsx"),
   mysales: () => import("./MySales.jsx"),
   cash: () => import("./PosCash.jsx"),
   storecosts: () => import("./StoreCosts.jsx"),
+  finreport: () => import("./FinanceReport.jsx"),
   statement: () => import("./StoreStatement.jsx"),
   storeorders: () => import("./StoreOrders.jsx"),
   pendingbalances: () => import("./PendingBalances.jsx"),
@@ -80,11 +83,14 @@ const PosApprovals = lazy(TAB_IMPORTS.approvals);
 const PosConfig = lazy(TAB_IMPORTS.posconfig);
 const AlertRules = lazy(TAB_IMPORTS.alerts);
 const AiUsage = lazy(TAB_IMPORTS.aiusage);
+const OperationLog = lazy(TAB_IMPORTS.oplog);
+const Promotions = lazy(TAB_IMPORTS.promotions);
 const SalesBoard = lazy(TAB_IMPORTS.salesboard);
 const StoreStatus = lazy(TAB_IMPORTS.storestatus);
 const MySales = lazy(TAB_IMPORTS.mysales);
 const PosCash = lazy(TAB_IMPORTS.cash);
 const StoreCosts = lazy(TAB_IMPORTS.storecosts);
+const FinanceReport = lazy(TAB_IMPORTS.finreport);
 const StoreStatement = lazy(TAB_IMPORTS.statement);
 const StoreOrders = lazy(TAB_IMPORTS.storeorders);
 const PendingBalances = lazy(TAB_IMPORTS.pendingbalances);
@@ -736,13 +742,16 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "posconfig" && <PosConfig />}
       {tab === "alerts" && <AlertRules me={me} />}
       {tab === "aiusage" && <AiUsage />}
+      {tab === "oplog" && <OperationLog me={me} />}
+      {tab === "promotions" && <Promotions />}
       {tab === "salesboard" && <SalesBoard go={go} tabs={tabs} me={me} />}
       {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} me={me} />}
       {tab === "mysales" && <MySales go={go} me={me} openSale={salePanel.open} />}
       {tab === "pendingbalances" && <PendingBalances me={me} go={go} openSale={salePanel.open} />}
       {salePanel.panel}
       {tab === "cash" && <PosCash me={me} />}
-      {tab === "storecosts" && <StoreCosts me={me} />}
+      {tab === "storecosts" && <StoreCosts me={me} go={go} />}
+      {tab === "finreport" && <FinanceReport me={me} />}
       {tab === "statement" && <StoreStatement me={me} go={go} />}
       {tab === "storeorders" && <StoreOrders me={me} go={go} params={nav.params} />}
       {tab === "patients" && <Patients me={me} openSale={salePanel.open} params={nav.params} />}

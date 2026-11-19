@@ -1,3 +1,6 @@
+import { backdateRecord, type Backdate, type BackdateRecord } from "./sale-date";
+import { saleMissing, type MissingKey } from "./pos";
+import type { AppliedPromotion } from "./promotions";
 import type { ICustomerModuleService, IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import {
@@ -328,7 +331,7 @@ async function upsertCustomer(container: MedusaContainer, c: PosCustomer, custom
   if (customerId && !existing) throw new PosError("customer_not_found", 404);
   // No email given: only the phone can match (an empty email must never "find" someone).
   if (!existing && c.email) existing = (await svc.listCustomers({ email: c.email }, { take: 1, order: { created_at: "ASC" } }))[0];
-  if (!existing) {
+  if (!existing && c.phone) {
     const ids = await customerIdsByPhone(container, c.phone);
     if (ids.length) existing = (await svc.listCustomers({ id: ids }, { take: 1, order: { created_at: "ASC" } }))[0];
   }
@@ -337,19 +340,20 @@ async function upsertCustomer(container: MedusaContainer, c: PosCustomer, custom
     // Never erase a known birth date with a blank one.
     if (!metadata.birth_date && c.birth_date) metadata.birth_date = c.birth_date;
     await svc.updateCustomers(existing.id, {
-      first_name: existing.first_name || c.first_name,
-      last_name: existing.last_name || c.last_name,
-      phone: existing.phone || c.phone,
+      first_name: existing.first_name || c.first_name || null,
+      last_name: existing.last_name || c.last_name || null,
+      phone: existing.phone || c.phone || null,
       email: existing.email || c.email || undefined,
       metadata,
     });
     return existing.id;
   }
+  // A name or phone not given yet stays empty (lenient sale), never "".
   const created = await svc.createCustomers({
     email: c.email || undefined,
-    first_name: c.first_name,
-    last_name: c.last_name,
-    phone: c.phone,
+    first_name: c.first_name || undefined,
+    last_name: c.last_name || undefined,
+    phone: c.phone || undefined,
     has_account: false,
     metadata: { birth_date: c.birth_date, created_at_store: true },
   });
@@ -1192,12 +1196,20 @@ export interface CreateSaleInput {
    * and the lab ticket waits until the prescription is added from the sale.
    */
   rxPending?: boolean;
+  /** The promotion the sale used (lib/pos-promotion.ts), copied onto the sale. */
+  promotion?: AppliedPromotion | null;
+  /** Patient data recorded as missing (lib/pos.ts missingCustomerData). */
+  missing?: MissingKey[];
+  /** The sale happened on an earlier day (lib/sale-date.ts); null/absent = now. */
+  backdate?: Backdate | null;
   idempotencyKey: string | null;
 }
 
 export interface CreatedSale {
   id: string;
   number: string;
+  /** The day it was recorded as, when backdated (lib/sale-date.ts). */
+  sold_on?: string | null;
   order_id: string;
   display_id: number | null;
   total: number;
@@ -1219,6 +1231,8 @@ export interface CreatedSale {
   replayed?: boolean;
   /** Sold with the prescription pending (lib/rx-pending.ts): the lab ticket waits for it. */
   rx_pending?: boolean;
+  /** What the sale was recorded without (lib/pos.ts saleMissing): the till says it and how to complete it. */
+  missing?: MissingKey[];
 }
 
 /** Sales currently being recorded, by idempotency key (one process; the unique index covers the rest). */
@@ -1262,6 +1276,7 @@ async function replayOf(container: MedusaContainer, key: string): Promise<Create
     optical_change: null,
     replayed: true,
     rx_pending: sale.rx_pending === true,
+    missing: saleMissing(sale.missing, { rx_pending: sale.rx_pending === true, paid: Number(sale.paid_cents) / 100, insurance: Number(sale.insurance_cents) / 100, total: Number(sale.total_cents) / 100 }),
   };
 }
 
@@ -1371,6 +1386,8 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     promised_on: promisedOn,
     optical_change: change,
     rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true,
+    sold_on: input.backdate?.date ?? null,
+    missing: saleMissing(input.missing, { rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true, paid: p.paid_cents / 100, insurance: p.insurance_cents / 100, total: quote.total }),
     ...(framePhotoFailed ? { frame_photo_failed: true } : {}),
   };
 }
@@ -1422,9 +1439,9 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
   }
 
   const address = {
-    first_name: customer.first_name,
-    last_name: customer.last_name,
-    phone: customer.phone,
+    first_name: customer.first_name || undefined,
+    last_name: customer.last_name || undefined,
+    phone: customer.phone || undefined,
     ...(customer.address
       ? {
           address_1: customer.address.address_1,
@@ -1460,9 +1477,9 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
         // The two switches of the pay step. No email on file = nothing to mail.
         notify_email: input.notifyEmail && Boolean(customer.email),
         notify_sms: input.notifySms === true,
-        patient_phone: customer.phone,
+        patient_phone: customer.phone || null,
         // Where the stage SMS goes (lib/order-stage-transition.ts reads `phone`), only when asked for.
-        ...(input.notifySms === true ? { phone: customer.phone } : {}),
+        ...(input.notifySms === true && customer.phone ? { phone: customer.phone } : {}),
         delivery: input.delivery,
         // The prescription comes later (lib/rx-pending.ts): the order board and the lab ticket wait for it.
         ...(input.rxPending === true ? { rx_pending: true } : {}),
@@ -1539,7 +1556,8 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
   const withLenses = quote.lines.some((l) => l.lens_category);
   // Counted on the store's calendar: a sale at 7 pm in Texas is still "today"
   // there although the UTC date has already moved on (lib/pos.ts promisedDate).
-  const promisedOn = promisedDate(new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
+  // A backdated sale was promised from the day it happened (lib/sale-date.ts).
+  const promisedOn = promisedDate(input.backdate?.soldAt ?? new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
   const p = input.payments;
   const sale = await pos(container).createPosSales({
     number,
@@ -1566,8 +1584,25 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
     // Only the private keys (the patient's frames): a store frame's photo is a public URL.
     own_frame_photo_keys: photoKeys.filter((k, i) => k && input.lines[i]?.kind === "own_frame") as unknown as Record<string, unknown>,
     rx_pending: input.rxPending === true && withLenses && !rx.newId,
+    promotion: (input.promotion ?? null) as unknown as Record<string, unknown> | null,
+    missing: (input.missing?.length ? input.missing : null) as unknown as Record<string, unknown> | null,
   });
+  if (input.backdate) await backdateSale(container, sale.id, orderId, input.backdate, input.sellerId);
   return { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed };
+}
+
+/**
+ * The sale happened on an earlier day (lib/sale-date.ts): its row and its
+ * Medusa order carry THAT instant as their date — every report, the receipt and
+ * the dashboards (projected right after, from `pos_sale.created_at`) read it
+ * from there — and the row keeps when it was really recorded. The payments keep
+ * their own time: the money is taken now, into today's open register.
+ */
+async function backdateSale(container: MedusaContainer, saleId: string, orderId: string, b: Backdate, actorId: string | null): Promise<void> {
+  const pg = pgOf(container);
+  const record = backdateRecord(b, new Date(), actorId);
+  await pg("pos_sale").where({ id: saleId }).update({ created_at: b.soldAt, backdate: JSON.stringify(record) });
+  await pg("order").where({ id: orderId }).update({ created_at: b.soldAt });
 }
 
 export async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {
@@ -1696,6 +1731,12 @@ export interface SaleRow {
   wearing_photo_at: string | null;
   /** Lenses sold before the prescription exists; it is added from the sale (lib/rx-pending.ts). */
   rx_pending: boolean;
+  /** The promotion it used (lib/promotions.ts), as it was then; null = none. */
+  promotion: AppliedPromotion | null;
+  /** What is still to complete (lib/pos.ts saleMissing): patient data, prescription, deposit. [] = complete. */
+  missing: MissingKey[];
+  /** Recorded with an earlier date: when it was really recorded and the day chosen (lib/sale-date.ts); null = that day. */
+  backdate: BackdateRecord | null;
   /**
    * The live payment rows. `id` and `details` are what the payment correction
    * (lib/payment-correction.ts) sends back for a row it keeps; `corrected_at`
@@ -1761,6 +1802,9 @@ export function toSale(s: Record<string, unknown>, payments: Array<Record<string
     has_wearing_photo: typeof s.wearing_photo_key === "string" && s.wearing_photo_key.length > 0,
     wearing_photo_at: iso(s.wearing_photo_at),
     rx_pending: s.rx_pending === true,
+    promotion: s.promotion && typeof s.promotion === "object" ? (s.promotion as AppliedPromotion) : null,
+    missing: saleMissing(s.missing, { rx_pending: s.rx_pending === true, paid: Number(s.paid_cents ?? 0) / 100, insurance: Number(s.insurance_cents ?? 0) / 100, total: Number(s.total_cents ?? 0) / 100, status: String(s.status) }),
+    backdate: s.backdate && typeof s.backdate === "object" ? (s.backdate as BackdateRecord) : null,
     payments: payments
       .filter((p) => p.sale_id === s.id)
       .map((p) => ({

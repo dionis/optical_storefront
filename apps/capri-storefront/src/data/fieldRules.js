@@ -86,15 +86,18 @@ export function addressProblems(a, { required = false, stateRequired = false } =
 }
 
 /** Cliente de una venta del punto de venta. */
-export function customerProblems(c, { requireAddress = false, requireEmail = false } = {}) {
+export function customerProblems(c, { requireAddress = false, requireEmail = false, lenient = false } = {}) {
+  // `lenient` (POS, dueño 17-nov-2026): nombre, apellido y teléfono VACÍOS no son error —
+  // la venta se registra con aviso y se completan después—; escritos mal, sí.
+  // Misma regla que `cleanCustomer(..., { lenient })` en el backend (lib/pos.ts).
   return onlyProblems({
-    first_name: nameProblem(c.first_name, true),
-    last_name: nameProblem(c.last_name, true),
+    first_name: nameProblem(c.first_name, !lenient),
+    last_name: nameProblem(c.last_name, !lenient),
     // El correo es OPCIONAL en el mostrador (dueño, 11-nov-2026): solo lo exige
     // la tienda online (`requireEmail`). Si se escribe, tiene que ser válido.
     // Misma regla que `cleanCustomer` en el backend (lib/pos.ts).
     email: emailProblem(c.email, requireEmail),
-    phone: phoneProblem(c.phone, true),
+    phone: phoneProblem(c.phone, !lenient),
     // La fecha de nacimiento NO es obligatoria: en el mostrador solo se exigen
     // los datos de contacto (decisión del dueño). Si se escribe, se valida
     // igual — una fecha imposible sigue siendo un error.

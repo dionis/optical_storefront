@@ -17,6 +17,9 @@ import StorePricing from "./StorePricing.jsx";
 import StoreAssortment from "./StoreAssortment.jsx";
 import PriceImport from "./PriceImport.jsx";
 import StoreTerminals from "./StoreTerminals.jsx";
+import StoreHoursEditor from "./StoreHoursEditor.jsx";
+import { hoursStatus, weekLine, WEEKDAYS } from "./storeHours.js";
+import "./store-hours.css";
 import FieldError from "../components/FieldError.jsx";
 import { LIMITS, phoneProblem, typedPhone } from "../data/fieldRules.js";
 
@@ -27,6 +30,23 @@ const KIND_ICON = { own: "store", family: "team", partner: "share", consignment:
 const KINDS = ["own", "family", "partner", "consignment", "online"];
 /** Las tiendas que liquidan un % de sus ventas (ni la propia ni la online). */
 const settles = (kind) => Boolean(kind) && kind !== "own" && kind !== "online";
+
+/** «Abierta · cierra 18:00» / «Cerrada · abre lun 09:00» y la semana en una línea (el horario se edita con «Horario»). */
+function HoursFact({ store, tz }) {
+  const { t } = useLang();
+  if (!store.hours) return <span className="adm-store-fact muted" title={t("adm.hours.button")}><Icon name="clock" size={12} />{t("adm.hours.none")}</span>;
+  const st = hoursStatus(store.hours, new Date(), tz);
+  const names = WEEKDAYS.map((d) => t(`adm.hours.short.${d}`));
+  const next = st.next_open && (st.next_open.today ? st.next_open.time : `${t(`adm.hours.short.${WEEKDAYS[(new Date(`${st.next_open.date}T12:00:00Z`).getUTCDay() + 6) % 7]}`)} ${st.next_open.time}`);
+  return (
+    <span className="adm-store-fact sh-fact" title={weekLine(store.hours, names, t("adm.hours.closedWord"))}>
+      <Icon name="clock" size={12} />
+      <span className={`sh-dot ${st.open ? "on" : ""}`} aria-hidden="true" />
+      {st.open ? t("adm.hours.openNow", { time: st.closes_at }) : next ? t("adm.hours.closedNow", { when: next }) : t("adm.hours.closedWord")}
+      {st.special?.label ? ` · ${st.special.label}` : ""}
+    </span>
+  );
+}
 
 /** Muestras de la paleta y, al lado, cualquier otro color. */
 function ColorPicker({ value, onChange, disabled }) {
@@ -65,12 +85,14 @@ export default function Stores({ go = null }) {
   const [draft, setDraft] = useState(EMPTY);
   const [pricingId, setPricingId] = useState(null); // tienda con el panel de precios abierto
   const [assortId, setAssortId] = useState(null); // tienda con el panel de catálogo abierto
+  const [hoursId, setHoursId] = useState(null); // tienda con el horario abierto
+  const [tz, setTz] = useState(undefined); // zona horaria del negocio (el reloj de las tiendas)
 
   const load = () => {
     if (demo) return;
     setState("loading");
     fetchStores()
-      .then((r) => { setStores(r.establishments || []); setState("ok"); })
+      .then((r) => { setStores(r.establishments || []); if (r.timezone) setTz(r.timezone); setState("ok"); })
       .catch(() => setState("error"));
   };
   useEffect(load, [demo]);
@@ -173,6 +195,7 @@ export default function Stores({ go = null }) {
                     {s.phone && <span className="adm-store-fact" title={t("adm.stores.phone")}><Icon name="phone" size={12} />{s.phone}</span>}
                     {s.created_at && <span className="adm-store-fact" title={t("adm.scr.store.created")}><Icon name="calendar" size={12} />{shortDate(s.created_at, lang)}</span>}
                     {settles(s.kind) && s.settlement_pct != null && <span className="adm-store-fact" title={t("adm.stores.settlementPct")}><Icon name="percent" size={12} />{s.settlement_pct} %</span>}
+                    <HoursFact store={s} tz={tz} />
                   </span>
                 </span>
               )}
@@ -184,13 +207,15 @@ export default function Stores({ go = null }) {
                 </>
               ) : (
                 <>
-                  <button className={`btn-xs ${pricingId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={pricingId === s.id} onClick={() => { setAssortId(null); setPricingId(pricingId === s.id ? null : s.id); }}><Icon name="prices" size={12} />{t("adm.stores.prices")}</button>
-                  <button className={`btn-xs ${assortId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={assortId === s.id} onClick={() => { setPricingId(null); setAssortId(assortId === s.id ? null : s.id); }}><Icon name="products" size={12} />{t("adm.stores.catalog")}</button>
+                  <button className={`btn-xs ${pricingId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={pricingId === s.id} onClick={() => { setAssortId(null); setHoursId(null); setPricingId(pricingId === s.id ? null : s.id); }}><Icon name="prices" size={12} />{t("adm.stores.prices")}</button>
+                  <button className={`btn-xs ${assortId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={assortId === s.id} onClick={() => { setPricingId(null); setHoursId(null); setAssortId(assortId === s.id ? null : s.id); }}><Icon name="products" size={12} />{t("adm.stores.catalog")}</button>
+                  <button className={`btn-xs ${hoursId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={hoursId === s.id} onClick={() => { setPricingId(null); setAssortId(null); setHoursId(hoursId === s.id ? null : s.id); }}><Icon name="clock" size={12} />{t("adm.hours.button")}</button>
                   <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", color: s.color || STORE_COLORS[0], kind: s.kind || "own", receipt_note: s.receipt_note || "", settlement_pct: s.settlement_pct ?? null }); }}><Icon name="edit" size={12} />{t("adm.stores.edit")}</button>
                   <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}><Icon name={s.is_active ? "power" : "checkCircle"} size={12} />{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
                 </>
               )}
             </div>
+            {hoursId === s.id && <StoreHoursEditor key={s.id} store={s} disabled={demo} onClose={() => setHoursId(null)} onSaved={(list) => { if (list) setStores(list); setHoursId(null); }} />}
             {/* Al editar la tienda se gestionan también sus puntos de venta. */}
             {editing === s.id && <StoreTerminals store={s} disabled={demo} />}
             </div>

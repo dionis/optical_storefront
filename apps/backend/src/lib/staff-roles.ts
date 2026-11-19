@@ -253,8 +253,8 @@ const PRIVILEGED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp; privileg
   { method: "GET", path: /^\/admin\/pos\/payment-methods$/, privilege: "payments.manage" },
   { method: "POST", path: /^\/admin\/pos\/payment-methods(\/[^/]+)?$/, privilege: "payments.manage" },
   // Costs (E13): edited with costs.manage, read with costs.view or costs.manage.
-  { method: "GET", path: /^\/admin\/store-costs(\/pnl)?$/, privilege: "costs.view" },
-  { method: "GET", path: /^\/admin\/store-costs(\/pnl)?$/, privilege: "costs.manage" },
+  { method: "GET", path: /^\/admin\/store-costs(\/pnl|\/breakdown)?$/, privilege: "costs.view" },
+  { method: "GET", path: /^\/admin\/store-costs(\/pnl|\/breakdown)?$/, privilege: "costs.manage" },
   { method: "POST", path: /^\/admin\/store-costs(\/[^/]+)?$/, privilege: "costs.manage" },
   { method: "DELETE", path: /^\/admin\/store-costs\/[^/]+$/, privilege: "costs.manage" },
   // Frame costs and the price band: the guard lets the privilege in, and

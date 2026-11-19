@@ -1,3 +1,5 @@
+import type { AppliedPromotion } from "./promotions";
+import type { StoreHours } from "./store-hours";
 import type { INotificationModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
@@ -136,7 +138,8 @@ export interface SaleDocument {
   kind: DocumentKind;
   /** `timezone`: the store's IANA zone; every date on a document is shown in it, never in the server's (UTC). */
   business: { name: string; legal_name: string; url: string; support_email: string | null; timezone: string };
-  store: { code: string; name: string; address: string | null; phone: string | null; receipt_note: string | null };
+  /** `hours`: the store's opening hours (lib/store-hours.ts), printed as one line on receipts; null = not set. */
+  store: { code: string; name: string; address: string | null; phone: string | null; receipt_note: string | null; hours: StoreHours | null };
   /** `printer`: the till's printer as configured (free text such as "thermal 80mm" or "HP LaserJet"); null when unknown. */
   terminal: { code: string | null; receipt_locale: string; ticket_locale: string; printer: string | null };
   sale: {
@@ -152,6 +155,8 @@ export interface SaleDocument {
     delivery: string;
     /** The prescription is not in yet (lib/rx-pending.ts): the lab ticket cannot be printed. */
     rx_pending: boolean;
+    /** The promotion the sale used, printed by name (lib/promotions.ts); null = none. */
+    promotion: AppliedPromotion | null;
   };
   customer: { name: string; phone: string | null };
   tracking_url: string;
@@ -357,7 +362,7 @@ export async function buildSaleDocument(
   const base: SaleDocument = {
     kind,
     business: { name: t.name, legal_name: t.legalName, url: t.storefrontUrl, support_email: t.supportEmail, timezone: t.timezone },
-    store: { code: store.code, name: store.name, address: store.address, phone: store.phone, receipt_note: store.receipt_note },
+    store: { code: store.code, name: store.name, address: store.address, phone: store.phone, receipt_note: store.receipt_note, hours: store.hours ?? null },
     terminal: { code: terminal?.code ?? null, receipt_locale: terminal?.receipt_locale ?? "es", ticket_locale: terminal?.ticket_locale ?? "en", printer },
     sale: {
       id: sale.id,
@@ -371,6 +376,7 @@ export async function buildSaleDocument(
       voided_at: sale.voided_at,
       delivery: sale.delivery,
       rx_pending: sale.rx_pending,
+      promotion: sale.promotion ?? null,
     },
     customer: { name, phone: order?.shipping_address?.phone ?? null },
     // The QR on the receipt opens the existing order tracking — no personal data in it.

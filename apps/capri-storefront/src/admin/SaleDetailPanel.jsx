@@ -22,6 +22,7 @@
 // = POST /admin/order-board/:id/stage con una de `next_stages`. Costo, comisión y
 // ganancia nunca se piden aquí: llegan en `economics` desde la lista que ya los
 // tenía (y solo si el servidor los dio).
+import MissingData from "./MissingData.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -725,6 +726,13 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
               {/* The free text of the request travels with the sale (void_note): the
                   person who confirms reads WHY the seller asked, not just the category. */}
               {s.void_requested_at && s.status !== "voided" && <div className="sd-banner warn">{t("adm.pos.sales.voidPending", { reason: t(`adm.pos.void.${s.void_reason}`) })}{s.void_note ? <><br /><small>{t("adm.pos.sales.voidNote", { note: s.void_note })}</small></> : null}</div>}
+              {/* Registrada con otra fecha (lib/sale-date.ts): el día que cuenta y cuándo se registró de verdad. */}
+              {s.backdate && (
+                <div className="sd-banner info sd-backdate">
+                  <Icon name="calendar" size={14} /> {t("adm.sdt.detail", { date: s.backdate.date, time: s.backdate.time, recorded: new Date(s.backdate.recorded_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) })}
+                  {s.backdate.note ? <><br /><small>{t("adm.sdt.detailNote", { note: s.backdate.note })}</small></> : null}
+                </div>
+              )}
               {s.internal_note && <div className="sd-banner info"><b>{t("adm.sd.note")}:</b> <span className="sd-note-text">{s.internal_note}</span></div>}
               {s.rx_pending && s.status !== "voided" && (
                 <div className="sd-banner warn sd-rx-pending">
@@ -734,6 +742,13 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                   )}
                 </div>
               )}
+              {/* Registrada con datos pendientes (backend lib/pos.ts saleMissing): qué falta y cómo completarlo.
+                  La receta pendiente tiene su propio aviso arriba; el anticipo se cobra en Pagos. */}
+              {s.status !== "voided" && mode !== "edit" && (() => {
+                const shown = (s.missing || []).filter((k) => k !== "prescription");
+                const data = shown.filter((k) => ["first_name", "last_name", "phone", "address"].includes(k));
+                return <MissingData missing={shown} compact onComplete={perms.can_edit && data.length ? () => { setEditRx(false); setMode("edit"); } : null} completeLabel={t("adm.pos.missing.completeData")} />;
+              })()}
               {mode === "edit" && (
                 <SaleEditForm
                   sale={s}
@@ -836,7 +851,10 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
               <Section icon="dollar" title={t("adm.sd.sec.amounts")}>
                 <dl className="sd-totals">
                   <div><dt>{t("adm.sd.list")}</dt><dd>{m(s.list)}</dd></div>
-                  {s.discount > 0 && <div><dt>{t("adm.sd.discount", { n: s.discount_pct })}</dt><dd>−{m(s.discount)}</dd></div>}
+                  {s.discount > 0 && <div><dt>{s.promotion?.priced ? t("adm.promo.pos.line", { name: s.promotion.name, n: s.discount_pct }) : t("adm.sd.discount", { n: s.discount_pct })}</dt><dd>−{m(s.discount)}</dd></div>}
+                  {/* Promoción sin dinero (examen gratis, regalo) o la que perdió frente a un descuento mayor: se dice igual. */}
+                  {s.promotion && !s.promotion.priced && <div><dt>{t(s.promotion.pct ? "adm.promo.pos.notPriced" : "adm.promo.pos.included", { name: s.promotion.name })}</dt><dd>{s.promotion.value_cents ? m(s.promotion.value_cents / 100) : "✓"}</dd></div>}
+                  {s.promotion?.ref && <div><dt>{t("adm.doc.rcpt.promoRef", { ref: s.promotion.ref })}</dt><dd /></div>}
                   {doc?.totals?.tax > 0 && <div><dt>{t("adm.sd.tax")}</dt><dd>{m(doc.totals.tax)}</dd></div>}
                   <div className="sd-total"><dt>{t("adm.sd.total")}</dt><dd>{m(s.total)}</dd></div>
                   <div><dt>{t("adm.sd.paid")}</dt><dd>{m(s.paid)}</dd></div>

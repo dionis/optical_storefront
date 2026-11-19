@@ -5,9 +5,11 @@ import { cleanText, listEstablishments, ONLINE_KIND, STORE_KINDS } from "../../.
 import { isValidPhone } from "../../../../lib/field-rules";
 import { forgetOnlineStore } from "../../../../lib/online-store";
 import { normalizeColor } from "../../../../lib/store-color";
+import { cleanStoreHours } from "../../../../lib/store-hours";
+import { recordAudit } from "../../../../lib/audit";
 
 /**
- * POST /admin/establishments/:id { name?, address?, phone?, color?, kind?, receipt_note?, is_active? }
+ * POST /admin/establishments/:id { name?, address?, phone?, color?, kind?, receipt_note?, hours?, is_active? }
  *
  * Edita una tienda. El código no se cambia nunca (está impreso en recibos y
  * fichas). No hay DELETE: una tienda con historial solo se desactiva (HU-01).
@@ -24,6 +26,8 @@ interface UpdateBody {
   color?: string;
   kind?: string;
   receipt_note?: string | null;
+  /** Opening hours (lib/store-hours.ts); null clears them. */
+  hours?: unknown;
   settlement_pct?: number | null;
   is_active?: boolean;
 }
@@ -93,8 +97,19 @@ export async function POST(req: AuthenticatedMedusaRequest<UpdateBody>, res: Med
     patch.settlement_pct = v;
   }
   if (typeof body.is_active === "boolean") patch.is_active = body.is_active;
+  if ("hours" in body) {
+    const h = cleanStoreHours(body.hours);
+    if ("reason" in h) {
+      res.status(422).json({ type: "invalid_data", reason: h.reason, day: h.day ?? null, message: "Invalid opening hours." });
+      return;
+    }
+    patch.hours = h.hours;
+  }
 
   await svc.updateEstablishments(patch as never);
+  if ("hours" in patch) {
+    await recordAudit(req.scope, { actorId: req.auth_context?.actor_id ?? null, action: "store.hours", entity: "establishment", entityId: id, establishmentId: id, before: { hours: (current as { hours?: unknown }).hours ?? null }, after: { hours: patch.hours } });
+  }
   forgetOnlineStore();
   res.json({ establishments: await listEstablishments(req.scope) });
 }

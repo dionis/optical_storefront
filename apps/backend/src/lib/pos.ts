@@ -218,10 +218,12 @@ export interface PosCustomerInput {
 }
 
 export interface PosCustomer {
+  /** "" when not given yet (lenient sale: completed later from the sale, see `missingCustomerData`). */
   first_name: string;
   last_name: string;
   /** "" when the patient gave none (optional at the counter). */
   email: string;
+  /** "" when not given yet (lenient sale). */
   phone: string;
   /** YYYY-MM-DD, or null: the counter only requires the contact data (owner's decision, same rule as `customerProblems` in the panel). */
   birth_date: string | null;
@@ -245,20 +247,27 @@ export function cleanCustomer(
   input: PosCustomerInput | null | undefined,
   now = new Date(),
   timeZone = "UTC",
-  opts: { requireEmail?: boolean } = {}
+  opts: { requireEmail?: boolean; lenient?: boolean } = {}
 ): { reason: string } | { customer: PosCustomer } {
   const c = input ?? {};
   // Longer than allowed is refused, not cut: a silently shortened email or phone is a wrong one.
   const first_name = text(c.first_name, FIELD_LIMITS.name + 1);
   const last_name = text(c.last_name, FIELD_LIMITS.name + 1);
-  if (!isValidName(first_name) || !isValidName(last_name)) return { reason: "customer_name" };
+  // `lenient` (the till and the sale's correction, owner 17-nov-2026: «se debe
+  // poder registrar la venta aunque falten datos porque luego se puede editar»):
+  // a name or phone NOT typed is allowed and recorded as missing; one typed
+  // wrong is still refused. At least the name or the phone, or nobody could
+  // find the sale again.
+  const nameOk = (v: string) => (opts.lenient && !v) || isValidName(v);
+  if (!nameOk(first_name) || !nameOk(last_name)) return { reason: "customer_name" };
 
   const email = text(c.email, FIELD_LIMITS.email + 1).toLowerCase();
   // Optional: a patient without email is a patient. A typed one must be a real address.
   if (email ? !isValidEmail(email) : opts.requireEmail) return { reason: "customer_email" };
 
   const phone = text(c.phone, FIELD_LIMITS.phone + 1);
-  if (!isValidPhone(phone)) return { reason: "customer_phone" };
+  if (!((opts.lenient && !phone) || isValidPhone(phone))) return { reason: "customer_phone" };
+  if (opts.lenient && !first_name && !phone) return { reason: "customer_identity" };
 
   const birthText = text(c.birth_date, 10);
   let birth_date: string | null = null;
@@ -292,6 +301,35 @@ export function cleanCustomer(
     };
   }
   return { customer: { first_name, last_name, email, phone, birth_date, address } };
+}
+
+/** What a sale's patient data still lacks (shown on the sale until it is completed). */
+export const MISSING_KEYS = ["first_name", "last_name", "phone", "address", "prescription", "deposit"] as const;
+export type MissingKey = (typeof MISSING_KEYS)[number];
+
+/**
+ * The patient data a sale was recorded without: name, last name, phone, and
+ * the address when it ships. The prescription and the deposit are read live
+ * from the sale (`rx_pending`, nothing paid), so they are not stored. Pure.
+ */
+export function missingCustomerData(
+  c: { first_name?: string | null; last_name?: string | null; phone?: string | null; address?: unknown },
+  delivery: string
+): MissingKey[] {
+  const out: MissingKey[] = [];
+  if (!String(c.first_name ?? "").trim()) out.push("first_name");
+  if (!String(c.last_name ?? "").trim()) out.push("last_name");
+  if (!String(c.phone ?? "").trim()) out.push("phone");
+  if (delivery === "ship" && !c.address) out.push("address");
+  return out;
+}
+
+/** Everything still missing on a sale: what was stored plus the live prescription and deposit. Pure. */
+export function saleMissing(stored: unknown, sale: { rx_pending?: boolean; paid?: number; insurance?: number; total?: number; status?: string }): MissingKey[] {
+  const keys = new Set<MissingKey>((Array.isArray(stored) ? stored : []).filter((k): k is MissingKey => (MISSING_KEYS as readonly string[]).includes(String(k))));
+  if (sale.rx_pending) keys.add("prescription");
+  if (sale.status !== "voided" && (sale.total ?? 0) > 0 && (sale.paid ?? 0) + (sale.insurance ?? 0) <= 0) keys.add("deposit");
+  return MISSING_KEYS.filter((k) => keys.has(k));
 }
 
 // ---------------------------------------------------------------------------
@@ -529,10 +567,11 @@ export function cleanPayments(
   input: unknown,
   dueCents: number,
   methods: PaymentMethodLike[],
-  opts: { establishmentId: string; requireFull?: boolean; allowInsurance?: boolean } = { establishmentId: "" }
+  opts: { establishmentId: string; requireFull?: boolean; allowInsurance?: boolean; allowNone?: boolean } = { establishmentId: "" }
 ): { reason: string; method?: string } | CleanedPayments {
   const list = Array.isArray(input) ? input : [];
-  if (list.length === 0 && dueCents > 0) return { reason: "no_payments" };
+  // `allowNone`: a sale recorded without a deposit (the whole total stays as balance; the till warned).
+  if (list.length === 0 && dueCents > 0 && !opts.allowNone) return { reason: "no_payments" };
   if (list.length > 6) return { reason: "bad_payment" };
   const byCode = new Map(methods.map((m) => [m.code, m]));
   const payments: PosPayment[] = [];
