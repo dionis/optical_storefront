@@ -128,6 +128,22 @@
 </section>
 
 <section>
+  <h2>19-nov-2026 — Ventas atrasadas de hasta un año que cuadran la contabilidad · recargo +$30 en el pasado</h2>
+  <p>El dueño: «el registro de venta debe poder ponerse en la fecha que se registre y con toda la actualización necesaria de tal forma que se vaya cuadrando la contabilidad… con un año retroactivo, pero se debe incluir la fecha en la que se registró: así se sabe si fue una actualización o una venta del día». Y: «agrega los +30 dólares cuando es +6, resuelve esto».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Hasta 366 días atrás para todos los roles</b> (antes vendedor 7, encargado 31). El dueño puede limitar cada rol en Configuración del POS → «Fecha retroactiva de las ventas» (0 = no puede).</td><td><span class="tag ok">Listo</span></td><td><code>lib/sale-date.ts</code>, <code>pos_setting.backdate_limits</code> (<code>CreatePos2BackdateLimits</code>), <code>PosConfig.jsx</code></td></tr>
+    <tr><td><b>El dinero cuadra</b>: «El dinero se cobró: Ese día» (por defecto) = los cobros llevan la fecha de la venta y no entran en ninguna caja (esa caja ya se contó); cuentan ese día en el reporte de caja y en las comisiones de ese mes. «Hoy» = entra en la caja abierta de hoy.</td><td><span class="tag ok">Listo</span></td><td><code>writePayments(..., { paidAt })</code> en <code>pos-data.ts</code></td></tr>
+    <tr><td><b>«El paciente ya se llevó los lentes»</b> (se marca sola si es de hace más de 30 días): entregada con esa fecha, sin bandeja y sin mensaje al paciente. Solo con la venta pagada.</td><td><span class="tag ok">Listo</span></td><td><code>markDelivered(..., { at, silent })</code>, <code>SaleDateCard.jsx</code></td></tr>
+    <tr><td><b>Fecha de registro en cada venta</b>: columna «Registro» en Ventas de tienda («Venta del día» / «Actualización · fecha en que se registró»), línea en la ficha, y en la exportación.</td><td><span class="tag ok">Listo</span></td><td><code>SaleRow.recorded_at</code>/<code>backdated</code>, <code>PosSales.jsx</code>, <code>SaleDetailPanel.jsx</code></td></tr>
+    <tr><td>Receta sin fecha en una venta atrasada = la fecha de la venta.</td><td><span class="tag ok">Listo</span></td><td><code>api/admin/pos/sales/route.ts</code></td></tr>
+    <tr><td><b>Recargo +$30 (base &gt; +6.00) también en las ventas anteriores</b>: se recalcula solo cada 6 h y al guardar los recargos; y sale como línea «Recargo de laboratorio» en la ficha de costo del pedido y en la hoja.</td><td><span class="tag ok">Listo</span></td><td><code>reconcileLabSurcharges</code> (<code>lib/sale-facts.ts</code>), <code>costSheetForOrder</code></td></tr>
+    <tr><td><b>Para verlo en producción</b>: <code>sync-repo.bat</code> → S y Redeploy en Coolify (producción sigue en 996e252; los parches 0078–0082 están en tu carpeta).</td><td><span class="tag">Tu paso</span></td><td>—</td></tr>
+  </table>
+  <p class="muted">Pruebas: <code>tests/sale-date.test.ts</code> (7), <code>tests/costing.test.ts</code> (+1). QA local (<code>qa/bd2</code>, 29 comprobaciones): venta de hace 300 días pagada y entregada (cobro con esa fecha y fuera de caja, sin bandeja, entregada ese día sin aviso, recargo $30, receta con esa fecha, reporte de caja de ese día), 40 días con cobro hoy (caja de hoy), entrega con saldo rechazada, vendedor 200 días permitido y limitado a 7 por el dueño, relleno del recargo y línea en la ficha de costo. Capturas en Galaxy Tab A7 Lite y escritorio.</p>
+</section>
+
+<section>
   <h2>18-nov-2026 — Historial de compras del paciente y promociones para quien repite</h2>
   <p>El dueño: «saber cuándo un cliente hace más de una compra, un historial de compra por cliente para poder hacer promociones y descuentos».</p>
   <table>

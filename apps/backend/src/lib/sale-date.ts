@@ -10,22 +10,63 @@
  * the result and the receipt — and remembers when it was really recorded and
  * by whom (`pos_sale.backdate`, migration CreatePos11, and the audit log).
  *
- * What does NOT move:
- *  - the money: the payments taken now are of NOW and go into today's open cash
- *    register (a closed register never changes, lib/cash.ts);
- *  - the prices, the discount limits and the promotions: today's (the quote is
- *    today's quote);
- *  - the sale number and the prescription number: the next ones of the sequence.
+ * The money (owner, 19-nov-2026: «con toda la actualización necesaria de tal
+ * forma que se vaya cuadrando la contabilidad»): the person says when it was
+ * collected —
+ *  - `money_on: "sale"` (default): it was collected THAT day and is already
+ *    counted or banked: the payments carry the sale's instant (fees, statement
+ *    and month follow it) and do NOT enter any register (a closed register never
+ *    changes, and today's would show cash that is not in the drawer);
+ *  - `money_on: "today"`: it is collected now: the payments are of now and the
+ *    cash goes into today's open register, as any sale.
+ * `delivered: true` = the patient already has the glasses (an old sale written
+ * in to build the history): no tray is taken, the sale is delivered as of that
+ * day, and the patient gets no message. Only a sale paid in full.
+ * A sale with lenses and no prescription date takes the sale's day as its date.
  *
- * How far back, by role: the seller a week, a manager or a supervisor a month,
- * the owner and the superadmins a year. Never a future day.
+ * What does NOT move: the prices, the discount limits and the promotions
+ * (today's quote), and the sale and prescription numbers (the next ones).
+ *
+ * How far back: one year for every role by default; the owner can narrow it
+ * per role in Configuración del POS (`pos_setting.backdate_limits`, migration
+ * CreatePos2BackdateLimits). Never a future day.
  */
 import { localParts } from "./alerts";
 import type { StaffRole } from "./staff-roles";
 
-export const BACKDATE_MAX_DAYS: Record<StaffRole, number> = { owner: 366, superadmin: 366, supervisor: 31, manager: 31, seller: 7 };
-/** A person without a role (the creator of an old sale) counts as a seller. */
-export const maxBackdateDays = (role: StaffRole | null | undefined): number => (role ? BACKDATE_MAX_DAYS[role] : BACKDATE_MAX_DAYS.seller);
+/** The furthest back anyone can go (a year, leap day included). */
+export const BACKDATE_CEILING = 366;
+export const BACKDATE_MAX_DAYS: Record<StaffRole, number> = { owner: 366, superadmin: 366, supervisor: 366, manager: 366, seller: 366 };
+export type BackdateLimits = { seller: number; manager: number; supervisor: number };
+export const DEFAULT_BACKDATE_LIMITS: BackdateLimits = { seller: 366, manager: 366, supervisor: 366 };
+/**
+ * How many days back a role may date a sale: the owner's limit for sellers,
+ * managers and supervisors (default a year); owner and superadmins always a
+ * year. A person without a role (the creator of an old sale) counts as a seller.
+ */
+export const maxBackdateDays = (role: StaffRole | null | undefined, limits: BackdateLimits = DEFAULT_BACKDATE_LIMITS): number =>
+  role === "owner" || role === "superadmin" ? BACKDATE_CEILING : Math.min(BACKDATE_CEILING, limits[(role ?? "seller") as keyof BackdateLimits] ?? DEFAULT_BACKDATE_LIMITS.seller);
+
+/** The owner's limits as stored → clean (0–366 days each; missing or bad = the default). */
+export function normalizeBackdateLimits(raw: unknown): BackdateLimits {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const pick = (k: keyof BackdateLimits) => {
+    const n = Number(r[k]);
+    return Number.isInteger(n) && n >= 0 && n <= BACKDATE_CEILING ? n : DEFAULT_BACKDATE_LIMITS[k];
+  };
+  return { seller: pick("seller"), manager: pick("manager"), supervisor: pick("supervisor") };
+}
+
+export function backdateLimitsDenied(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object") return "bad_backdate_limits";
+  for (const k of ["seller", "manager", "supervisor"] as const) {
+    const v = (raw as Record<string, unknown>)[k];
+    if (v === undefined) continue;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 0 || n > BACKDATE_CEILING) return "bad_backdate_limits";
+  }
+  return null;
+}
 
 /** The hour a backdated sale gets when the person gives none (the dashboards bucket by hour). */
 export const DEFAULT_BACKDATE_TIME = "12:00";
@@ -74,6 +115,10 @@ export interface Backdate {
   time: string;
   note: string | null;
   days: number;
+  /** When the money was collected: that day (off the registers) or now (today's register). */
+  moneyOn: "sale" | "today";
+  /** The patient already has the glasses: delivered as of that day, no tray, no message. */
+  delivered: boolean;
 }
 
 export type BackdateReason = "sold_on_invalid" | "sold_on_future" | "sold_on_too_old";
@@ -82,7 +127,7 @@ export type BackdateReason = "sold_on_invalid" | "sold_on_future" | "sold_on_too
  * The till's `sold_on` ({ date, time?, note? }): null = today (no backdate),
  * the backdate, or why not. `role` decides how far back.
  */
-export function cleanSoldOn(input: unknown, now: Date, timeZone: string, role: StaffRole | null | undefined): Backdate | null | { reason: BackdateReason; max?: number } {
+export function cleanSoldOn(input: unknown, now: Date, timeZone: string, role: StaffRole | null | undefined, limits: BackdateLimits = DEFAULT_BACKDATE_LIMITS): Backdate | null | { reason: BackdateReason; max?: number } {
   if (input == null || input === "") return null;
   if (typeof input !== "object") return { reason: "sold_on_invalid" };
   const o = input as Record<string, unknown>;
@@ -97,10 +142,11 @@ export function cleanSoldOn(input: unknown, now: Date, timeZone: string, role: S
   const days = daysBetween(date, today);
   if (days < 0) return { reason: "sold_on_future" };
   if (days === 0) return null; // today is the default, not a backdate
-  const max = maxBackdateDays(role);
+  const max = maxBackdateDays(role, limits);
   if (days > max) return { reason: "sold_on_too_old", max };
   const time = rawTime || DEFAULT_BACKDATE_TIME;
-  return { soldAt: zonedInstant(date, time, timeZone), date, time, note: noteRaw || null, days };
+  if (o.money_on !== undefined && o.money_on !== null && o.money_on !== "sale" && o.money_on !== "today") return { reason: "sold_on_invalid" };
+  return { soldAt: zonedInstant(date, time, timeZone), date, time, note: noteRaw || null, days, moneyOn: o.money_on === "today" ? "today" : "sale", delivered: o.delivered === true };
 }
 
 /** What the sale row keeps about it (`pos_sale.backdate`). */
@@ -113,6 +159,10 @@ export interface BackdateRecord {
   date: string;
   time: string;
   note: string | null;
+  /** When the money was collected (see the head of this file); absent on sales recorded before 19-nov-2026 = "today". */
+  money_on?: "sale" | "today";
+  /** Recorded as already delivered. */
+  delivered?: boolean;
 }
 
 export const backdateRecord = (b: Backdate, recordedAt: Date, by: string | null): BackdateRecord => ({
@@ -121,4 +171,6 @@ export const backdateRecord = (b: Backdate, recordedAt: Date, by: string | null)
   date: b.date,
   time: b.time,
   note: b.note,
+  money_on: b.moneyOn,
+  delivered: b.delivered,
 });

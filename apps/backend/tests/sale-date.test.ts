@@ -1,4 +1,4 @@
-import { BACKDATE_MAX_DAYS, cleanSoldOn, daysBetween, maxBackdateDays, zonedInstant } from "../src/lib/sale-date";
+import { backdateLimitsDenied, backdateRecord, BACKDATE_CEILING, cleanSoldOn, daysBetween, maxBackdateDays, normalizeBackdateLimits, zonedInstant } from "../src/lib/sale-date";
 import { localParts } from "../src/lib/alerts";
 
 /**
@@ -27,14 +27,43 @@ describe("sale date", () => {
     expect(localParts(noon.soldAt, TZ).hour).toBe(12);
   });
 
-  it("never the future; never further back than the role allows", () => {
+  it("never the future; a year back for every role by default", () => {
     expect(cleanSoldOn({ date: "2026-11-19" }, NOW, TZ, "owner")).toEqual({ reason: "sold_on_future" });
-    expect(cleanSoldOn({ date: "2026-11-10" }, NOW, TZ, "seller")).toEqual({ reason: "sold_on_too_old", max: 7 });
-    expect(cleanSoldOn({ date: "2026-11-11" }, NOW, TZ, "seller")).not.toHaveProperty("reason");
-    expect(cleanSoldOn({ date: "2026-10-18" }, NOW, TZ, "manager")).not.toHaveProperty("reason");
-    expect(cleanSoldOn({ date: "2026-10-17" }, NOW, TZ, "supervisor")).toEqual({ reason: "sold_on_too_old", max: 31 });
-    expect(cleanSoldOn({ date: "2025-11-18" }, NOW, TZ, "superadmin")).not.toHaveProperty("reason");
-    expect(maxBackdateDays(null)).toBe(BACKDATE_MAX_DAYS.seller);
+    for (const role of ["seller", "manager", "supervisor", "owner", "superadmin"] as const) {
+      expect(cleanSoldOn({ date: "2025-11-18" }, NOW, TZ, role)).not.toHaveProperty("reason");
+      expect(cleanSoldOn({ date: "2025-11-16" }, NOW, TZ, role)).toEqual({ reason: "sold_on_too_old", max: BACKDATE_CEILING });
+    }
+    expect(maxBackdateDays(null)).toBe(366);
+  });
+
+  it("the owner can narrow it per role; owner and superadmins always a year", () => {
+    const limits = normalizeBackdateLimits({ seller: 7, manager: 31 });
+    expect(limits).toEqual({ seller: 7, manager: 31, supervisor: 366 });
+    expect(cleanSoldOn({ date: "2026-11-10" }, NOW, TZ, "seller", limits)).toEqual({ reason: "sold_on_too_old", max: 7 });
+    expect(cleanSoldOn({ date: "2026-11-11" }, NOW, TZ, "seller", limits)).not.toHaveProperty("reason");
+    expect(cleanSoldOn({ date: "2026-10-17" }, NOW, TZ, "manager", limits)).toEqual({ reason: "sold_on_too_old", max: 31 });
+    expect(maxBackdateDays("owner", { seller: 0, manager: 0, supervisor: 0 })).toBe(366);
+    expect(maxBackdateDays("superadmin", { seller: 0, manager: 0, supervisor: 0 })).toBe(366);
+    // 0 = that role cannot backdate at all.
+    expect(cleanSoldOn({ date: "2026-11-17" }, NOW, TZ, "seller", { seller: 0, manager: 0, supervisor: 0 })).toEqual({ reason: "sold_on_too_old", max: 0 });
+    expect(normalizeBackdateLimits({ seller: 500, manager: -1, supervisor: "x" })).toEqual({ seller: 366, manager: 366, supervisor: 366 });
+    expect(backdateLimitsDenied({ seller: 400 })).toBe("bad_backdate_limits");
+    expect(backdateLimitsDenied({ seller: 1.5 })).toBe("bad_backdate_limits");
+    expect(backdateLimitsDenied(null)).toBe("bad_backdate_limits");
+    expect(backdateLimitsDenied({ seller: 30, manager: 90 })).toBeNull();
+  });
+
+  it("when the money came in and whether it was already delivered", () => {
+    const def = cleanSoldOn({ date: "2026-06-01" }, NOW, TZ, "seller");
+    if (!def || "reason" in def) throw new Error("expected a backdate");
+    expect(def).toMatchObject({ moneyOn: "sale", delivered: false });
+    const today = cleanSoldOn({ date: "2026-06-01", money_on: "today", delivered: true }, NOW, TZ, "seller");
+    if (!today || "reason" in today) throw new Error("expected a backdate");
+    expect(today).toMatchObject({ moneyOn: "today", delivered: true });
+    expect(cleanSoldOn({ date: "2026-06-01", money_on: "yesterday" }, NOW, TZ, "seller")).toEqual({ reason: "sold_on_invalid" });
+    // The record keeps when it was really written, so a backdated sale is never mistaken for a sale of the day.
+    const rec = backdateRecord(today, NOW, "user_1");
+    expect(rec).toEqual({ recorded_at: NOW.toISOString(), by: "user_1", date: "2026-06-01", time: "12:00", note: null, money_on: "today", delivered: true });
   });
 
   it("rejects what is not a date, a time or a short note", () => {

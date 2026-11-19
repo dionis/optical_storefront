@@ -1,6 +1,7 @@
 // Recargos de laboratorio por graduación alta (LabSurcharges.jsx; backend lib/lab-surcharge.ts). Dueño, 18-nov-2026.
 export default {
   es: {
+    "adm.cost.kind.lab_surcharge": "Recargo de laboratorio · graduación alta",
     "adm.ls.title": "Recargos de laboratorio por graduación",
     "adm.ls.sub": "Lo que el laboratorio le cobra de más a la tienda cuando la graduación sale del rango estándar (como en las listas de precios de Essilor, Zeiss, Hoya o Shamir). Se aplica una vez por trabajo si cualquiera de los dos ojos pasa el límite. En la misma potencia y dirección cuenta solo el escalón más alto.",
     "adm.ls.col.on": "Activo",
@@ -30,6 +31,7 @@ export default {
     "adm.err.pos.bad_surcharges": "Revisa los recargos: nombre, potencia, límite y costo (0–1000). En cilindro, adición y prisma solo «más de».",
   },
   en: {
+    "adm.cost.kind.lab_surcharge": "Lab surcharge · high power",
     "adm.ls.title": "Lab surcharges by prescription power",
     "adm.ls.sub": "What the lab charges the store on top when the power is beyond the standard range (as in the Essilor, Zeiss, Hoya or Shamir price lists). Applied once per job when either eye passes the limit. On the same power and direction only the highest step counts.",
     "adm.ls.col.on": "Active",

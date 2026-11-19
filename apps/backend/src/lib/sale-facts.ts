@@ -241,3 +241,40 @@ export async function reconcileSaleFacts(container: MedusaContainer, now = new D
     return 0;
   }
 }
+
+/**
+ * Brings the lab surcharges of the sold lens jobs in line with the owner's
+ * rules (owner, 19-nov-2026: «agrega los +30 dólares cuando es +6, resuelve
+ * esto»). A sale projected before the surcharges existed, or before the owner
+ * changed a rule, has the old amount in `sale_fact.lab_surcharge_cents`; this
+ * finds every lens line whose amount differs from what the rules say today and
+ * re-projects its order (idempotent). Runs after the owner saves the rules and
+ * in the 6-hourly reconcile, so the first run after the deploy fixes the past.
+ * Never throws; returns how many orders were re-projected.
+ */
+export async function reconcileLabSurcharges(container: MedusaContainer, opts: { limit?: number } = {}): Promise<number> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  try {
+    const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+    const rows = (await pg("sale_fact as sf")
+      .join("order_line_item as li", "li.id", "sf.line_item_id")
+      .join("prescription as p", "p.id", pg.raw("li.metadata->>'prescription_id'"))
+      .whereNotNull("sf.lens_design")
+      .select("sf.order_id", "sf.lab_surcharge_cents", "p.od_sph", "p.od_cyl", "p.od_add", "p.od_prism", "p.os_sph", "p.os_cyl", "p.os_add", "p.os_prism")) as Array<Record<string, unknown>>;
+    const { lab_surcharges: rules } = await getPosSettings(container);
+    const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+    const stale = new Set<string>();
+    for (const r of rows) {
+      const want = surchargeFor({ od: { sph: num(r.od_sph), cyl: num(r.od_cyl), add: num(r.od_add), prism: num(r.od_prism) }, os: { sph: num(r.os_sph), cyl: num(r.os_cyl), add: num(r.os_add), prism: num(r.os_prism) } }, rules).cents;
+      if (want !== (Number(r.lab_surcharge_cents) || 0)) stale.add(String(r.order_id));
+    }
+    const ids = [...stale].slice(0, opts.limit ?? 2000);
+    let done = 0;
+    for (const id of ids) if ((await projectOrder(container, id)) > 0) done++;
+    if (ids.length) logger.info(`[sale-fact] lab surcharges brought up to date on ${done} orders`);
+    return done;
+  } catch (e) {
+    logger.warn(`[sale-fact] lab surcharge reconcile skipped: ${(e as Error).message}`);
+    return 0;
+  }
+}

@@ -1217,6 +1217,8 @@ export interface CreatedSale {
   number: string;
   /** The day it was recorded as, when backdated (lib/sale-date.ts). */
   sold_on?: string | null;
+  /** Set when the backdated sale was recorded as already delivered. */
+  delivered_at?: string | null;
   order_id: string;
   display_id: number | null;
   total: number;
@@ -1337,14 +1339,16 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
   // none waits for the others. The order's stamp below needs the tray. The
   // approval was already claimed (status "used") before the order was placed;
   // only the link to the sale is written now that the sale exists.
+  const b = input.backdate ?? null;
+  // An old sale recorded as already delivered takes no tray: the glasses are not in the store.
   const [tray] = await Promise.all([
-    withLenses
+    withLenses && !b?.delivered
       ? takeTray(container, store.id, sale.id).then(async (n) => {
           await svc.updatePosSales({ id: sale.id, tray_number: n });
           return n;
         })
       : Promise.resolve(null),
-    writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments }),
+    writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments, paidAt: b && b.moneyOn === "sale" ? b.soldAt : null }),
     approval ? svc.updateDiscountApprovals({ id: approval.id, sale_id: sale.id } as never) : Promise.resolve(),
   ]);
 
@@ -1366,6 +1370,13 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
 
   // Dashboards (sale_fact), after the order carries the sale's id.
   await projectOrder(container, orderId);
+
+  // Recorded as already delivered (lib/sale-date.ts): delivered as of that day, silently.
+  let deliveredAt: string | null = null;
+  if (b?.delivered && p.balance_cents === 0) {
+    const row = await getSale(container, sale.id);
+    if (row) deliveredAt = (await markDelivered(container, row, { actorId: input.sellerId, at: b.soldAt, silent: true })).delivered_at;
+  }
 
   logger.info(`[pos] sale ${number} (order ${orderId}) by ${input.sellerCode ?? input.sellerId ?? "?"} at ${input.terminal.code}: ${quote.total_cents} cents, paid ${p.paid_cents}, balance ${p.balance_cents}`);
 
@@ -1394,6 +1405,7 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     optical_change: change,
     rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true,
     sold_on: input.backdate?.date ?? null,
+    delivered_at: deliveredAt,
     missing: saleMissing(input.missing, { rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true, paid: p.paid_cents / 100, insurance: p.insurance_cents / 100, total: quote.total }),
     ...(framePhotoFailed ? { frame_photo_failed: true } : {}),
   };
@@ -1602,8 +1614,8 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
  * The sale happened on an earlier day (lib/sale-date.ts): its row and its
  * Medusa order carry THAT instant as their date — every report, the receipt and
  * the dashboards (projected right after, from `pos_sale.created_at`) read it
- * from there — and the row keeps when it was really recorded. The payments keep
- * their own time: the money is taken now, into today's open register.
+ * from there — and the row keeps when it was really recorded. The payments
+ * follow `money_on` (see writePayments).
  */
 async function backdateSale(container: MedusaContainer, saleId: string, orderId: string, b: Backdate, actorId: string | null): Promise<void> {
   const pg = pgOf(container);
@@ -1652,11 +1664,27 @@ async function ledgerCashPayments(
 /** Writes payments to the ledger; an insurer's part also opens its claim (HU-113). */
 async function writePayments(
   container: MedusaContainer,
-  args: { saleId: string; orderId: string | null; establishmentId: string; terminalId: string | null; actorId: string | null; kind: "deposit" | "balance"; payments: PosPayment[] }
+  args: {
+    saleId: string;
+    orderId: string | null;
+    establishmentId: string;
+    terminalId: string | null;
+    actorId: string | null;
+    kind: "deposit" | "balance";
+    payments: PosPayment[];
+    /**
+     * A backdated sale whose money was collected THAT day (lib/sale-date.ts,
+     * `money_on: "sale"`): the payments carry that instant and enter no
+     * register — the day's register was counted (or closed) without the system,
+     * and today's would show cash that is not in the drawer.
+     */
+    paidAt?: Date | null;
+  }
 ): Promise<void> {
   const svc = pos(container);
   if (!args.payments.length) return;
-  const cashSession = args.payments.some((p) => p.counts_as_cash) ? await openCashSession(container, { establishmentId: args.establishmentId, terminalId: args.terminalId, actorId: args.actorId }) : null;
+  const offRegister = Boolean(args.paidAt);
+  const cashSession = !offRegister && args.payments.some((p) => p.counts_as_cash) ? await openCashSession(container, { establishmentId: args.establishmentId, terminalId: args.terminalId, actorId: args.actorId }) : null;
   const written = await svc.createPosSalePayments(
     args.payments.map((p) => ({
       sale_id: args.saleId,
@@ -1668,11 +1696,15 @@ async function writePayments(
       received_by: args.actorId,
       fee_cents: p.fee_cents,
       counts_as_cash: p.counts_as_cash,
-      details: p.details as unknown as Record<string, unknown>,
+      details: (offRegister ? { ...p.details, backdated: true } : p.details) as unknown as Record<string, unknown>,
       cash_session_id: p.counts_as_cash ? cashSession : null,
     }))
   );
-  await ledgerCashPayments(container, { sessionId: cashSession, saleId: args.saleId, terminalId: args.terminalId, actorId: args.actorId, rows: written });
+  if (offRegister) {
+    await pgOf(container)("pos_sale_payment").whereIn("id", written.map((w) => w.id)).update({ created_at: args.paidAt });
+  } else {
+    await ledgerCashPayments(container, { sessionId: cashSession, saleId: args.saleId, terminalId: args.terminalId, actorId: args.actorId, rows: written });
+  }
   for (const p of args.payments.filter((x) => x.insurance)) {
     await svc.createInsuranceClaims({
       sale_id: args.saleId,
@@ -1745,6 +1777,14 @@ export interface SaleRow {
   /** Recorded with an earlier date: when it was really recorded and the day chosen (lib/sale-date.ts); null = that day. */
   backdate: BackdateRecord | null;
   /**
+   * When the sale was really written into the system (owner, 19-nov-2026: «se debe
+   * incluir la fecha en la que se registró, así se sabe si fue una actualización o
+   * una venta del día»): the backdate's `recorded_at`, else `created_at`.
+   */
+  recorded_at: string;
+  /** True when it was recorded on a later day than the one it is of. */
+  backdated: boolean;
+  /**
    * The live payment rows. `id` and `details` are what the payment correction
    * (lib/payment-correction.ts) sends back for a row it keeps; `corrected_at`
    * marks a row that was corrected after it was taken.
@@ -1812,6 +1852,8 @@ export function toSale(s: Record<string, unknown>, payments: Array<Record<string
     promotion: s.promotion && typeof s.promotion === "object" ? (s.promotion as AppliedPromotion) : null,
     missing: saleMissing(s.missing, { rx_pending: s.rx_pending === true, paid: Number(s.paid_cents ?? 0) / 100, insurance: Number(s.insurance_cents ?? 0) / 100, total: Number(s.total_cents ?? 0) / 100, status: String(s.status) }),
     backdate: s.backdate && typeof s.backdate === "object" ? (s.backdate as BackdateRecord) : null,
+    recorded_at: s.backdate && typeof s.backdate === "object" && (s.backdate as BackdateRecord).recorded_at ? (s.backdate as BackdateRecord).recorded_at : new Date(s.created_at as string).toISOString(),
+    backdated: Boolean(s.backdate && typeof s.backdate === "object"),
     payments: payments
       .filter((p) => p.sale_id === s.id)
       .map((p) => ({
@@ -2016,7 +2058,7 @@ const DELIVERY_STAGES = ["shipped", "in_transit", "delivered"] as const;
  * logged and the delivery stands — the sale is delivered in our records and
  * the board shows it so from `delivered_at` anyway.
  */
-async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow, actorId: string | null): Promise<boolean> {
+async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow, actorId: string | null, silent = false): Promise<boolean> {
   if (!sale.order_id) return false;
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   try {
@@ -2032,7 +2074,7 @@ async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow
     const steps = DELIVERY_STAGES.slice(first);
     for (const stage of steps) {
       try {
-        await transitionOrderStage(container, sale.order_id, { stage, actorId: actorId ?? "pos", noNotification: stage !== "delivered" });
+        await transitionOrderStage(container, sale.order_id, { stage, actorId: actorId ?? "pos", noNotification: silent || stage !== "delivered" });
       } catch (e) {
         const why = e instanceof StageError ? `${e.reason}: ${e.message}` : (e as Error).message;
         logger.warn(`[pos] sale ${sale.number}: order ${sale.order_id} not moved to '${stage}': ${why}`);
@@ -2053,14 +2095,24 @@ async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow
  * it is, nothing is rewritten. `balance_due` while money is owed — collect it
  * first, or in the same step with `collectAndDeliver` (HU-32).
  */
-export async function markDelivered(container: MedusaContainer, sale: SaleRow, opts: { actorId?: string | null } = {}): Promise<SaleRow> {
+export async function markDelivered(
+  container: MedusaContainer,
+  sale: SaleRow,
+  opts: {
+    actorId?: string | null;
+    /** The instant it was handed over, when earlier than now (a backdated sale recorded as delivered). */
+    at?: Date | null;
+    /** No message to the patient on the way to "delivered" (it happened long ago). */
+    silent?: boolean;
+  } = {}
+): Promise<SaleRow> {
   // Cheap early exits on what the caller saw; the UPDATE below is the real gate.
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
   if (sale.balance > 0) throw new PosError("balance_due", 409, { balance: sale.balance });
   if (sale.delivered_at) return sale;
   const actorId = opts.actorId ?? null;
   // The order first: once delivered_at exists the board refuses every move.
-  const stageMoved = await advanceOrderToDelivered(container, sale, actorId);
+  const stageMoved = await advanceOrderToDelivered(container, sale, actorId, opts.silent === true);
   const plan = deliveryClaimPlan(sale.id);
   const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ delivered_at: unknown }>;
   if (!res.rows[0]) {
@@ -2071,6 +2123,7 @@ export async function markDelivered(container: MedusaContainer, sale: SaleRow, o
     if (now.balance > 0) throw new PosError("balance_due", 409, { balance: now.balance });
     return now; // delivered meanwhile: the other hand-over counts
   }
+  if (opts.at) await pgOf(container)("pos_sale").where({ id: sale.id }).update({ delivered_at: opts.at });
   await releaseTray(container, sale.id);
   await recordAudit(container, {
     actorId,
@@ -2078,7 +2131,7 @@ export async function markDelivered(container: MedusaContainer, sale: SaleRow, o
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
-    after: { delivery: sale.delivery, order_stage_moved: stageMoved },
+    after: { delivery: sale.delivery, order_stage_moved: stageMoved, ...(opts.at ? { delivered_on: opts.at.toISOString(), backdated: true } : {}) },
   });
   return (await getSale(container, sale.id)) as SaleRow;
 }

@@ -179,7 +179,7 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
     const customer = cleanCustomer(body.customer, new Date(), tenant().timezone, { requireEmail: store.kind === ONLINE_KIND, lenient: true });
     if ("reason" in customer) throw new PosError(customer.reason);
     const missing = missingCustomerData(customer.customer, body.delivery === "ship" ? "ship" : "pickup");
-    const backdate = cleanSoldOn(body.sold_on, new Date(), tenant().timezone, scope.role);
+    const backdate = cleanSoldOn(body.sold_on, new Date(), tenant().timezone, scope.role, (await getPosSettings(req.scope)).backdate_limits);
     if (backdate && "reason" in backdate) throw new PosError(backdate.reason, 422, backdate.max ? { max: backdate.max } : {});
     const lines = cleanLines(body.lines);
     if ("reason" in lines) throw new PosError(lines.reason);
@@ -218,6 +218,10 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
     // No deposit is allowed: the whole total stays as balance (the till warned).
     const payments = cleanPayments(body.payments, quote.total_cents, methods, { establishmentId: store.id, allowNone: true });
     if ("reason" in payments) throw new PosError(payments.reason, 422, payments.method ? { method: payments.method } : {});
+    // Recorded as already delivered = the patient took the glasses: only a sale paid in full (lib/sale-date.ts).
+    if (backdate?.delivered && payments.balance_cents > 0) throw new PosError("sold_on_delivered_balance", 422, { balance: payments.balance_cents / 100 });
+    // A backdated prescription without its own date is of the sale's day.
+    if (backdate && rxMeta.new && !rxMeta.new.rx_date) rxMeta.new = { ...rxMeta.new, rx_date: backdate.date, rx_date_approx: false };
 
     const key = typeof body.idempotency_key === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(body.idempotency_key) ? body.idempotency_key : null;
     const sale = await createPosSale(req.scope, {
@@ -246,7 +250,7 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
     });
     res.json({ sale });
     if (backdate && !sale.replayed) {
-      void recordAudit(req.scope, { actorId: scope.user_id, action: "sale.backdate", entity: "pos_sale", entityId: sale.id, establishmentId: store.id, before: { recorded_on: localParts(new Date(), tenant().timezone).date }, after: { number: sale.number, sold_on: backdate.date, time: backdate.time, days: backdate.days, note: backdate.note } }).catch(() => {});
+      void recordAudit(req.scope, { actorId: scope.user_id, action: "sale.backdate", entity: "pos_sale", entityId: sale.id, establishmentId: store.id, before: { recorded_on: localParts(new Date(), tenant().timezone).date }, after: { number: sale.number, sold_on: backdate.date, time: backdate.time, days: backdate.days, note: backdate.note, money_on: backdate.moneyOn, delivered: Boolean(sale.delivered_at) } }).catch(() => {});
     }
     // The sale is recorded and the till answered: emails go out without holding it.
     if (!sale.replayed) {

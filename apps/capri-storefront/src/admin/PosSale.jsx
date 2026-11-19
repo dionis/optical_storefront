@@ -43,7 +43,7 @@ import { useSalePanel } from "./SaleDetailPanel.jsx";
 import MissingData from "./MissingData.jsx";
 import VisualAcuityCard from "./VisualAcuityCard.jsx";
 import { clinicalBody, clinicalProblem, EMPTY_CLINICAL } from "./visualAcuity.js";
-import SaleDateCard, { EMPTY_SOLD_ON, soldOnBody, soldOnProblem, todayIn } from "./SaleDateCard.jsx";
+import SaleDateCard, { EMPTY_SOLD_ON, soldOnBody, soldOnDeliveredProblem, soldOnProblem, todayIn } from "./SaleDateCard.jsx";
 import "./pos.css";
 import "./pos-tablet.css";
 import RxForm from "./PosRx.jsx";
@@ -878,9 +878,9 @@ export default function PosSale({ me }) {
       await dialog({ tone: "warning", title: t("adm.va.title"), message: t("adm.va.badLong"), confirmLabel: t("adm.sdt.fix") });
       return;
     }
-    const dateProblem = soldOnProblem(soldOn, todayIn(ctx?.timezone), ctx?.backdate_max_days ?? 7);
+    const dateProblem = soldOnProblem(soldOn, todayIn(ctx?.timezone), ctx?.backdate_max_days ?? 366) || soldOnDeliveredProblem(soldOn, todayIn(ctx?.timezone), payState.balance);
     if (dateProblem) {
-      await dialog({ tone: "warning", title: t("adm.sdt.title"), message: t(dateProblem, { max: ctx?.backdate_max_days ?? 7, min: "" }), confirmLabel: t("adm.sdt.fix") });
+      await dialog({ tone: "warning", title: t("adm.sdt.title"), message: t(dateProblem, { max: ctx?.backdate_max_days ?? 366, min: "" }), confirmLabel: t("adm.sdt.fix") });
       return;
     }
     for (const n of STEPS.slice(0, -1)) {
@@ -908,7 +908,7 @@ export default function PosSale({ me }) {
       const ok = await confirm({
         tone: "warning",
         title: t("adm.sdt.confirmTitle"),
-        message: t("adm.sdt.confirmMsg", { date: back.date, time: back.time || "12:00" }),
+        message: t(back.money_on === "today" ? "adm.sdt.confirmMsgToday" : "adm.sdt.confirmMsgSale", { date: back.date, time: back.time || "12:00" }) + (back.delivered ? ` ${t("adm.sdt.confirmDelivered")}` : ""),
         confirmLabel: t("adm.sdt.confirmYes"),
         cancelLabel: t("adm.sdt.confirmNo"),
       });
@@ -1400,7 +1400,7 @@ export default function PosSale({ me }) {
               <label><input type="radio" checked={delivery === "ship"} onChange={() => setDelivery("ship")} /> {t("adm.pos.pay.ship")}</label>
             </fieldset>
             {delivery === "ship" && !(customer.address_1 && customer.city && customer.postal_code) && <div className="adm-demo-banner">{t("adm.err.pos.address_required_to_ship")}</div>}
-            <SaleDateCard value={soldOn} onChange={setSoldOn} timeZone={ctx?.timezone} maxDays={ctx?.backdate_max_days ?? 7} disabled={busy} />
+            <SaleDateCard value={soldOn} onChange={setSoldOn} timeZone={ctx?.timezone} maxDays={ctx?.backdate_max_days ?? 366} disabled={busy} balance={payState.balance} />
             <WearingCaptureCard value={wear} onChange={setWear} busy={busy} />
             {/* Avisos al paciente: un interruptor por canal, para no saturar su correo ni su teléfono. */}
             <fieldset className="pos-notify">
@@ -1427,7 +1427,7 @@ export default function PosSale({ me }) {
           <div className="pos-done">
             <Icon name="checkCircle" size={40} />
             <h3>{t("adm.pos.done.title", { n: result.number })}</h3>
-            {result.sold_on && <p className="pos-wear-status"><Icon name="calendar" size={14} /> {t("adm.sdt.doneAs", { date: result.sold_on })}</p>}
+            {result.sold_on && <p className="pos-wear-status"><Icon name="calendar" size={14} /> {t("adm.sdt.doneAs", { date: result.sold_on })}{result.delivered_at ? ` · ${t("adm.sdt.doneDelivered")}` : ""}</p>}
             <dl className="pos-totals">
               <dt>{t("adm.pos.price.total")}</dt><dd>{m(result.total)}</dd>
               <dt>{t("adm.pos.pay.paid")}</dt><dd>{m(result.paid)}</dd>

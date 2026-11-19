@@ -61,7 +61,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       optical_thresholds: settings.optical_thresholds,
       timezone: tenant().timezone,
       // How many days back this person may date a sale (lib/sale-date.ts); the server checks it again.
-      backdate_max_days: maxBackdateDays(scope.role),
+      backdate_max_days: maxBackdateDays(scope.role, settings.backdate_limits),
     });
   });
 }

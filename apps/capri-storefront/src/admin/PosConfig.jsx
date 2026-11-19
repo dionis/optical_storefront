@@ -150,11 +150,13 @@ function Limits() {
   if (!s) return null;
   const save = async () => {
     setBusy(true);
-    try { const r = await savePosSettings({ discount_limits: s.discount_limits, optical_thresholds: s.optical_thresholds }); setS(r.settings); toast({ tone: "success", title: t("adm.pos.cfg.saved") }); }
+    try { const r = await savePosSettings({ discount_limits: s.discount_limits, optical_thresholds: s.optical_thresholds, backdate_limits: s.backdate_limits }); setS(r.settings); toast({ tone: "success", title: t("adm.pos.cfg.saved") }); }
     catch (e) { toast({ tone: "error", title: t(e.message) }); } finally { setBusy(false); }
   };
   const setL = (k) => (e) => setS((x) => ({ ...x, discount_limits: { ...x.discount_limits, [k]: e.target.value } }));
   const setT = (k) => (e) => setS((x) => ({ ...x, optical_thresholds: { ...x.optical_thresholds, [k]: e.target.value } }));
+  // Días hacia atrás que cada rol puede poner a una venta (lib/sale-date.ts); dueño y superadmin, siempre un año.
+  const setB = (k) => (e) => setS((x) => ({ ...x, backdate_limits: { ...(x.backdate_limits || {}), [k]: e.target.value === "" ? "" : Math.round(Number(e.target.value)) } }));
   return (
     <div className="adm-card">
       <h3>{t("adm.pos.cfg.limits")}</h3>
@@ -169,6 +171,13 @@ function Limits() {
       <div className="pos-form">
         {["se", "cyl", "add", "axis", "axisMinCyl"].map((k) => (
           <label key={k}>{t(`adm.pos.cfg.th.${k}`)}<input type="number" min="0" step={k === "axis" ? "1" : "0.25"} value={s.optical_thresholds[k]} onChange={setT(k)} /></label>
+        ))}
+      </div>
+      <h3>{t("adm.sdt.cfg.title")}</h3>
+      <p className="adm-sub">{t("adm.sdt.cfg.sub")}</p>
+      <div className="pos-form">
+        {["seller", "manager", "supervisor"].map((r) => (
+          <label key={r}>{t(`adm.team.role.${r}`)} ({t("adm.sdt.cfg.days")})<input type="number" min="0" max="366" step="1" value={s.backdate_limits?.[r] ?? 366} onChange={setB(r)} /></label>
         ))}
       </div>
       <button type="button" className="btn-sm primary" disabled={busy} onClick={save}><Icon name="save" size={14} /> {t("adm.pos.cfg.save")}</button>

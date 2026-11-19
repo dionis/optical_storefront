@@ -43,6 +43,7 @@ import { WearingPhotoPanel } from "./WearingPhoto.jsx";
 import { StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
 import { DESIGNS, MATERIALS, PHOTO, AR_OPTIONS, L } from "../data/lensPricing.js";
 import "./sale-detail.css";
+import "./sale-date.css";
 
 const fmt = (v, lang) => (v ? new Date(v).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -737,11 +738,15 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                   person who confirms reads WHY the seller asked, not just the category. */}
               {s.void_requested_at && s.status !== "voided" && <div className="sd-banner warn">{t("adm.pos.sales.voidPending", { reason: t(`adm.pos.void.${s.void_reason}`) })}{s.void_note ? <><br /><small>{t("adm.pos.sales.voidNote", { note: s.void_note })}</small></> : null}</div>}
               {/* Registrada con otra fecha (lib/sale-date.ts): el día que cuenta y cuándo se registró de verdad. */}
-              {s.backdate && (
+              {s.backdate ? (
                 <div className="sd-banner info sd-backdate">
-                  <Icon name="calendar" size={14} /> {t("adm.sdt.detail", { date: s.backdate.date, time: s.backdate.time, recorded: new Date(s.backdate.recorded_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) })}
+                  <Icon name="calendar" size={14} /> <b>{t("adm.sdt.kind.update")}</b> · {t("adm.sdt.detail", { date: s.backdate.date, time: s.backdate.time, recorded: new Date(s.backdate.recorded_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) })}
+                  {s.backdate.money_on ? <><br /><small>{t(s.backdate.money_on === "today" ? "adm.sdt.detailMoneyToday" : "adm.sdt.detailMoneySale")}{s.backdate.delivered ? ` · ${t("adm.sdt.detailDelivered")}` : ""}</small></> : null}
                   {s.backdate.note ? <><br /><small>{t("adm.sdt.detailNote", { note: s.backdate.note })}</small></> : null}
                 </div>
+              ) : (
+                // Toda venta dice cuándo se registró: aquí, el mismo momento de la venta.
+                <p className="sdt-recorded"><Icon name="clock" size={12} /> {t("adm.sdt.kind.day")} · {t("adm.sdt.recordedAt", { at: new Date(s.recorded_at || s.created_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) })}</p>
               )}
               {s.internal_note && <div className="sd-banner info"><b>{t("adm.sd.note")}:</b> <span className="sd-note-text">{s.internal_note}</span></div>}
               {s.rx_pending && s.status !== "voided" && (
