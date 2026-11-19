@@ -1,7 +1,10 @@
 // Copia del panel de backend/src/lib/visual-acuity.ts (agudeza visual sc/cc y
 // ojo dominante). Mismos casos en scripts/test-visual-acuity.mjs. El servidor
 // vuelve a validar todo; aquí se normaliza al salir del campo («100-2» → «20/100-2»).
+import { EMPTY_HISTORY, historyBody, historyForm, historyProblem, isEmptyHistory } from "./clinicalHistory.js";
+
 /** The Snellen lines of a standard 20-ft chart (denominators). */
+
 export const SNELLEN_LINES = [10, 12.5, 15, 16, 20, 25, 30, 32, 40, 50, 60, 63, 70, 80, 100, 125, 160, 200, 250, 320, 400, 500, 800];
 export const LOW_VISION = ["CF", "HM", "LP", "NLP"];
 const LOW_LOGMAR = { CF: 1.9, HM: 2.3, LP: 2.7, NLP: 3.0 };
@@ -67,7 +70,7 @@ export function vaLogMar(va) {
 const EMPTY_SET = () => ({ od: "", os: "", ou: "" });
 
 export const isEmptyClinical = (c) =>
-  !c || (!c.dominant_eye && ["sc", "cc"].every((k) => ["od", "os", "ou"].every((e) => !c.va?.[k]?.[e])));
+  !c || (!c.dominant_eye && isEmptyHistory(c.history) && ["sc", "cc"].every((k) => ["od", "os", "ou"].every((e) => !c.va?.[k]?.[e])));
 
 /**
  * Lines gained with the correction, per eye and both (logMAR sc − cc, in
@@ -82,19 +85,21 @@ export function linesGained(c) {
   return { od: g("od"), os: g("os"), ou: g("ou") };
 }
 
-export const EMPTY_CLINICAL = { va: { sc: { od: "", os: "", ou: "" }, cc: { od: "", os: "", ou: "" } }, dominant_eye: null };
+export const EMPTY_CLINICAL = { va: { sc: { od: "", os: "", ou: "" }, cc: { od: "", os: "", ou: "" } }, dominant_eye: null, history: EMPTY_HISTORY };
 /** Las sugerencias del campo (las líneas más usadas y los códigos de baja visión, en español). */
 export const VA_SUGGEST = ["20/15", "20/20", "20/25", "20/30", "20/40", "20/50", "20/60", "20/70", "20/80", "20/100", "20/200", "20/400", "CF", "HM", "LP", "NLP"];
 /** El campo que no es una agudeza («sc.od»…), o null. */
 export function clinicalProblem(c) {
   for (const k of ["sc", "cc"]) for (const e of ["od", "os", "ou"]) if (normalizeVa(c?.va?.[k]?.[e]) === null) return `${k}.${e}`;
-  return null;
+  const h = historyProblem(c?.history);
+  return h ? `history.${h}` : null;
 }
 /** Lo que viaja al servidor: null cuando no se anotó nada. */
 export function clinicalBody(c) {
   if (!c || clinicalProblem(c) || isEmptyClinical(c)) return null;
   const n = (v) => normalizeVa(v) || "";
-  return { va: { sc: { od: n(c.va.sc.od), os: n(c.va.sc.os), ou: n(c.va.sc.ou) }, cc: { od: n(c.va.cc.od), os: n(c.va.cc.os), ou: n(c.va.cc.ou) } }, dominant_eye: c.dominant_eye || null };
+  const history = historyBody(c.history);
+  return { va: { sc: { od: n(c.va.sc.od), os: n(c.va.sc.os), ou: n(c.va.sc.ou) }, cc: { od: n(c.va.cc.od), os: n(c.va.cc.os), ou: n(c.va.cc.ou) } }, dominant_eye: c.dominant_eye || null, ...(history ? { history } : {}) };
 }
 /** Lo guardado → el formulario. */
-export const clinicalForm = (c) => (c ? { va: { sc: { ...EMPTY_CLINICAL.va.sc, ...(c.va?.sc || {}) }, cc: { ...EMPTY_CLINICAL.va.cc, ...(c.va?.cc || {}) } }, dominant_eye: c.dominant_eye || null } : EMPTY_CLINICAL);
+export const clinicalForm = (c) => (c ? { va: { sc: { ...EMPTY_CLINICAL.va.sc, ...(c.va?.sc || {}) }, cc: { ...EMPTY_CLINICAL.va.cc, ...(c.va?.cc || {}) } }, dominant_eye: c.dominant_eye || null, history: historyForm(c.history) } : { ...EMPTY_CLINICAL, history: historyForm(null) });

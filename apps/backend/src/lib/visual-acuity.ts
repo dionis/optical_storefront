@@ -18,9 +18,12 @@
  *
  * Stored on the prescription (`prescription.clinical`, migration
  * CreatePrescription4Clinical): { va: { sc: { od, os, ou }, cc: { od, os, ou } },
- * dominant_eye: "od" | "os" | null }. sc = sin corrección (without glasses),
+ * dominant_eye: "od" | "os" | null, history? } (history: lib/clinical-history.ts).
+ * sc = sin corrección (without glasses),
  * cc = con corrección (with this prescription). Everything is optional.
  */
+
+import { cleanHistory, isEmptyHistory, type ClinicalHistory } from "./clinical-history";
 
 /** The Snellen lines of a standard 20-ft chart (denominators). */
 export const SNELLEN_LINES = [10, 12.5, 15, 16, 20, 25, 30, 32, 40, 50, 60, 63, 70, 80, 100, 125, 160, 200, 250, 320, 400, 500, 800] as const;
@@ -91,19 +94,21 @@ export interface VaSet { od: string; os: string; ou: string }
 export interface Clinical {
   va: { sc: VaSet; cc: VaSet };
   dominant_eye: Eye | null;
+  /** Case history and the examiner's notes (lib/clinical-history.ts); absent/null = none. */
+  history?: ClinicalHistory | null;
 }
 
 const EMPTY_SET = (): VaSet => ({ od: "", os: "", ou: "" });
 
 export const isEmptyClinical = (c: Clinical | null | undefined): boolean =>
-  !c || (!c.dominant_eye && ["sc", "cc"].every((k) => ["od", "os", "ou"].every((e) => !c.va[k as "sc" | "cc"][e as keyof VaSet])));
+  !c || (!c.dominant_eye && isEmptyHistory(c.history) && ["sc", "cc"].every((k) => ["od", "os", "ou"].every((e) => !c.va[k as "sc" | "cc"][e as keyof VaSet])));
 
 /**
  * The till's `{ va: { sc: {od, os, ou}, cc: {…} }, dominant_eye }` → the
  * clean value (null when nothing was given), or the field that is wrong
  * (`va_invalid` with `field`: "sc.od", …; `dominant_eye_invalid`).
  */
-export function cleanClinical(input: unknown): Clinical | null | { reason: "va_invalid" | "dominant_eye_invalid"; field?: string } {
+export function cleanClinical(input: unknown): Clinical | null | { reason: "va_invalid" | "dominant_eye_invalid" | "history_invalid"; field?: string } {
   if (input === null || input === undefined || input === "") return null;
   if (typeof input !== "object") return { reason: "va_invalid" };
   const o = input as Record<string, unknown>;
@@ -122,6 +127,9 @@ export function cleanClinical(input: unknown): Clinical | null | { reason: "va_i
     if (d !== "od" && d !== "os") return { reason: "dominant_eye_invalid" };
     out.dominant_eye = d;
   }
+  const h = cleanHistory(o.history);
+  if (h && "reason" in h) return h;
+  if (h) out.history = h;
   return isEmptyClinical(out) ? null : out;
 }
 

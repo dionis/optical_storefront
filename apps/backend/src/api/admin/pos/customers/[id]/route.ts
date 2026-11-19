@@ -3,6 +3,7 @@ import { getCustomer, lastPrescription, listSales, opticalHistory, PosError } fr
 import { posHandler, posScope } from "../../../../../lib/pos-route";
 import { getPosSettings } from "../../../../../lib/pos-settings";
 import { purchaseSummary } from "../../../../../lib/patient-purchases";
+import { clinicalSummaryOf } from "../../../../../lib/clinical-history";
 
 /**
  * GET /admin/pos/customers/:id — a customer at the counter:
@@ -32,6 +33,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       last_prescription: last,
       purchase_summary: purchases,
       history,
+      // The patient's clinical history across their prescriptions (lib/clinical-history.ts): conditions with
+      // the first and last visit, family history, latest medications/allergies and every doctor's note.
+      clinical_summary: clinicalSummaryOf(history),
       // Purchase history across stores: what, where, when, how much — no payments detail.
       sales: sales.map((s) => ({
         id: s.id,

@@ -438,7 +438,8 @@ export async function buildSaleDocument(
               // Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts): the panel shows them with
               // the prescription; the printed ticket carries only the dominant eye (the lab needs it for
               // progressives and monovision, not the acuity).
-              clinical: r.clinical && typeof r.clinical === "object" ? r.clinical : null,
+              // The case history and the doctor's notes NEVER leave with the lab document (minimum necessary).
+              clinical: r.clinical && typeof r.clinical === "object" ? { va: (r.clinical as { va?: unknown }).va ?? null, dominant_eye: (r.clinical as { dominant_eye?: unknown }).dominant_eye ?? null } : null,
             }
           : null,
       };
