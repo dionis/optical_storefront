@@ -31,9 +31,15 @@ export async function fetchPricingOverview(store = "all") {
   }
 }
 
-/** La regla de TODAS las monturas (o estuches). mode "none" la quita. */
-export function savePricingRule({ scope = "frame", mode, value, store }) {
-  return post("/admin/pricing/frames/rule", { scope, mode, value: mode === "none" ? null : Number(value), store });
+/**
+ * La regla de TODAS las monturas (o estuches). mode "none" la quita.
+ * `addend` solo con "cost_multiple": dólares que se suman tras el múltiplo
+ * (costo × value + addend); vacío = 0. Se manda tal cual: el servidor valida.
+ */
+export function savePricingRule({ scope = "frame", mode, value, addend, store }) {
+  const body = { scope, mode, value: mode === "none" ? null : Number(value), store };
+  if (mode === "cost_multiple") body.addend = addend === undefined || addend === null || String(addend).trim() === "" ? 0 : Number(addend);
+  return post("/admin/pricing/frames/rule", body);
 }
 
 /** Precio propio de un modelo; price null lo devuelve a la regla. */

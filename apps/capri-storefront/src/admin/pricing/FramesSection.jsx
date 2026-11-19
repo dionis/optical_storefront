@@ -49,16 +49,22 @@ import "./pricing-across.css";
 export function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
   const [mode, setMode] = useState(rule ? rule.mode : "none");
   const [value, setValue] = useState(rule ? String(rule.value) : "");
+  // «N × costo + $ fijo»: el fijo solo existe en el modo múltiplo del costo.
+  const addendOf = (r) => (r && r.mode === "cost_multiple" && Number(r.addend) > 0 ? Number(r.addend).toFixed(2) : "");
+  const [addend, setAddend] = useState(addendOf(rule));
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     setMode(rule ? rule.mode : "none");
     setValue(rule ? String(rule.value) : "");
-  }, [rule?.mode, rule?.value, scope, store]); // eslint-disable-line react-hooks/exhaustive-deps
+    setAddend(addendOf(rule));
+  }, [rule?.mode, rule?.value, rule?.addend, scope, store]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const now = !rule
     ? t("adm.price.frames.ruleNone")
     : rule.mode === "cost_multiple"
-      ? t("adm.price.frames.ruleCost", { v: rule.value, n: rule.applied ?? 0 })
+      ? Number(rule.addend) > 0
+        ? t("adm.price.frames.ruleCostPlus", { v: rule.value, a: money(Number(rule.addend), "usd", lang), n: rule.applied ?? 0 })
+        : t("adm.price.frames.ruleCost", { v: rule.value, n: rule.applied ?? 0 })
       : rule.mode === "percent"
         ? t("adm.price.frames.rulePercent", { v: rule.value > 0 ? `+${rule.value}` : rule.value })
         : t("adm.price.frames.ruleDelta", { v: money(rule.value, "usd", lang) });
@@ -71,7 +77,7 @@ export function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
     if (busy) return;
     setBusy(true);
     try {
-      const data = await savePricingRule({ scope, mode, value, store });
+      const data = await savePricingRule({ scope, mode, value, addend, store });
       onSaved(data);
     } catch (err) {
       onError(err.message);
@@ -108,6 +114,24 @@ export function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
             onChange={(e) => setValue(e.target.value)}
           />
           <span className="pp-unit">{unit}</span>
+        </>
+      )}
+      {mode === "cost_multiple" && (
+        <>
+          <span className="pp-unit" aria-hidden="true">+</span>
+          <input
+            className="pp-input pp-num wide"
+            type="number"
+            step="0.01"
+            min="0"
+            max="500"
+            placeholder="0.00"
+            aria-label={t("adm.price.frames.addend")}
+            title={t("adm.price.frames.addendHint")}
+            value={addend}
+            onChange={(e) => setAddend(e.target.value)}
+          />
+          <span className="pp-unit">USD</span>
         </>
       )}
       <button className="btn-xs primary" disabled={busy}>{busy ? t("adm.price.saving") : t("adm.price.save")}</button>
