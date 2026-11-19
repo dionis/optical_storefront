@@ -163,3 +163,5 @@ change.patch
 
 # Read-only DB comparison (scripts/db-compare): reports stay local
 .db-compare/
+
+opencode.json
