@@ -53,5 +53,6 @@ import saleDate from "./sale-date.js";
 import visualAcuity from "./visual-acuity.js";
 import labSurcharges from "./lab-surcharges.js";
 import repeatPatients from "./repeat-patients.js";
+import clinicalHistory from "./clinical-history.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant, saleAdmin, password, wearing, frameModes, webChannel, operationLog, storeHoursPromos, posMissing, pnlBreakdown, financeReport, saleDate, visualAcuity, labSurcharges, repeatPatients];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant, saleAdmin, password, wearing, frameModes, webChannel, operationLog, storeHoursPromos, posMissing, pnlBreakdown, financeReport, saleDate, visualAcuity, labSurcharges, repeatPatients, clinicalHistory];
