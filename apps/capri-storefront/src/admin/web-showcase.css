@@ -1,0 +1,26 @@
+/* Tiendas → «Vitrina de la tienda web» (WebShowcaseCard.jsx). Tokens --adm-* de admin.css. */
+.wsc-sub { margin: 0 0 10px; max-width: 92ch; }
+.wsc-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.wsc-mode { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--adm-line); border-radius: 10px; cursor: pointer; min-height: 44px; }
+.wsc-mode.on { border-color: var(--adm-accent); box-shadow: 0 0 0 1px var(--adm-accent) inset; }
+.wsc-mode input { margin-top: 3px; }
+.wsc-mode span { display: flex; flex-direction: column; gap: 2px; }
+.wsc-mode small { color: var(--adm-muted); line-height: 1.35; }
+.wsc-pick-title { margin: 12px 0 6px; }
+.wsc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wsc-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; min-height: 36px; border: 1px solid var(--adm-line); border-radius: 999px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.wsc-chip small { color: var(--adm-muted); font-size: 11px; }
+.wsc-chip.on { border-color: var(--adm-accent); background: color-mix(in srgb, var(--adm-accent) 12%, transparent); font-weight: 600; }
+.wsc-order { margin: 10px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; max-width: 360px; }
+.wsc-order li { display: flex; align-items: center; gap: 6px; }
+.wsc-order li span { flex: 1; }
+.wsc-warn { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; color: var(--adm-red, #c62828); }
+.wsc-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--adm-line) 35%, transparent); }
+.wsc-preview-title { font-weight: 600; margin-right: 4px; }
+.wsc-preview-list { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 1 260px; }
+.wsc-actions { margin-top: 12px; align-items: center; }
+.wsc-msg { font-size: 13px; }
+.wsc-msg.ok { color: var(--adm-green, #2e7d32); }
+.wsc-msg.bad { color: var(--adm-red, #c62828); }
+.wsc-note { display: flex; gap: 6px; align-items: flex-start; margin: 10px 0 0; max-width: 92ch; }
+html.adm-touch .wsc-chip { min-height: 44px; }
