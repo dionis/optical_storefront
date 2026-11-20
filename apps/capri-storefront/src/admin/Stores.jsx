@@ -12,6 +12,7 @@ import { formatAddressLine } from "../data/addressAutocomplete.js";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import WebStoreCard from "./WebStoreCard.jsx";
+import WebShowcaseCard from "./WebShowcaseCard.jsx";
 import HelpTip from "./HelpTip.jsx";
 import StorePricing from "./StorePricing.jsx";
 import StoreAssortment from "./StoreAssortment.jsx";
@@ -158,6 +159,8 @@ export default function Stores({ go = null }) {
 
       {/* La tienda online: la cuarta tienda del negocio, sin caja ni dirección. */}
       <WebStoreCard go={go} demo={demo} stores={stores} />
+      {/* Qué marcas enseña primero la web como ejemplos (solo dueño y superadmin). */}
+      <WebShowcaseCard demo={demo} />
 
       <div className="adm-card">
         <h3><Icon name="store" size={16} />{t("adm.stores.listTitle", { n: stores.length })}</h3>
