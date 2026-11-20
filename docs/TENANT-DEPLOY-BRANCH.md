@@ -36,7 +36,22 @@ Si el merge choca en `apps/capri-storefront/vercel.json`, se toma la versión de
 
 Después de cada merge, cada óptica se actualiza al redesplegar: **Deploy** en su app de Coolify (o webhook automático) y Vercel recompila solo. Las migraciones de base de datos corren al arrancar el backend.
 
-**Nunca** al revés: nada de esta rama vuelve a `develop_optical_storepos`, `develop` ni `main` (las fichas de clientes no son de esas ramas). Una corrección de código se hace en `develop_optical_storepos` y llega aquí con el merge.
+Nada de esta rama vuelve a `develop_optical_storepos`: una corrección de código se hace allí y llega aquí con el merge.
+
+**Hacia `develop` sí (decisión del dueño, 20-nov-2026)**: `tenant-deploy` es la versión con soporte multi-óptica y es la que debe quedar en `develop` (www.rubilens.com). El flujo es de un solo sentido y siempre por pull request con los checks en verde:
+
+```
+develop_optical_storepos  ──merge──▶  tenant-deploy  ──PR──▶  develop
+```
+
+Lo que hace seguro llevarla a `develop`:
+
+- **La web de RUBI LENS sigue en el backend del panel**: el proyecto de Vercel de www.rubilens.com lleva `BACKEND_TARGET_OVERRIDE=staging` (Production **y** Preview). `backend-target.mjs` lo respeta para RUBI LENS y El Rancho y lo **rechaza** para una óptica nueva, que siempre usa su `/medusa-t-<slug>`. La variable nunca va en el código ni en una ficha (`check-vercel-config.mjs` lo impide).
+- **La marca de `develop` sigue siendo RUBI LENS**: sin `TENANT_FILE`, `develop` y `main` compilan con `tenants/rubi-lens/tenant.json`.
+- Las fichas de ópticas nuevas y sus reescrituras `/medusa-t-*` viajan también a `develop`: son configuración que la web de RUBI LENS no usa.
+- El backend de `develop` no se despliega (Coolify despliega `main` y `develop_optical_storepos`), así que el código de backend que llega a `develop` no cambia nada en vivo.
+
+Antes de fusionar el PR a `develop`, abrir su vista previa de Vercel y comprobar `/medusa-staging/version` (el commit del backend del panel), el catálogo con los precios de la tienda online, el carrito hasta Stripe (sin pagar) y que la marca y el pie son los de RUBI LENS.
 
 ## Alta de una óptica, en resumen
 
