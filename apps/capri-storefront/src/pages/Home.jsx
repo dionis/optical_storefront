@@ -5,6 +5,7 @@ import { BRANDS } from "../data/brands.js";
 import { brandHeroImage, brandInfo } from "../data/brandMedia.js";
 import { LOOKBOOK_BY_ID, lookbookTag } from "../data/lookbook.js";
 import { useCatalog } from "../data/catalogStore.js";
+import { useShowcaseOrder } from "../data/useShowcase.js";
 import ProductCard from "../components/ProductCard.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { setSeo } from "../lib/seo.js";
@@ -126,7 +127,10 @@ export default function Home() {
     });
   }, [lang]);
   const { products: PRODUCTS, loading } = useCatalog();
-  const featured = PRODUCTS.slice(0, 12);
+  // «Los más vendidos» = los 12 primeros en el orden de la vitrina que eligió
+  // el dueño (data/showcase.js: catálogo, marcas elegidas o mezcla al azar).
+  const showcased = useShowcaseOrder(PRODUCTS);
+  const featured = showcased.slice(0, 12);
 
   // Carrusel del hero (avance automático + control manual)
   const [slide, setSlide] = useState(0);

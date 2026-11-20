@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { DISCOUNTS_ENABLED } from "../config/features.js";
 import { useParams, useSearchParams, useLocation } from "react-router-dom";
 import { useCatalog } from "../data/catalogStore.js";
+import { useShowcaseOrder } from "../data/useShowcase.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
 import { FILTER_GROUPS, productMatches, BRAND_FILTER_KEY } from "../data/filters.js";
 import { brandHeroImage, brandInfo } from "../data/brandMedia.js";
@@ -28,6 +29,7 @@ export default function Catalog() {
     });
   }, [lang]);
   const { products: PRODUCTS, cases: CASES, loading } = useCatalog();
+  const showcased = useShowcaseOrder(PRODUCTS);
   // `/estuches` (ruta propia, está en el sitemap) es el listado de estuches:
   // equivale a `/marca/case`. Sin esto mostraba TODAS las monturas.
   const { pathname } = useLocation();
@@ -105,7 +107,11 @@ export default function Catalog() {
   };
 
   const results = useMemo(() => {
-    let list = PRODUCTS.filter((p) => {
+    // «Relevancia» = el orden de la vitrina del dueño (data/showcase.js). En la
+    // página de UNA marca se queda el orden del catálogo: la vitrina ordena
+    // marcas entre sí, no los modelos de una marca.
+    const base = brand ? PRODUCTS : showcased;
+    let list = base.filter((p) => {
       if (brand && p.brand_slug !== brand.slug) return false;
       if (q && !(`${p.name} ${p.brand}`.toLowerCase().includes(q))) return false;
       if (!productMatches(p, selected)) return false;
@@ -130,7 +136,7 @@ export default function Catalog() {
       });
     }
     return list;
-  }, [PRODUCTS, brand, q, selected, sort, ratings, ofertaParam]);
+  }, [PRODUCTS, showcased, brand, q, selected, sort, ratings, ofertaParam]);
 
   // Render INCREMENTAL de la rejilla: primero 48 tarjetas y, al acercarse al
   // final, 48 más (IntersectionObserver). Con 549 montadas de golpe el primer
