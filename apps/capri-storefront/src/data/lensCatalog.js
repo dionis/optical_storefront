@@ -21,8 +21,22 @@ import { DESIGNS, MATERIALS, BASE, FINISHES, PHOTO, AR, TREAT } from "./lensPric
 import { adminGet, queryKey } from "../admin/adminApi.js";
 import { useCached } from "../admin/adminCache.js";
 
-/** The bundled 2026 list — first paint, offline, and fallback. */
-export const STATIC_CATALOG = { DESIGNS, MATERIALS, BASE, FINISHES, PHOTO, AR, TREAT };
+/**
+ * The bundled 2026 list — first paint, offline, and fallback.
+ *
+ * `BASE_MATERIALS` mirrors `BASE`: the list of material codes with a price for
+ * each design. In the bundled list every design carries every material, so
+ * this is `Object.keys(BASE[d])`, computed once to avoid a runtime cost per
+ * read. The live payload rebuilds it from the active base cells returned by
+ * /store/lens-config/matrix (which already drops cells the admin switched off,
+ * UpgradeLensCellActive11 + loadLensMatrix).
+ */
+const STATIC_BASE_MATERIALS = Object.fromEntries(
+  Object.entries(BASE).map(([d, cells]) => [d, Object.keys(cells)])
+);
+export const STATIC_CATALOG = {
+  DESIGNS, MATERIALS, BASE, BASE_MATERIALS: STATIC_BASE_MATERIALS, FINISHES, PHOTO, AR, TREAT,
+};
 
 /** The finish a design is sold with unless the seller picks the other one (same rule as the backend's lib/lens-finish.ts). */
 export const defaultFinishFor = (category) => (category === "prog" ? "digital" : "stock");
@@ -51,9 +65,20 @@ export function adaptLensMatrix(payload) {
   // FINISHES carries both cells for the POS, null where the owner has not
   // priced that finish. A row without `finish` (backend before the finish
   // migration) is the design's only cell.
+  //
+  // activeMaterials collects every material code that appears in at least one
+  // ACTIVE base cell (the backend already drops `is_active=false` cells from
+  // /matrix via loadLensMatrix, UpgradeLensCellActive11). Materials with no
+  // surviving cell — the owner switched off every (design, material) row for
+  // that index — must NOT appear in the wizard, otherwise the storefront would
+  // keep offering "Índice 1.56 — $0" after the panel admin turned it off. The
+  // same source of truth is used for the per-design `BASE_MATERIALS` map, so a
+  // material is shown for a design only when there is a real price for it.
   const categoryOf = Object.fromEntries(designs.map((d) => [d.code, d.category]));
   const base = {};
   const finishes = {};
+  const activeMaterials = new Set();
+  const materialsByDesign = {};
   for (const b of basePrices) {
     const fallback = defaultFinishFor(categoryOf[b.design_code]);
     const finish = b.finish === "stock" || b.finish === "digital" ? b.finish : fallback;
@@ -64,7 +89,14 @@ export function adaptLensMatrix(payload) {
       if (!base[b.design_code]) base[b.design_code] = {};
       base[b.design_code][b.material_code] = dollars(b.price_cents) ?? 0;
     }
+    activeMaterials.add(b.material_code);
+    if (!materialsByDesign[b.design_code]) materialsByDesign[b.design_code] = new Set();
+    materialsByDesign[b.design_code].add(b.material_code);
   }
+  // Exposed as a plain object of arrays (JSON-friendly) so the wizard can
+  // intersect it with its MATERIALS list without touching Sets.
+  const BASE_MATERIALS = {};
+  for (const [d, set] of Object.entries(materialsByDesign)) BASE_MATERIALS[d] = Array.from(set);
 
   const ar = { sv: [], bifprog: [] };
   for (const a of ars) {
@@ -99,13 +131,23 @@ export function adaptLensMatrix(payload) {
       add: !!d.requires_add,
       label: { es: d.label_es, en: d.label_en },
     })),
-    MATERIALS: materials.map((m) => ({
-      id: m.code,
-      maxAbs: Number(m.max_abs),
-      label: { es: m.label_es, en: m.label_en },
-      desc: { es: m.desc_es || "", en: m.desc_en || "" },
-    })),
+    // Only materials still backed by an active base cell. A material whose every
+    // (design × material) cell was switched off in the admin stops appearing in
+    // the wizard, so the storefront matches the panel admin exactly.
+    MATERIALS: materials
+      .filter((m) => activeMaterials.has(m.code))
+      .map((m) => ({
+        id: m.code,
+        maxAbs: Number(m.max_abs),
+        label: { es: m.label_es, en: m.label_en },
+        desc: { es: m.desc_es || "", en: m.desc_en || "" },
+      })),
     BASE: base,
+    // Per-design list of material codes with at least one active cell. The
+    // wizard uses this to show, for the chosen use, only materials the owner
+    // really sells at that use — a material active elsewhere but disabled for
+    // this design is left out of its choices.
+    BASE_MATERIALS,
     FINISHES: finishes,
     PHOTO: photos.map((p) => ({
       id: p.code,
