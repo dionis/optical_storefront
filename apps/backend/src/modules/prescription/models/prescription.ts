@@ -51,4 +51,6 @@ export const PrescriptionRecord = model.define("prescription", {
   worn_source: model.text().nullable(),
   /** rx_date is an estimate ("about 3 years ago"). */
   rx_date_approx: model.boolean().default(false),
+  /** Visual acuity sc/cc per eye and both, and the dominant eye (lib/visual-acuity.ts); null = not recorded. */
+  clinical: model.json().nullable(),
 });

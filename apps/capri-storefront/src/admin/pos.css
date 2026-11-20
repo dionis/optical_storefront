@@ -71,3 +71,23 @@
 
 /* Pasos ya visitados a los que se puede volver o saltar; «todo» = visitado pero ahora incompleto. */
 .pos-steps li.todo .pos-step-n { background: var(--adm-amber-soft); border-color: var(--adm-amber, #d98a0b); color: var(--adm-amber-dark, #a1640a); }
+
+/* Venta con datos pendientes (PosSale.jsx avisos, MissingData.jsx). */
+.pos-warn-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.pos-warn-list li { border-left: 3px solid var(--adm-amber, #e0a100); background: var(--adm-amber-soft, #fff4d6); border-radius: 6px; padding: 7px 10px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.pos-warn-list li span { color: var(--adm-muted, #5b6474); font-size: 12.5px; line-height: 1.35; }
+.pos-warn-how { margin: 6px 0 0; font-size: 13px; text-align: left; }
+.pos-missing { border: 1px solid var(--adm-amber, #e0a100); background: var(--adm-amber-soft, #fff4d6); border-radius: var(--adm-radius-sm, 10px); padding: 10px 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 8px; text-align: left; width: 100%; box-sizing: border-box; }
+.pos-missing-title { display: flex; align-items: center; gap: 6px; color: var(--adm-amber-dark, #8a5a00); }
+.pos-missing ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pos-missing li { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 13px; }
+.pos-missing li span { color: var(--adm-muted, #5b6474); }
+.pos-missing .btn-sm { align-self: flex-start; }
+.pos-missing.compact { margin: 6px 0; padding: 8px 10px; }
+.pos-flag-missing { color: var(--adm-amber-dark, #8a5a00); font-weight: 700; }
+
+/* Paciente que repite (PosSale.jsx → pos-picked; backend lib/patient-purchases.ts). */
+.pos-picked { flex-wrap: wrap; }
+.pos-repeat { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--adm-surface); color: var(--adm-ink); border: 1px solid var(--adm-line); }
+.pos-repeat.tier-returning { border-color: var(--adm-accent, var(--adm-blue)); }
+.pos-repeat.tier-vip { border-color: var(--adm-gold, #B8862B); background: var(--adm-gold-soft, rgba(184, 134, 43, .12)); }

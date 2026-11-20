@@ -27,7 +27,10 @@ import DataTable, { tableSpecFrom } from "./DataTable.jsx";
 import { useColumns } from "./useColumns.js";
 import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
+import PnlBreakdown from "./PnlBreakdown.jsx";
+import CostNameInput from "./CostNameInput.jsx";
 import "./screens.css";
+import "./pnl-breakdown.css";
 
 const CATEGORIES = ["rent", "maintenance", "utilities", "salaries", "insurance", "licenses", "subscriptions", "equipment", "supplies", "shipping", "repairs", "remakes", "accounting", "other"];
 // Every frequency the server accepts (lib/store-costs.ts, «Reglas y comisiones»): a weekly or
@@ -44,7 +47,7 @@ const ROWS = [["net_sales", false], ["cogs", true], ["payment_fees", true], ["co
 /** Lo que suma «Costos» en la tira de indicadores. */
 const COST_KEYS = ["cogs", "payment_fees", "commissions", "variable_manual", "fixed", "shared"];
 
-export default function StoreCosts({ me }) {
+export default function StoreCosts({ me, go = null }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const [ctx, setCtx] = useState(null);
@@ -55,6 +58,12 @@ export default function StoreCosts({ me }) {
   const [items, setItems] = useState([]);
   const [state, setState] = useState("loading");
   const [form, setForm] = useState(null); // EMPTY o el costo en edición (con id)
+  // Todos los costos (de todas las tiendas que se pueden ver): el autocompletado y «también en otras tiendas».
+  const [allItems, setAllItems] = useState([]);
+  // Tienda(s) a las que se aplica el costo nuevo o el cambio: id → true.
+  const [alsoIn, setAlsoIn] = useState({});
+  // Tarjeta abierta en el desglose (null = cerrado).
+  const [brk, setBrk] = useState(null);
   const canManage = !me || me.is_admin !== false || (me.privileges || []).includes("costs.manage");
   const isAdmin = !me || me.is_admin !== false;
   const m = (v) => (v === null || v === undefined ? "—" : money(v, "usd", lang));
@@ -79,10 +88,12 @@ export default function StoreCosts({ me }) {
     Promise.all([
       adminFetch(`/admin/store-costs/pnl?month=${month}`).catch(() => null),
       adminFetch(`/admin/store-costs${storeOnly ? `?store=${encodeURIComponent(storeOnly)}` : ""}`).catch(() => null),
-    ]).then(([p, list]) => {
+      storeOnly ? adminFetch("/admin/store-costs").catch(() => null) : Promise.resolve(null),
+    ]).then(([p, list, every]) => {
       if (cancelled || seq !== loadSeq.current) return;
       setPnl(p);
       setItems(list?.items || []);
+      setAllItems((every || list)?.items || []);
       setState(p || list ? "ready" : "error");
     });
     return () => { cancelled = true; };
@@ -104,13 +115,34 @@ export default function StoreCosts({ me }) {
   const commSorted = useSortable(pnl?.sellers || [], { id: "costs-commissions", defaultKey: "commission", defaultDir: "desc" });
   const sth = (sorted, col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
 
+  // ── Guardar: una tienda, varias (una copia por tienda, cada una editable por su lado) o compartido;
+  // al editar, el mismo cambio puede aplicarse a ese costo en otras tiendas (o agregarlo a las que no lo tienen).
+  const norm = (v) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const siblingsOf = (f) => (f?.description ? allItems.filter((it) => it.id !== f.id && it.establishment_id && norm(it.description) === norm(f.description)) : []);
+  const COPY_FIELDS = ["kind", "category", "tax_category", "description", "amount", "frequency", "amortize_months", "per_sale", "starts_on", "ends_on", "vendor", "notes"];
+  const copyOf = (f) => Object.fromEntries(COPY_FIELDS.filter((k) => f[k] !== undefined).map((k) => [k, f[k]]));
   const save = async (e) => {
     e.preventDefault();
-    const body = { ...form, establishment_id: form.establishment_id || null };
+    const targets = Object.keys(alsoIn).filter((id) => alsoIn[id]);
+    const multi = !form.id && form.establishment_id === "__multi";
+    if (multi && !targets.length) { toast({ tone: "warning", title: t("adm.cst.pickStores") }); return; }
+    const sibs = siblingsOf(form);
     try {
-      await adminFetch(form.id ? `/admin/store-costs/${form.id}` : "/admin/store-costs", { method: "POST", body });
-      toast({ tone: "success", title: t("adm.costs2.saved") });
+      if (multi) {
+        for (const id of targets) await adminFetch("/admin/store-costs", { method: "POST", body: { ...form, establishment_id: id, allocation: null } });
+      } else {
+        await adminFetch(form.id ? `/admin/store-costs/${form.id}` : "/admin/store-costs", { method: "POST", body: { ...form, establishment_id: form.establishment_id || null } });
+        // También en otras tiendas: la que ya lo tiene se actualiza con estos datos; la que no, lo recibe.
+        for (const id of targets) {
+          const sib = sibs.find((x) => x.establishment_id === id);
+          const body = { ...copyOf(form), attachment: null, allocation: null, establishment_id: id };
+          if (sib) await adminFetch(`/admin/store-costs/${sib.id}`, { method: "POST", body: { ...sib, ...body, amount: String(body.amount) } });
+          else await adminFetch("/admin/store-costs", { method: "POST", body });
+        }
+      }
+      toast({ tone: "success", title: targets.length > (multi ? 1 : 0) ? t("adm.cst.savedMany", { n: multi ? targets.length : targets.length + 1 }) : t("adm.costs2.saved") });
       setForm(null);
+      setAlsoIn({});
       load();
     } catch (err) { toast({ tone: "error", title: t(errKey(err)) }); }
   };
@@ -119,7 +151,7 @@ export default function StoreCosts({ me }) {
     try { await adminFetch(`/admin/store-costs/${it.id}`, { method: "DELETE" }); load(); } catch (err) { toast({ tone: "error", title: t(errKey(err)) }); }
   };
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const edit = (it) => setForm({ ...EMPTY, ...it, establishment_id: it.establishment_id || "", amount: String(it.amount), amortize_months: it.amortize_months ?? "", ends_on: it.ends_on || "", allocation: it.allocation || { method: "sales", shares: {} }, attachment: null });
+  const edit = (it) => { setAlsoIn({}); setForm({ ...EMPTY, ...it, establishment_id: it.establishment_id || "", amount: String(it.amount), amortize_months: it.amortize_months ?? "", ends_on: it.ends_on || "", allocation: it.allocation || { method: "sales", shares: {} }, attachment: null }); };
 
   // ── Costos registrados: una sola tabla con orden y selector de columnas ──
   const cols = useMemo(() => [
@@ -216,13 +248,27 @@ export default function StoreCosts({ me }) {
       {state === "error" && <div className="adm-login-err">{t("adm.err.pos.generic")}</div>}
 
       {focus && (
+        // Cada tarjeta abre su desglose exacto (PnlBreakdown.jsx): de qué está hecha y de dónde sale.
         <div className="sc-kpis">
-          <div className="sc-kpi"><small>{t("adm.costs2.row.net_sales")}</small><b>{m(focus.net_sales)}</b></div>
-          <div className="sc-kpi"><small>{t("adm.scr.sc.costs")}</small><b>{m(costsOf(focus))}</b></div>
-          <div className="sc-kpi hero"><small>{t("adm.costs2.row.result")}</small><b className={Number(focus.result) < 0 ? "neg" : "good"}>{m(focus.result)}</b></div>
-          <div className="sc-kpi"><small>{t("adm.costs2.row.margin")}</small><b>{focus.contribution_pct == null ? "—" : `${focus.contribution_pct} %`}</b></div>
-          <div className="sc-kpi"><small>{t("adm.costs2.row.breakEven")}</small><b>{m(focus.break_even)}</b><span>{t("adm.costs2.breakEvenHint")}</span></div>
+          {[
+            { tab: "sales", label: t("adm.costs2.row.net_sales"), value: m(focus.net_sales) },
+            { tab: "costs", label: t("adm.scr.sc.costs"), value: m(costsOf(focus)) },
+            { tab: "result", label: t("adm.costs2.row.result"), value: m(focus.result), cls: Number(focus.result) < 0 ? "neg" : "good", hero: true },
+            { tab: "margin", label: t("adm.costs2.row.margin"), value: focus.contribution_pct == null ? "—" : `${focus.contribution_pct} %` },
+            { tab: "breakeven", label: t("adm.costs2.row.breakEven"), value: m(focus.break_even), hint: t("adm.costs2.breakEvenHint") },
+          ].map((k) => (
+            <button key={k.tab} type="button" className={`sc-kpi clickable ${k.hero ? "hero" : ""}`} onClick={() => setBrk(k.tab)} title={t("adm.brk.open")} aria-haspopup="dialog">
+              <small>{k.label}</small>
+              <b className={k.cls || ""}>{k.value}</b>
+              {k.hint && <span>{k.hint}</span>}
+              <em className="sc-kpi-more"><Icon name="search" size={11} /> {t("adm.brk.open")}</em>
+            </button>
+          ))}
         </div>
+      )}
+      {brk && (
+        <PnlBreakdown month={month} storeId={storeOnly || null} scopeLabel={scopeLabel} tab={brk} paymentMethods={ctx?.payment_methods || []}
+          onClose={() => setBrk(null)} onGoSales={go ? () => { setBrk(null); go("possales"); } : null} />
       )}
 
       {pnl && (
@@ -287,9 +333,11 @@ export default function StoreCosts({ me }) {
           <form className="alr-form" onSubmit={save}>
             <div className="pos-form">
               <label>{t("adm.pos.store")}
-                <select value={form.establishment_id} onChange={(e) => set("establishment_id", e.target.value)}>
+                <select value={form.establishment_id} onChange={(e) => { set("establishment_id", e.target.value); setAlsoIn({}); }}>
                   {isAdmin && <option value="">{t("adm.costs2.shared")}</option>}
                   {ctx?.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
+                  {/* Una copia por tienda: el mismo costo en varias, y luego cada una se cambia por su lado. */}
+                  {!form.id && (ctx?.stores.length || 0) > 1 && <option value="__multi">{t("adm.cst.multi")}</option>}
                 </select>
               </label>
               <label>{t("adm.costs2.kind")}
@@ -298,7 +346,12 @@ export default function StoreCosts({ me }) {
               <label>{t("adm.costs2.category")}
                 <select value={form.category} onChange={(e) => set("category", e.target.value)}>{CATEGORIES.map((c) => <option key={c} value={c}>{t(`adm.costs2.cat.${c}`)}</option>)}</select>
               </label>
-              <label>{t("adm.costs2.description")}<input value={form.description} onChange={(e) => set("description", e.target.value)} /></label>
+              <label>{t("adm.costs2.description")}
+                <CostNameInput value={form.description || ""} items={allItems} storeCode={(id) => ctx?.stores.find((x) => x.id === id)?.code || ""}
+                  placeholder={t("adm.cst.namePh")} ariaLabel={t("adm.costs2.description")}
+                  onChange={(v) => set("description", v)}
+                  onPick={(fields) => setForm((f) => ({ ...f, ...fields, amount: String(fields.amount ?? ""), establishment_id: f.establishment_id, id: f.id }))} />
+              </label>
               <label>{t("adm.pos.pay.amount")}<input inputMode="decimal" required value={form.amount} onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} /></label>
               <label>{t("adm.costs2.frequency")}
                 <select value={form.frequency} onChange={(e) => set("frequency", e.target.value)}>{FREQS.map((f) => <option key={f} value={f}>{t(`adm.costs2.freq.${f}`)}</option>)}</select>
@@ -308,6 +361,28 @@ export default function StoreCosts({ me }) {
               <label>{t("adm.costs2.ends")}<input type="date" value={form.ends_on || ""} onChange={(e) => set("ends_on", e.target.value)} /></label>
               <label>{t("adm.costs2.vendor")}<input value={form.vendor || ""} onChange={(e) => set("vendor", e.target.value)} /></label>
             </div>
+            {(() => {
+              const others = (ctx?.stores || []).filter((x) => x.id !== form.establishment_id);
+              if (!others.length || (form.id && !form.establishment_id) || (!form.id && form.establishment_id === "")) return null;
+              const multi = !form.id && form.establishment_id === "__multi";
+              const sibs = siblingsOf(form);
+              return (
+                <fieldset className="cst-stores">
+                  <legend>{t(multi ? "adm.cst.storesLegend" : "adm.cst.alsoLegend")}</legend>
+                  {(multi ? ctx.stores : others).map((x) => {
+                    const sib = sibs.find((y) => y.establishment_id === x.id);
+                    return (
+                      <label key={x.id}>
+                        <input type="checkbox" checked={Boolean(alsoIn[x.id])} onChange={(e) => setAlsoIn((a) => ({ ...a, [x.id]: e.target.checked }))} />
+                        <b>{x.code}</b> {sib ? t("adm.cst.hasIt", { v: m(sib.amount) }) : multi ? "" : t("adm.cst.addIt")}
+                      </label>
+                    );
+                  })}
+                  {multi && <button type="button" className="btn-xs" onClick={() => setAlsoIn(Object.fromEntries(ctx.stores.map((x) => [x.id, true])))}>{t("adm.cst.all")}</button>}
+                  <span className="hint">{t(multi ? "adm.cst.multiHint" : "adm.cst.alsoHint")}</span>
+                </fieldset>
+              );
+            })()}
             {!form.establishment_id && (
               <fieldset className="alr-stores">
                 <legend>{t("adm.costs2.allocation")}</legend>
@@ -343,7 +418,7 @@ export default function StoreCosts({ me }) {
           totals={{ amount: itemsTotal }}
           totalsLabel={t("adm.costs2.total")}
           right={canManage && !form ? (
-            <button type="button" className="btn-xs primary" onClick={() => setForm({ ...EMPTY, establishment_id: storeOnly || (isAdmin ? "" : ctx?.stores[0]?.id || "") })}><Icon name="plus" size={13} /> {t("adm.costs2.add")}</button>
+            <button type="button" className="btn-xs primary" onClick={() => { setAlsoIn({}); setForm({ ...EMPTY, establishment_id: storeOnly || (isAdmin ? "" : ctx?.stores[0]?.id || "") }); }}><Icon name="plus" size={13} /> {t("adm.costs2.add")}</button>
           ) : null}
         />
       </div>

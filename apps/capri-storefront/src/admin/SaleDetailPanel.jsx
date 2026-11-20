@@ -22,6 +22,9 @@
 // = POST /admin/order-board/:id/stage con una de `next_stages`. Costo, comisión y
 // ganancia nunca se piden aquí: llegan en `economics` desde la lista que ya los
 // tenía (y solo si el servidor los dio).
+import VisualAcuityCard, { VisualAcuityView } from "./VisualAcuityCard.jsx";
+import { clinicalBody, clinicalForm, clinicalProblem } from "./visualAcuity.js";
+import MissingData from "./MissingData.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -40,6 +43,7 @@ import { WearingPhotoPanel } from "./WearingPhoto.jsx";
 import { StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
 import { DESIGNS, MATERIALS, PHOTO, AR_OPTIONS, L } from "../data/lensPricing.js";
 import "./sale-detail.css";
+import "./sale-date.css";
 
 const fmt = (v, lang) => (v ? new Date(v).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -103,6 +107,7 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
   // «Graduación pendiente» (backend lib/rx-pending.ts): la receta se escribe aquí por primera vez.
   const rxPending = sale.rx_pending === true && !rx;
   const { t } = useLang();
+  const { toast } = useFeedback();
   const initCust = useMemo(() => ({
     first_name: customer?.first_name || "", last_name: customer?.last_name || "", email: customer?.email || "", phone: customer?.phone || "", birth_date: customer?.birth_date || "",
     address_1: address?.address_1 || "", city: address?.city || "", province: address?.province || "", postal_code: address?.postal_code || "",
@@ -118,6 +123,10 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
   const [rxForm, setRxForm] = useState(initRx);
   useEffect(() => setRxForm(initRx), [initRx]);
   const [showRxErrors, setShowRxErrors] = useState(false);
+  // Agudeza visual y ojo dominante de esa receta (VisualAcuityCard.jsx).
+  const initClinical = rx?.clinical || null;
+  const [vaForm, setVaForm] = useState(() => clinicalForm(initClinical));
+  useEffect(() => setVaForm(clinicalForm(initClinical)), [initClinical]);
 
   const custChanged = Boolean(customer) && JSON.stringify(cust) !== JSON.stringify(initCust);
   const rxChanged = rxOpen && Boolean(rxForm) && JSON.stringify(rxForm) !== JSON.stringify(initRx);
@@ -133,12 +142,14 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
     if (delivery !== (sale.delivery === "ship" ? "ship" : "pickup")) b.delivery = delivery;
     if ((promised || null) !== (sale.promised_on || null)) b.promised_on = promised || null;
     if (note.trim() !== (sale.internal_note || "").trim()) b.internal_note = note.trim() || null;
-    if (rxChanged) b.prescription = { rx: toRx(rxForm), rx_date: rxForm.rx_date || null };
+    const clinicalChanged = rxOpen && JSON.stringify(clinicalBody(vaForm)) !== JSON.stringify(clinicalBody(clinicalForm(initClinical)));
+    if (rxChanged || clinicalChanged) b.prescription = { rx: toRx(rxForm), rx_date: rxForm.rx_date || null, clinical: clinicalBody(vaForm) };
     return b;
   };
   const changes = Object.keys(body()).length;
   const save = () => {
     if (rxChanged && hasRxErrors(validateRx(rxForm, rxForm.type || inferType(rxForm)).errors)) { setShowRxErrors(true); return; }
+    if (rxOpen && clinicalProblem(vaForm)) { toast({ tone: "error", title: t("adm.va.badLong") }); return; }
     // La receta que estaba pendiente necesita al menos la esfera de los dos ojos.
     if (rxPending && rxOpen && (num(rxForm?.od?.sph) === null || num(rxForm?.os?.sph) === null)) { setShowRxErrors(true); return; }
     onSave(body());
@@ -187,6 +198,7 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
           ) : (
             <>
               <RxForm value={rxForm} onChange={setRxForm} mode="new" disabled={busy} showErrors={showRxErrors} idp="sd-edit-rx" />
+              <VisualAcuityCard value={vaForm} onChange={setVaForm} disabled={busy} idp="sd-edit-va" />
               <small className="sd-hint">{t(rxPending ? "adm.sd.edit.rxAddHint" : "adm.sd.edit.rxHint")}</small>
             </>
           )}
@@ -725,6 +737,17 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
               {/* The free text of the request travels with the sale (void_note): the
                   person who confirms reads WHY the seller asked, not just the category. */}
               {s.void_requested_at && s.status !== "voided" && <div className="sd-banner warn">{t("adm.pos.sales.voidPending", { reason: t(`adm.pos.void.${s.void_reason}`) })}{s.void_note ? <><br /><small>{t("adm.pos.sales.voidNote", { note: s.void_note })}</small></> : null}</div>}
+              {/* Registrada con otra fecha (lib/sale-date.ts): el día que cuenta y cuándo se registró de verdad. */}
+              {s.backdate ? (
+                <div className="sd-banner info sd-backdate">
+                  <Icon name="calendar" size={14} /> <b>{t("adm.sdt.kind.update")}</b> · {t("adm.sdt.detail", { date: s.backdate.date, time: s.backdate.time, recorded: new Date(s.backdate.recorded_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) })}
+                  {s.backdate.money_on ? <><br /><small>{t(s.backdate.money_on === "today" ? "adm.sdt.detailMoneyToday" : "adm.sdt.detailMoneySale")}{s.backdate.delivered ? ` · ${t("adm.sdt.detailDelivered")}` : ""}</small></> : null}
+                  {s.backdate.note ? <><br /><small>{t("adm.sdt.detailNote", { note: s.backdate.note })}</small></> : null}
+                </div>
+              ) : (
+                // Toda venta dice cuándo se registró: aquí, el mismo momento de la venta.
+                <p className="sdt-recorded"><Icon name="clock" size={12} /> {t("adm.sdt.kind.day")} · {t("adm.sdt.recordedAt", { at: new Date(s.recorded_at || s.created_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) })}</p>
+              )}
               {s.internal_note && <div className="sd-banner info"><b>{t("adm.sd.note")}:</b> <span className="sd-note-text">{s.internal_note}</span></div>}
               {s.rx_pending && s.status !== "voided" && (
                 <div className="sd-banner warn sd-rx-pending">
@@ -734,6 +757,13 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                   )}
                 </div>
               )}
+              {/* Registrada con datos pendientes (backend lib/pos.ts saleMissing): qué falta y cómo completarlo.
+                  La receta pendiente tiene su propio aviso arriba; el anticipo se cobra en Pagos. */}
+              {s.status !== "voided" && mode !== "edit" && (() => {
+                const shown = (s.missing || []).filter((k) => k !== "prescription");
+                const data = shown.filter((k) => ["first_name", "last_name", "phone", "address"].includes(k));
+                return <MissingData missing={shown} compact onComplete={perms.can_edit && data.length ? () => { setEditRx(false); setMode("edit"); } : null} completeLabel={t("adm.pos.missing.completeData")} />;
+              })()}
               {mode === "edit" && (
                 <SaleEditForm
                   sale={s}
@@ -817,6 +847,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                               <>
                                 <div className="sd-rx-head">{rx.rx_number && <span>{t("adm.sd.rxNumber")} <b>{rx.rx_number}</b></span>}{rx.seg_height != null && <span className="sd-muted">{t("adm.sd.rx.seg")}: {fmtRx(rx.seg_height, 2, false)}</span>}</div>
                                 <RxGrid rx={rx} />
+                                <VisualAcuityView clinical={rx.clinical} />
                                 {perms.can_edit && mode !== "edit" && (
                                   <button type="button" className="btn-sm sd-rx-edit adm-noprint" disabled={busy} onClick={() => { setEditRx(true); setMode("edit"); panelRef.current?.querySelector(".sd-body")?.scrollTo({ top: 0, behavior: "smooth" }); }}>
                                     <Icon name="edit" size={13} /> {t("adm.sd.edit.rxEdit")}
@@ -836,7 +867,10 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
               <Section icon="dollar" title={t("adm.sd.sec.amounts")}>
                 <dl className="sd-totals">
                   <div><dt>{t("adm.sd.list")}</dt><dd>{m(s.list)}</dd></div>
-                  {s.discount > 0 && <div><dt>{t("adm.sd.discount", { n: s.discount_pct })}</dt><dd>−{m(s.discount)}</dd></div>}
+                  {s.discount > 0 && <div><dt>{s.promotion?.priced ? t("adm.promo.pos.line", { name: s.promotion.name, n: s.discount_pct }) : t("adm.sd.discount", { n: s.discount_pct })}</dt><dd>−{m(s.discount)}</dd></div>}
+                  {/* Promoción sin dinero (examen gratis, regalo) o la que perdió frente a un descuento mayor: se dice igual. */}
+                  {s.promotion && !s.promotion.priced && <div><dt>{t(s.promotion.pct ? "adm.promo.pos.notPriced" : "adm.promo.pos.included", { name: s.promotion.name })}</dt><dd>{s.promotion.value_cents ? m(s.promotion.value_cents / 100) : "✓"}</dd></div>}
+                  {s.promotion?.ref && <div><dt>{t("adm.doc.rcpt.promoRef", { ref: s.promotion.ref })}</dt><dd /></div>}
                   {doc?.totals?.tax > 0 && <div><dt>{t("adm.sd.tax")}</dt><dd>{m(doc.totals.tax)}</dd></div>}
                   <div className="sd-total"><dt>{t("adm.sd.total")}</dt><dd>{m(s.total)}</dd></div>
                   <div><dt>{t("adm.sd.paid")}</dt><dd>{m(s.paid)}</dd></div>

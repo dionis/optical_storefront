@@ -5,10 +5,12 @@
  * throws — see src/lib/sale-facts.ts reconcileSaleFacts.
  */
 import type { MedusaContainer } from "@medusajs/framework/types";
-import { reconcileSaleFacts } from "../lib/sale-facts";
+import { reconcileLabSurcharges, reconcileSaleFacts } from "../lib/sale-facts";
 
 export default async function saleFactReconcileJob(container: MedusaContainer) {
   await reconcileSaleFacts(container);
+  // Sales projected before the lab surcharges (or before a rule changed) get today's amount.
+  await reconcileLabSurcharges(container);
 }
 
 export const config = {

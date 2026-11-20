@@ -25,6 +25,7 @@
  *                       the money was received: the cash is in that store's
  *                       drawer, and moving the rows would break its register.
  */
+import { cleanClinical, type Clinical } from "./visual-acuity";
 import type { ICustomerModuleService, IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
@@ -35,7 +36,7 @@ import { recordAudit } from "./audit";
 import type { EstablishmentRow } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
 import { syncOrderToSheet } from "./gsheet-sync";
-import { cleanCustomer, saleNumber, type PosCustomerInput } from "./pos";
+import { cleanCustomer, missingCustomerData, saleNumber, type PosCustomerInput } from "./pos";
 import { tenant } from "./tenant";
 import {
   checkPrescriptions,
@@ -94,7 +95,7 @@ export interface SaleDetailsPatch {
   /** Free text, or null/"" to clear. */
   internal_note?: unknown;
   /** New values of the sale's new prescription (same shape as at the till). */
-  prescription?: { rx?: Prescription & Record<string, unknown>; rx_date?: unknown } | null;
+  prescription?: { rx?: Prescription & Record<string, unknown>; rx_date?: unknown; clinical?: unknown } | null;
 }
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -104,7 +105,8 @@ const realDay = (v: string): boolean => DAY_RE.test(v) && new Date(`${v}T00:00:0
 export function cleanDetailsPatch(body: SaleDetailsPatch): { reason: string } | { patch: CleanPatch } {
   const patch: CleanPatch = {};
   if (body.customer !== undefined) {
-    const c = cleanCustomer(body.customer, new Date(), tenant().timezone);
+    // Lenient like the till: the correction may still leave something for later (pos_sale.missing says what).
+    const c = cleanCustomer(body.customer, new Date(), tenant().timezone, { lenient: true });
     if ("reason" in c) return { reason: c.reason };
     patch.customer = c.customer;
   }
@@ -129,7 +131,14 @@ export function cleanDetailsPatch(body: SaleDetailsPatch): { reason: string } | 
     if (!rx || typeof rx !== "object" || !rx.od || !rx.os) return { reason: "prescription_required" };
     const d = body.prescription.rx_date;
     if (d !== undefined && d !== null && d !== "" && !(typeof d === "string" && realDay(d))) return { reason: "bad_rx_date" };
-    patch.prescription = { rx, rx_date: typeof d === "string" && d ? d : null };
+    // Visual acuity and dominant eye (lib/visual-acuity.ts): absent = keep what the prescription has.
+    let clinical: Clinical | null | undefined;
+    if (body.prescription.clinical !== undefined) {
+      const c = cleanClinical(body.prescription.clinical);
+      if (c && "reason" in c) return { reason: c.reason };
+      clinical = c;
+    }
+    patch.prescription = { rx, rx_date: typeof d === "string" && d ? d : null, ...(clinical !== undefined ? { clinical } : {}) };
   }
   if (!Object.keys(patch).length) return { reason: "nothing_to_change" };
   return { patch };
@@ -140,14 +149,14 @@ interface CleanPatch {
   delivery?: "pickup" | "ship";
   promised_on?: string | null;
   internal_note?: string | null;
-  prescription?: { rx: Prescription & Record<string, unknown>; rx_date: string | null };
+  prescription?: { rx: Prescription & Record<string, unknown>; rx_date: string | null; clinical?: Clinical | null };
 }
 
 interface OrderForEdit {
   id: string;
   email: string | null;
   metadata: Record<string, unknown> | null;
-  shipping_address?: { id: string; address_1?: string | null } | null;
+  shipping_address?: { id: string; address_1?: string | null; first_name?: string | null; last_name?: string | null; phone?: string | null } | null;
   billing_address?: { id: string } | null;
   items?: Array<{ product_id?: string | null; metadata?: Record<string, unknown> | null }>;
 }
@@ -156,7 +165,7 @@ async function orderForEdit(container: MedusaContainer, orderId: string): Promis
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const { data } = await query.graph({
     entity: "order",
-    fields: ["id", "email", "metadata", "shipping_address.id", "shipping_address.address_1", "billing_address.id", "items.product_id", "items.metadata"],
+    fields: ["id", "email", "metadata", "shipping_address.id", "shipping_address.address_1", "shipping_address.first_name", "shipping_address.last_name", "shipping_address.phone", "billing_address.id", "items.product_id", "items.metadata"],
     filters: { id: orderId },
   });
   return (data[0] as OrderForEdit | undefined) ?? null;
@@ -192,7 +201,7 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
   const order = sale.order_id ? await orderForEdit(container, sale.order_id) : null;
 
   const delivery = p.delivery ?? (sale.delivery === "ship" ? "ship" : "pickup");
-  if (delivery === "ship" && !(p.customer?.address ?? order?.shipping_address?.address_1)) throw new PosError("address_required_to_ship");
+  // A sale to ship without an address is allowed (it shows as missing until the address is added).
 
   // The prescription is checked before anything is written: an Rx the lab cannot cut never replaces a good one.
   let rxId: string | null = null;
@@ -212,25 +221,25 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
     if (!existing) throw new PosError("customer_not_found", 404);
     // An explicit correction overwrites (unlike the till, which only fills blanks).
     await customers.updateCustomers(existing.id, {
-      first_name: p.customer.first_name,
-      last_name: p.customer.last_name,
+      first_name: p.customer.first_name || null,
+      last_name: p.customer.last_name || null,
       // Optional at the counter: no email is NULL, never "" (the unique index on email would collide).
       email: p.customer.email || null,
-      phone: p.customer.phone,
+      phone: p.customer.phone || null,
       metadata: { ...(existing.metadata ?? {}), birth_date: p.customer.birth_date },
     });
     if (order) {
       const orders = container.resolve<IOrderModuleService>(Modules.ORDER);
       const address = {
-        first_name: p.customer.first_name,
-        last_name: p.customer.last_name,
-        phone: p.customer.phone,
+        first_name: p.customer.first_name || null,
+        last_name: p.customer.last_name || null,
+        phone: p.customer.phone || null,
         ...(p.customer.address
           ? { address_1: p.customer.address.address_1, city: p.customer.address.city, province: p.customer.address.province ?? undefined, postal_code: p.customer.address.postal_code, country_code: p.customer.address.country_code }
           : {}),
       };
       // `null` clears it (the column is nullable; the DTO type only knows `string`).
-      await orders.updateOrders(order.id, { email: (p.customer.email || null) as unknown as string, metadata: { ...(order.metadata ?? {}), patient_phone: p.customer.phone } });
+      await orders.updateOrders(order.id, { email: (p.customer.email || null) as unknown as string, metadata: { ...(order.metadata ?? {}), patient_phone: p.customer.phone || null } });
       const ids = [order.shipping_address?.id, order.billing_address?.id].filter((v): v is string => Boolean(v));
       if (ids.length) await orders.updateOrderAddresses(ids.map((id) => ({ id, ...address })) as never);
     }
@@ -244,12 +253,13 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
         source: p.prescription.rx.source === "ocr" ? "ocr" : "manual",
         verified_by_user: storedVerifiedByUser(p.prescription.rx),
         ...(p.prescription.rx_date ? { rx_date: new Date(`${p.prescription.rx_date}T12:00:00Z`) } : {}),
+        ...(p.prescription.clinical !== undefined ? { clinical: p.prescription.clinical ? JSON.stringify(p.prescription.clinical) : null } : {}),
         updated_at: new Date(),
       });
     changed.push("prescription");
   } else if (p.prescription && order) {
     // The prescription that was pending: a new record with its Rx number, linked to the lens lines.
-    await attachLatePrescription(container, { saleId: sale.id, orderId: order.id, customerId: sale.customer_id, rx: p.prescription.rx, rxDate: p.prescription.rx_date });
+    await attachLatePrescription(container, { saleId: sale.id, orderId: order.id, customerId: sale.customer_id, rx: p.prescription.rx, rxDate: p.prescription.rx_date, clinical: p.prescription.clinical ?? null });
     changed.push("prescription");
   }
   const salePatch: Record<string, unknown> = {};
@@ -257,6 +267,13 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
   if (p.promised_on !== undefined && p.promised_on !== sale.promised_on) { salePatch.promised_on = p.promised_on; changed.push("promised_on"); }
   if (p.internal_note !== undefined && p.internal_note !== sale.internal_note) { salePatch.internal_note = p.internal_note; changed.push("internal_note"); }
   if (!changed.length) throw new PosError("nothing_to_change");
+  // What is still missing after this correction (lib/pos.ts missingCustomerData).
+  if (p.customer || "delivery" in salePatch) {
+    const sa = order?.shipping_address;
+    const now = p.customer ?? { first_name: sa?.first_name ?? "", last_name: sa?.last_name ?? "", phone: sa?.phone ?? "", address: sa?.address_1 ? {} : null };
+    const missing = missingCustomerData(now, delivery);
+    salePatch.missing = missing.length ? missing : null;
+  }
 
   await pos(container).updatePosSales({ id: sale.id, ...salePatch, edited_at: new Date(), edited_by: actorId } as never);
   if (order && ("delivery" in salePatch || "promised_on" in salePatch)) {

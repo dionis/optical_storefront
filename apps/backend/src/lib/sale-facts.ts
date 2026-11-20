@@ -1,3 +1,5 @@
+import { surchargeFor } from "./lab-surcharge";
+import { getPosSettings } from "./pos-settings";
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
@@ -34,6 +36,8 @@ export interface LineContext {
   soldAt: Date;
   status: "active" | "voided";
   tz: string;
+  /** Lab surcharge (cents) of each lens line by its prescription id (lib/lab-surcharge.ts). */
+  surchargeByRx?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -93,12 +97,36 @@ export function factFromLine(item: Record<string, unknown>, productMeta: Record<
     tax_cents: tax,
     frame_cents: cents(md.frame_price) * qty,
     lenses_cents: cents(md.lens_addon) * qty,
+    // A high power's lab surcharge, once per lens job (lib/lab-surcharge.ts).
+    lab_surcharge_cents: withLenses && md.prescription_id ? ctx.surchargeByRx?.get(String(md.prescription_id)) ?? 0 : 0,
     total_cents: total,
     payment_methods: ctx.paymentMethods as unknown as Record<string, unknown>,
     status: ctx.status,
     sold_at: ctx.soldAt,
     sold_date_local: localParts(ctx.soldAt, ctx.tz).date,
   };
+}
+
+/**
+ * The lab surcharge of each prescription the order's lens lines are cut to,
+ * with the owner's current rules (lib/lab-surcharge.ts). Read when the order is
+ * projected: at the sale, and again when the sale's prescription is corrected.
+ */
+async function surchargesOf(container: MedusaContainer, items: Array<Record<string, unknown>>): Promise<Map<string, number>> {
+  const ids = [...new Set(items.map((i) => String(((i.metadata ?? {}) as Record<string, unknown>).prescription_id ?? "")).filter(Boolean))];
+  const out = new Map<string, number>();
+  if (!ids.length) return out;
+  const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+  const [rows, settings] = await Promise.all([
+    pg("prescription").whereIn("id", ids).select("id", "od_sph", "od_cyl", "od_add", "od_prism", "os_sph", "os_cyl", "os_add", "os_prism") as Promise<Array<Record<string, unknown>>>,
+    getPosSettings(container),
+  ]);
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  for (const r of rows) {
+    const { cents: c } = surchargeFor({ od: { sph: num(r.od_sph), cyl: num(r.od_cyl), add: num(r.od_add), prism: num(r.od_prism) }, os: { sph: num(r.os_sph), cyl: num(r.os_cyl), add: num(r.os_add), prism: num(r.os_prism) } }, settings.lab_surcharges);
+    out.set(String(r.id), c);
+  }
+  return out;
 }
 
 /** (Re)writes the facts of one order. Idempotent: an order's rows are replaced. */
@@ -139,6 +167,7 @@ export async function projectOrder(container: MedusaContainer, orderId: string):
       tz: tenant().timezone,
     };
     const items = order.items ?? [];
+    ctx.surchargeByRx = await surchargesOf(container, items).catch(() => new Map<string, number>());
     const meta = await loadProductMetadata(container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION), items.map((i) => String(i.product_id ?? "")).filter(Boolean));
     const rows = items.map((it) => factFromLine(it, meta.get(String(it.product_id ?? "")) ?? {}, ctx));
     const svc = container.resolve<SalesAnalyticsModuleService>(SALES_ANALYTICS_MODULE);
@@ -209,6 +238,43 @@ export async function reconcileSaleFacts(container: MedusaContainer, now = new D
     return done;
   } catch (e) {
     logger.warn(`[sale-fact] reconcile skipped: ${(e as Error).message}`);
+    return 0;
+  }
+}
+
+/**
+ * Brings the lab surcharges of the sold lens jobs in line with the owner's
+ * rules (owner, 19-nov-2026: «agrega los +30 dólares cuando es +6, resuelve
+ * esto»). A sale projected before the surcharges existed, or before the owner
+ * changed a rule, has the old amount in `sale_fact.lab_surcharge_cents`; this
+ * finds every lens line whose amount differs from what the rules say today and
+ * re-projects its order (idempotent). Runs after the owner saves the rules and
+ * in the 6-hourly reconcile, so the first run after the deploy fixes the past.
+ * Never throws; returns how many orders were re-projected.
+ */
+export async function reconcileLabSurcharges(container: MedusaContainer, opts: { limit?: number } = {}): Promise<number> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  try {
+    const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+    const rows = (await pg("sale_fact as sf")
+      .join("order_line_item as li", "li.id", "sf.line_item_id")
+      .join("prescription as p", "p.id", pg.raw("li.metadata->>'prescription_id'"))
+      .whereNotNull("sf.lens_design")
+      .select("sf.order_id", "sf.lab_surcharge_cents", "p.od_sph", "p.od_cyl", "p.od_add", "p.od_prism", "p.os_sph", "p.os_cyl", "p.os_add", "p.os_prism")) as Array<Record<string, unknown>>;
+    const { lab_surcharges: rules } = await getPosSettings(container);
+    const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+    const stale = new Set<string>();
+    for (const r of rows) {
+      const want = surchargeFor({ od: { sph: num(r.od_sph), cyl: num(r.od_cyl), add: num(r.od_add), prism: num(r.od_prism) }, os: { sph: num(r.os_sph), cyl: num(r.os_cyl), add: num(r.os_add), prism: num(r.os_prism) } }, rules).cents;
+      if (want !== (Number(r.lab_surcharge_cents) || 0)) stale.add(String(r.order_id));
+    }
+    const ids = [...stale].slice(0, opts.limit ?? 2000);
+    let done = 0;
+    for (const id of ids) if ((await projectOrder(container, id)) > 0) done++;
+    if (ids.length) logger.info(`[sale-fact] lab surcharges brought up to date on ${done} orders`);
+    return done;
+  } catch (e) {
+    logger.warn(`[sale-fact] lab surcharge reconcile skipped: ${(e as Error).message}`);
     return 0;
   }
 }

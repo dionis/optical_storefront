@@ -4,6 +4,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { sessionRevoked, tokenIssuedAtMs } from "./session-control";
 import { isAllowedForInactiveUser, isAllowedForRestrictedRole } from "./staff-roles";
 import { getStaffScope } from "./staff-scope";
+import { setOpActor } from "./operation-log-context";
 
 /**
  * Role gate for every /admin route, ours and Medusa's.
@@ -53,6 +54,9 @@ export async function staffGuard(
     res.status(401).json({ type: "unauthorized", reason: "session_revoked", message: "This session was signed out; sign in again." });
     return;
   }
+
+  // The operation log (lib/operation-log-context.ts): who, with which role.
+  setOpActor(ctx.actor_id, "user", scope.role ?? (scope.is_admin ? "admin" : "inactive"));
 
   if (scope.is_admin) return next();
   const url = req.originalUrl ?? req.url;

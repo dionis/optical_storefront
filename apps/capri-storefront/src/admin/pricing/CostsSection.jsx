@@ -20,6 +20,8 @@ import { money } from "../adminOrders.js";
 import HelpTip from "../HelpTip.jsx";
 import Icon from "../icons.jsx";
 import FinAcc from "../finance/Accordion.jsx";
+import CostNameInput from "../CostNameInput.jsx";
+import "../pnl-breakdown.css";
 import { deleteCostItem, deleteCostRule, saveCostItem, saveCostRule, saveSalesTax, toggleRuleInStore } from "../finance/financeApi.js";
 import { cadenceOf, landsOf, percentSharesOf, whoOf } from "../finance/explain.js";
 import { blankItem, FREQUENCIES, groupOf, monthlyOf, round2, RULE_KINDS, slugOf, sumBy, TAX_CATEGORIES, TAX_DEFAULT_CATEGORY, taxOf } from "../finance/model.js";
@@ -58,7 +60,7 @@ function Toggle({ on, label, disabled, onChange, className = "" }) {
 }
 
 /** Una partida de costo, editable en su fila. */
-function CostRow({ item, group, stores, activeCount = 0, salesCount, chainSales, canShare, onSaved, onError, onCancelNew }) {
+function CostRow({ item, group, stores, allItems = [], activeCount = 0, salesCount, chainSales, canShare, onSaved, onError, onCancelNew }) {
   const { t, lang } = useLang();
   const { confirm } = useFeedback();
   const start = useMemo(() => editable(item), [item]);
@@ -67,6 +69,9 @@ function CostRow({ item, group, stores, activeCount = 0, salesCount, chainSales,
   const [busy, setBusy] = useState(false);
   // "saving" | "saved" | "error" | null — what the row says about itself.
   const [status, setStatus] = useState(null);
+  // «Copiar a otras tiendas» (dueño, 17-nov-2026): el mismo costo en varias tiendas, cada copia editable por su lado.
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyTo, setCopyTo] = useState({});
 
   // ── Autoguardado (dueño, 13-nov-2026: «no se está autoguardando») ──────────
   //
@@ -215,7 +220,14 @@ function CostRow({ item, group, stores, activeCount = 0, salesCount, chainSales,
   return (
     <div ref={elRef} className={`fin-row ${row.active ? "" : "is-off"} ${dirty ? "is-dirty" : ""} ${busy ? "is-busy" : ""} ${status ? `is-${status}` : ""} ${dirty && !valid(row) ? "is-invalid" : ""}`} onKeyDown={onKey} onBlur={onBlur} role="row">
       <span className="fin-c name" role="cell">
-        <input className="fin-in" value={row.description} placeholder={t(`adm.fin.tax.${row.tax_category}`)} maxLength={160} aria-label={t("adm.fin.col.name")} onChange={(e) => set("description", e.target.value)} />
+        {item.id ? (
+          <input className="fin-in" value={row.description} placeholder={t(`adm.fin.tax.${row.tax_category}`)} maxLength={160} aria-label={t("adm.fin.col.name")} onChange={(e) => set("description", e.target.value)} />
+        ) : (
+          // Fila nueva: el nombre se autocompleta con los costos que ya existen en cualquier tienda (CostNameInput.jsx).
+          <CostNameInput value={row.description} items={allItems} storeCode={(id) => storeOf(id)?.code || ""} inputClassName="fin-in" autoFocus
+            placeholder={t(`adm.fin.tax.${row.tax_category}`)} ariaLabel={t("adm.fin.col.name")} onChange={(v) => set("description", v)}
+            onPick={(f) => setRow((r) => ({ ...r, ...f, tax_category: f.tax_category || r.tax_category, category: f.category || r.category, kind: r.per_sale || f.per_sale ? r.kind : f.kind || r.kind, establishment_id: r.establishment_id, allocation: r.allocation }))} />
+        )}
       </span>
       <span className="fin-c store" role="cell" data-label={t("adm.fin.col.store")}>
         <select className="fin-in" value={row.establishment_id || ""} aria-label={t("adm.fin.col.store")}
@@ -258,6 +270,7 @@ function CostRow({ item, group, stores, activeCount = 0, salesCount, chainSales,
         {status === "saved" && !dirty && <span className="fin-auto saved" role="status" title={t("adm.fin.autosaved")}><Icon name="check" size={12} /><span className="fin-auto-t">{t("adm.fin.autosaved")}</span></span>}
         {dirty && status !== "saving" && <button type="button" className={`fin-ib ok ${status === "error" ? "retry" : ""}`} disabled={busy} onClick={() => persist(row, { loud: true })} title={t(status === "error" ? "adm.fin.retry" : "adm.fin.save")} aria-label={t(status === "error" ? "adm.fin.retry" : "adm.fin.save")}><Icon name="check" size={13} /></button>}
         {dirty && item.id && status !== "saving" && <button type="button" className="fin-ib" disabled={busy} onClick={undo} title={t("adm.fin.undo")} aria-label={t("adm.fin.undo")}><Icon name="undo" size={13} /></button>}
+        {item.id && row.establishment_id && stores.length > 1 && <button type="button" className={`fin-ib ${copyOpen ? "on" : ""}`} disabled={busy} onClick={() => { setCopyTo({}); setCopyOpen((v) => !v); }} title={t("adm.cst.copy")} aria-label={t("adm.cst.copy")} aria-expanded={copyOpen}><Icon name="copy" size={13} /></button>}
         <button type="button" className="fin-ib warn" disabled={busy} onClick={remove} title={item.id ? t("adm.fin.delete") : t("adm.fin.cancel")} aria-label={item.id ? t("adm.fin.delete") : t("adm.fin.cancel")}><Icon name={item.id ? "trash" : "close"} size={13} /></button>
       </span>
       <div className={`fin-explain ${row.active ? "" : "off"}`} role="cell">
@@ -279,6 +292,42 @@ function CostRow({ item, group, stores, activeCount = 0, salesCount, chainSales,
         {!row.active && <span className="fin-ex-i fin-ex-off">{t("adm.fin.ex.off")}</span>}
         {row.active && row.ends_on && <span className="fin-ex-i">{t("adm.fin.ex.until", { date: row.ends_on })}</span>}
       </div>
+      {copyOpen && (() => {
+        const key = String(row.description || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+        const sibOf = (sid) => (key ? allItems.find((it) => it.id !== item.id && it.establishment_id === sid && String(it.description || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() === key) : null);
+        const others = stores.filter((x) => x.id !== row.establishment_id);
+        const doCopy = async () => {
+          const ids = others.filter((x) => copyTo[x.id]).map((x) => x.id);
+          if (!ids.length) return;
+          setBusy(true);
+          try {
+            const same = { kind: row.kind, category: row.category, tax_category: row.tax_category, description: row.description, amount: row.amount, frequency: row.frequency, amortize_months: row.amortize_months, starts_on: row.starts_on, ends_on: row.ends_on, vendor: row.vendor, notes: row.notes, active: row.active, per_sale: row.per_sale };
+            for (const sid of ids) {
+              const sib = sibOf(sid);
+              await saveCostItem(sib ? { ...editable(sib), ...same } : { ...same, id: null, establishment_id: sid, allocation: null });
+            }
+            setCopyOpen(false);
+            onSaved();
+          } catch (e) { onError(e.message); } finally { if (alive.current) setBusy(false); }
+        };
+        return (
+          <div className="cst-copy" role="cell">
+            <b>{t("adm.cst.copyTitle")}</b>
+            {others.map((x) => {
+              const sib = sibOf(x.id);
+              return (
+                <label key={x.id}>
+                  <input type="checkbox" checked={Boolean(copyTo[x.id])} onChange={(e) => setCopyTo((c) => ({ ...c, [x.id]: e.target.checked }))} />
+                  <b>{x.code}</b> {sib ? <small>{t("adm.cst.hasIt", { v: m(sib.amount) })}</small> : null}
+                </label>
+              );
+            })}
+            <button type="button" className="btn-xs" onClick={() => setCopyTo(Object.fromEntries(others.map((x) => [x.id, true])))}>{t("adm.cst.all")}</button>
+            <button type="button" className="btn-xs primary" disabled={busy || !others.some((x) => copyTo[x.id])} onClick={doCopy}><Icon name="copy" size={12} /> {t("adm.cst.copyDo")}</button>
+            <small>{t("adm.cst.copyHint")}</small>
+          </div>
+        );
+      })()}
       {more && (
         <div className="fin-more" role="cell">
           <label>{t("adm.fin.f.starts")}<input type="date" className="fin-in" value={row.starts_on} onChange={(e) => set("starts_on", e.target.value)} /></label>
@@ -399,7 +448,7 @@ function RuleTable({ rules, store, isStore, salesCount, onSaved, onError }) {
               <span className="fin-unit">{r.unit === "percent" ? "%" : "$"}</span>
             </span>
             <span className="fin-c monthly num muted" data-label={t("adm.fin.col.monthly")} title={t("adm.fin.rules.estHint")}>
-              {r.kind === "order_fixed" ? m(round2(r.amount * totalSales)) : r.unit === "percent" ? t("adm.fin.rules.ofSale") : t("adm.fin.rules.perPayment")}
+              {r.kind === "order_fixed" ? m(isStore && r.enabled === false ? 0 : round2(r.amount * totalSales)) : r.unit === "percent" ? t("adm.fin.rules.ofSale") : t("adm.fin.rules.perPayment")}
             </span>
             <span className="fin-c flag" data-label={t("adm.fin.col.active")}>
               <Toggle on={r.active} label={r.active ? t("adm.fin.on") : t("adm.fin.off")} disabled={busy.has(r.id)} onChange={(v) => save(r, { active: v })} />
@@ -499,11 +548,11 @@ export default function CostsAccordions({ data, scopeStore, open, onToggle, onSa
     <div className="fin-table" role="table" aria-label={t(`adm.fin.acc.${group}`)}>
       <Head perSale={group === "perSale"} />
       {drafts[group] && (
-        <CostRow key="new" item={drafts[group]} group={group} stores={stores} activeCount={activeCount} salesCount={data.sales_count || {}} chainSales={chainSales} canShare={canShare}
+        <CostRow key="new" item={drafts[group]} group={group} stores={stores} allItems={data.items} activeCount={activeCount} salesCount={data.sales_count || {}} chainSales={chainSales} canShare={canShare}
           onSaved={(opts) => savedDraft(group, opts)} onError={onError} onCancelNew={() => setDrafts((d) => ({ ...d, [group]: null }))} />
       )}
       {byGroup[group].map((it) => (
-        <CostRow key={it.id} item={it} group={group} stores={stores} activeCount={activeCount} salesCount={data.sales_count || {}} chainSales={chainSales} canShare={canShare} onSaved={onSaved} onError={onError} />
+        <CostRow key={it.id} item={it} group={group} stores={stores} allItems={data.items} activeCount={activeCount} salesCount={data.sales_count || {}} chainSales={chainSales} canShare={canShare} onSaved={onSaved} onError={onError} />
       ))}
       {!byGroup[group].length && !drafts[group] && <p className="fin-empty">{t(`adm.fin.empty.${group}`)}</p>}
     </div>
@@ -515,7 +564,11 @@ export default function CostsAccordions({ data, scopeStore, open, onToggle, onSa
   );
 
   const rules = data.rules || [];
-  const perSaleRulesTotal = rules.filter((r) => r.active && r.kind === "order_fixed").reduce((a, r) => a + r.amount * chainSales, 0);
+  // Fijos por venta del encabezado: con una tienda elegida, SUS ventas y solo las reglas que esa tienda
+  // cobra («Se cobra»); antes multiplicaba por las ventas de toda la cadena (dueño, 17-nov-2026: «por qué
+  // sale el 494»: $4 de Op3 + $10 × 49 ventas de todas las tiendas). Igual que el libro (lib/financial-statement.ts).
+  const scopedSales = scopeStore ? Number(data.sales_count?.[scopeStore] ?? 0) : chainSales;
+  const perSaleRulesTotal = rules.filter((r) => r.active && r.kind === "order_fixed" && (!scopeStore || r.enabled !== false)).reduce((a, r) => a + r.amount * scopedSales, 0);
   const pnlShown = (k) => (scopeStore ? Number(pnlStore(scopeStore)?.[k]) || 0 : Number(data.pnl?.total?.[k]) || 0);
 
   return (

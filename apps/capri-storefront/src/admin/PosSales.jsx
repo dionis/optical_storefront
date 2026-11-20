@@ -22,6 +22,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import "./sale-date.css";
 import { adminFetch } from "./adminApi.js";
 import { money } from "./adminOrders.js";
 import { listDeletedSales, listSales, posContext, restoreSale, searchCustomers } from "./posApi.js";
@@ -87,6 +88,9 @@ export function useSaleDetails(sales, { store = "", enabled = true } = {}) {
  * respaldo, lo descriptivo que la venta no traiga — una venta de la web o
  * cualquier fila sin esos campos.
  */
+/** Lo que la venta tiene pendiente de completar, sin el anticipo (el saldo ya tiene su columna). */
+const pendingOf = (s) => (s.status === "voided" ? [] : (s.missing || []).filter((k) => k !== "deposit"));
+
 export function mergeSaleDetails(s, d) {
   const pick = (mine, theirs) => (mine === undefined || mine === null ? theirs ?? null : mine);
   const row = {
@@ -253,16 +257,26 @@ export default function PosSales({ me, params }) {
     sums.voided > 0 ? { label: t("adm.scr.voided"), value: sums.voided, tone: "muted" } : null,
   ];
 
+  const fmtWhen = (v) => (v ? new Date(v).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" }) : "");
   const statusText = (s) => (s.status === "voided" ? t("adm.pos.sales.st.voided") : s.delivered_at ? t("adm.pos.sales.st.delivered") : t("adm.pos.sales.st.completed"));
   const storeCode = (s) => storeById.get(s.establishment_id)?.code || "";
   // Todas las columnas de una venta; `essential` es lo de serie, el resto se enciende en «Columnas».
   const cols = useMemo(() => [
     { key: "number", header: t("adm.pos.sales.number"), essential: true, width: 12, render: (s) => <b>{s.number}</b> },
     { key: "created_at", header: t("adm.pos.sales.when"), type: "datetime", essential: true, width: 16 },
+    // Cuándo se escribió en el sistema (dueño, 19-nov-2026): «venta del día» o «actualización» (registrada después con la fecha de la venta).
+    {
+      key: "recorded_at", header: t("adm.sdt.col.recorded"), essential: true, width: 16,
+      get: (s) => (s.backdated ? `${t("adm.sdt.kind.update")} · ${fmtWhen(s.recorded_at)}` : t("adm.sdt.kind.day")),
+      sortValue: (s) => s.recorded_at || s.created_at,
+      render: (s) => (s.backdated
+        ? <span className="sdt-recorded is-back" title={t("adm.sdt.flagHint", { recorded: fmtWhen(s.recorded_at) })}><Icon name="clock" size={12} /> {t("adm.sdt.kind.update")}<small> · {fmtWhen(s.recorded_at)}</small></span>
+        : <span className="sdt-recorded">{t("adm.sdt.kind.day")}</span>),
+    },
     { key: "store", header: t("adm.tbl.store"), get: storeCode, hiddenByDefault: !isAll, width: 8 },
     { key: "terminal", header: t("adm.pos.terminal"), get: (s) => termById.get(s.terminal_id)?.code || "", hiddenByDefault: true, width: 8 },
     { key: "seller_code", header: t("adm.pos.sales.seller"), essential: true, width: 8 },
-    { key: "customer", header: t("adm.tbl.customer"), essential: true, width: 22 },
+    { key: "customer", header: t("adm.tbl.customer"), essential: true, width: 22, render: (s) => s.customer || <span className="muted">{t("adm.pos.missing.noName")}</span> },
     { key: "customer_phone", header: t("adm.tbl.phone"), hiddenByDefault: true, width: 14 },
     { key: "frame_brand", header: t("adm.rpt.col.brand"), get: (s) => s.frame_brand || (s.own_frame ? t("adm.rpt.ownFrame") : ""), essential: true, width: 14 },
     { key: "frame_model", header: t("adm.rpt.col.model"), essential: true, width: 18 },
@@ -293,9 +307,13 @@ export default function PosSales({ me, params }) {
         <>
           <span className={`adm-chip ${s.status === "voided" ? "bad" : s.delivered_at ? "ok" : "neutral"}`}>{statusText(s)}</span>
           {s.void_requested_at && s.status !== "voided" ? <small className="pos-flag"> {t("adm.pos.sales.st.voidAsked")}</small> : null}
+          {/* Registrada con datos pendientes (sin contar el saldo, que tiene su columna). */}
+          {pendingOf(s).length ? <small className="pos-flag pos-flag-missing" title={pendingOf(s).map((k) => t(`adm.pos.missing.${k}`)).join(" · ")}> {t("adm.pos.missing.flag", { n: pendingOf(s).length })}</small> : null}
+          {/* Registrada después, con la fecha del día en que se vendió (lib/sale-date.ts). */}
+          {s.backdate ? <small className="pos-flag" title={t("adm.sdt.flagHint", { recorded: fmtWhen(s.backdate.recorded_at) })}> {t("adm.sdt.flag")}</small> : null}
         </>
       ),
-      text: (s) => `${statusText(s)}${s.void_requested_at && s.status !== "voided" ? ` · ${t("adm.pos.sales.st.voidAsked")}` : ""}`,
+      text: (s) => `${statusText(s)}${s.void_requested_at && s.status !== "voided" ? ` · ${t("adm.pos.sales.st.voidAsked")}` : ""}${pendingOf(s).length ? ` · ${t("adm.pos.missing.flag", { n: pendingOf(s).length })}` : ""}`,
     },
   ], [t, lang, isAll, termById, storeById, hasEcon, hasCommission]); // eslint-disable-line react-hooks/exhaustive-deps
   const columns = useColumns("pos-sales", cols);

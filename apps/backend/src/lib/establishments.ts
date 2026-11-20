@@ -1,3 +1,4 @@
+import type { StoreHours } from "./store-hours";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { createSalesChannelsWorkflow } from "@medusajs/medusa/core-flows";
 import { ESTABLISHMENT_MODULE } from "../modules/establishment";
@@ -40,6 +41,8 @@ export interface EstablishmentRow {
   color: string;
   kind: string;
   receipt_note: string | null;
+  /** Opening hours (lib/store-hours.ts); null = not set. */
+  hours: StoreHours | null;
   /** Share of the net sales the store keeps (family, partner, consignment); null = none set. */
   settlement_pct: number | null;
   is_active: boolean;
@@ -63,6 +66,7 @@ export async function listEstablishments(container: MedusaContainer): Promise<Es
     color: (r as { color?: string | null }).color ?? STORE_COLORS[i % STORE_COLORS.length],
     kind: String((r as { kind?: string }).kind ?? "own"),
     receipt_note: (r as { receipt_note?: string | null }).receipt_note ?? null,
+    hours: ((r as { hours?: StoreHours | null }).hours as StoreHours | null) ?? null,
     settlement_pct: (r as { settlement_pct?: number | null }).settlement_pct == null ? null : Number((r as { settlement_pct?: number }).settlement_pct),
     is_active: Boolean(r.is_active),
     created_at: String(r.created_at),

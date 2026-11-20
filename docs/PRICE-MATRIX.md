@@ -65,6 +65,15 @@ costo (la tienda online: 3 ×). La regla es una fila de `store_price_rule`
 tienda (guardar una cierra la otra). Solo de tienda (`store_required`), solo
 monturas (`bad_scope` en estuches).
 
+**Monto fijo (19-nov-2026)**: la regla puede llevar `addend` (dólares, 0–500,
+dos decimales; `bad_addend` si no) que se suma tras el múltiplo — «costo × 2.9 +
+$1.00». Va en `POST … { mode: "cost_multiple", value, addend }` y en la columna
+`store_price_rule.addend` (migración `UpgradeStoreRuleAddend11`). Esa columna
+NO está en el modelo del ORM a propósito: se lee y escribe por SQL en
+`lib/cost-multiple.ts` (`costRuleAddends` / `setCostRuleAddend`) y una base
+sin migrar responde 0, para que un `db:migrate` fallido no tumbe toda lectura
+de precios. Cambiar solo el monto vuelve a derivar los precios.
+
 Lo que produce NO se calcula al vuelo: se escribe como el **precio exacto** de
 cada modelo en esa tienda (`mode = override`, `source = "cost_multiple"`), que
 es lo que ya leen la caja, la matriz, la web (`lib/web-pricing.ts`) y los
@@ -72,7 +81,7 @@ informes.
 
 | Caso | Qué pasa |
 |---|---|
-| Modelo con costo (el de la tienda, o el de la cadena) | precio = costo × N, al centavo |
+| Modelo con costo (el de la tienda, o el de la cadena) | precio = costo × N + A, al centavo (A = monto fijo de la regla, 0 si no hay) |
 | Modelo sin costo | sin precio derivado: conserva el que tendría sin la regla |
 | El dueño escribió un precio para ese modelo en esa tienda | no se toca (`source` distinto) |
 | El dueño vacía ese precio | vuelve a costo × N al momento (`followCostMultiple`) |

@@ -1,0 +1,30 @@
+/* Horario de las tiendas (StoreHoursEditor.jsx, Stores.jsx). */
+.sh-card { margin-top: 10px; }
+.sh-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sh-head h3 { margin: 0; display: flex; align-items: center; gap: 6px; }
+.sh-preview { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--adm-muted); background: var(--adm-line-2, #f4f5f8); border-radius: 8px; padding: 6px 10px; overflow-wrap: anywhere; }
+.sh-week { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; }
+.sh-row, .sh-special { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 6px 8px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); background: var(--adm-surface); }
+.sh-row.closed { background: var(--adm-line-2, #f6f7f9); }
+.sh-day { min-width: 92px; }
+.sh-times { display: inline-flex; align-items: center; gap: 6px; }
+.sh-times input[type="time"], .sh-special input[type="date"] { min-height: 34px; }
+.sh-special .adm-input { flex: 1 1 160px; min-width: 0; }
+.sh-switch { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: 999px; padding: 3px 10px 3px 4px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 30px; color: var(--adm-muted); }
+.sh-switch > span { width: 26px; height: 16px; border-radius: 999px; background: var(--adm-line); position: relative; transition: background .15s; }
+.sh-switch > span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.sh-switch.on { color: var(--adm-green-dark, #1b7f4c); border-color: var(--adm-green-soft, #cdebd9); }
+.sh-switch.on > span { background: var(--adm-green, #2f9e5b); }
+.sh-switch.on > span::after { transform: translateX(10px); }
+.sh-copy { margin-left: auto; }
+.sh-sub { margin: 14px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--adm-muted); }
+.sh-special { margin-bottom: 6px; }
+.sh-err { margin-top: 10px; }
+.sh-actions { margin-top: 12px; }
+.sh-fact { gap: 5px; }
+.sh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--adm-red, #d64545); display: inline-block; }
+.sh-dot.on { background: var(--adm-green, #2f9e5b); }
+@media (max-width: 640px) {
+  .sh-day { min-width: 0; flex: 1 1 100%; }
+  .sh-copy { margin-left: 0; }
+}

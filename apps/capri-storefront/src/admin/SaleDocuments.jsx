@@ -7,6 +7,7 @@
 // de 80 mm (impresora térmica) y el recibo «doble» (una hoja carta apaisada con
 // copia del cliente y copia de la tienda, para una impresora normal). Los tres
 // llevan la foto de la montura: la del catálogo o la que trajo el cliente.
+import { WEEKDAYS, weekLine } from "./storeHours.js";
 import { useState } from "react";
 import qrcode from "qrcode-generator";
 import { T } from "../i18n/translations.js";
@@ -178,7 +179,8 @@ export function jobHtml(doc, copyKey = null) {
           <td>${e.prism == null ? "—" : `${fmtRx(e.prism, 2, false)}${e.base ? ` ${esc(e.base)}` : ""}`}</td>
           <td>${fmtRx(tk.rx?.seg_height, 2, false)}</td><td>${fmtRx(tk.rx?.[`pd_${eye}`], 2, false)}</td></tr>`;
       }).join("")}
-    </tbody></table>`;
+    </tbody></table>
+    ${tk.rx?.clinical?.dominant_eye ? `<p class="muted"><b>${esc(t("adm.va.dominant"))}:</b> ${esc(t(`adm.va.eye.${tk.rx.clinical.dominant_eye}`))}</p>` : ""}`;
   return doc.tickets.map((tk) => {
     const l = tk.line;
     const handling = l.handling === "patient_own_frame" ? t("adm.doc.job.handling.own") : t("adm.doc.job.handling.supplied");
@@ -305,7 +307,7 @@ export function receiptHtml(doc) {
     </tbody></table>
     <table><tbody>
       ${tot.discount > 0 || tot.tax > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.subtotal"))}</td><td class="r">${m(tot.list)}</td></tr>` : ""}
-      ${tot.discount > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.discount", { n: tot.discount_pct }))}</td><td class="r">−${m(tot.discount)}</td></tr>` : ""}
+      ${discountRows(doc, t, m)}
       ${tot.tax > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.tax"))}</td><td class="r">${m(tot.tax)}</td></tr>` : ""}
       <tr class="tot"><td>${esc(t("adm.doc.rcpt.total"))}</td><td class="r">${m(tot.total)}</td></tr>
       ${doc.payments.map((p) => `<tr><td>${esc(t(kindKey(p)))} (${esc(method(p))})</td><td class="r">${m(p.amount)}</td></tr>`).join("")}
@@ -318,12 +320,36 @@ export function receiptHtml(doc) {
     </tbody></table>
     <div class="c">${code128Svg(doc.sale.number, 36)}</div>
     <div class="c qr">${qrSvg(doc.tracking_url)}<div class="muted">${esc(doc.sale.number)} · ${esc(t("adm.doc.rcpt.scan"))}</div></div>
+    ${hoursHtml(doc, t, "muted")}
     ${doc.store.receipt_note ? `<hr/><div class="muted">${esc(doc.store.receipt_note)}</div>` : ""}
     <div class="muted c">${esc(t("adm.doc.rcpt.noRx"))}</div>
   </section>`;
 }
 
 /** Una copia del recibo doble: media hoja carta, densa, con todo lo de la venta. `copyKey` es el pie (cliente / tienda). */
+/**
+ * El descuento y la promoción, cada uno con su nombre (nunca se suman: la
+ * venta usó el mayor; backend lib/promotions.ts). Una promoción sin dinero
+ * (examen gratis, regalo) sale como «Incluye: …».
+ */
+function discountRows(doc, t, m) {
+  const tot = doc.totals;
+  const pr = doc.sale.promotion;
+  const rows = [];
+  if (tot.discount > 0) {
+    const label = pr && pr.priced ? t("adm.doc.rcpt.promotion", { name: pr.name, n: tot.discount_pct }) : t("adm.doc.rcpt.discount", { n: tot.discount_pct });
+    rows.push(`<tr><td>${esc(label)}${pr && pr.priced && pr.ref ? `<br/><span class="muted">${esc(t("adm.doc.rcpt.promoRef", { ref: pr.ref }))}</span>` : ""}</td><td class="r">−${m(tot.discount)}</td></tr>`);
+  }
+  if (pr && !pr.pct) rows.push(`<tr><td>${esc(t("adm.doc.rcpt.included", { name: pr.name }))}</td><td class="r">${pr.value_cents ? `<s>${m(pr.value_cents / 100)}</s> ${esc(t("adm.doc.rcpt.free"))}` : esc(t("adm.doc.rcpt.free"))}</td></tr>`);
+  return rows.join("");
+}
+
+/** La semana de la tienda en una línea (Tiendas → Horario); nada si no tiene horario. */
+function hoursHtml(doc, t, cls) {
+  const line = weekLine(doc.store.hours, WEEKDAYS.map((d) => t(`adm.hours.short.${d}`)), t("adm.hours.closedWord"));
+  return line ? `<div class="${cls}">${esc(t("adm.doc.rcpt.hours", { hours: line }))}</div>` : "";
+}
+
 function duoCopyHtml(doc, t, lang, copyKey) {
   const m = (v) => money(v, "usd", lang);
   const tot = doc.totals;
@@ -365,12 +391,13 @@ function duoCopyHtml(doc, t, lang, copyKey) {
       </tbody></table></div>
       <div><table><tbody>
         <tr><td>${esc(t("adm.doc.rcpt.subtotal"))}</td><td class="r">${m(tot.list)}</td></tr>
-        ${tot.discount > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.discount", { n: tot.discount_pct }))}</td><td class="r">−${m(tot.discount)}</td></tr>` : ""}
+        ${discountRows(doc, t, m)}
         ${tot.tax > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.tax"))}</td><td class="r">${m(tot.tax)}</td></tr>` : ""}
         <tr class="tot"><td>${esc(t("adm.doc.rcpt.total"))}</td><td class="r">${m(tot.total)}</td></tr>
         <tr class="due"><td>${esc(t("adm.doc.rcpt.balance"))}</td><td class="r">${m(tot.balance)}</td></tr>
       </tbody></table></div>
     </div>
+    ${hoursHtml(doc, t, "note")}
     ${doc.store.receipt_note ? `<div class="note">${esc(doc.store.receipt_note)}</div>` : ""}
     <div class="foot">
       <div class="bc">${code128Svg(doc.sale.number, 30)}<div class="muted">${esc(t("adm.doc.rcpt.noRx"))}</div></div>

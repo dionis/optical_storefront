@@ -2,14 +2,17 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { loadPricingOverview, resolvePricingStore } from "../../../../../lib/pricing-overview";
-import { applyCostMultiple, COST_MULTIPLE_MODE, costMultipleDenied } from "../../../../../lib/cost-multiple";
+import { applyCostMultiple, COST_MULTIPLE_MODE, costAddendDenied, costAddendOf, costMultipleDenied, setCostRuleAddend } from "../../../../../lib/cost-multiple";
 import { adjustmentDenied } from "../../../../../lib/store-pricing";
 import { replaceRule } from "../../../../../lib/store-pricing-data";
 import { mirrorPricesToSheet } from "../../../../../lib/gsheet-sync";
 
 /**
  * POST /admin/pricing/frames/rule
- *   { scope: "frame" | "case" | "all", mode: "none"|"percent"|"delta", value, store? }
+ *   { scope: "frame" | "case" | "all", mode: "none"|"percent"|"delta"|"cost_multiple", value, addend?, store? }
+ *
+ * `cost_multiple` (a store's frames only): price = cost × value + addend,
+ * addend in dollars (0…500, two decimals; empty = 0) — lib/cost-multiple.ts.
  *
  * THE rule the owner asked for: "I set a RULE that applies to ALL frames".
  * `scope` "frame" covers every frame, "case" every case (estuche), "all" both
@@ -26,6 +29,8 @@ interface Body {
   scope?: string;
   mode?: string;
   value?: unknown;
+  /** cost_multiple only: dollars added after the multiple (cost × value + addend); empty = 0. */
+  addend?: unknown;
   store?: unknown;
 }
 
@@ -41,7 +46,9 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   }
   // «N veces el costo de la montura» (lib/cost-multiple.ts): a STORE's rule for its frames.
   const byCost = mode === COST_MULTIPLE_MODE;
-  const denied = byCost ? (scope !== "frame" ? "bad_scope" : costMultipleDenied(body.value)) : adjustmentDenied(mode, body.value);
+  const denied = byCost
+    ? scope !== "frame" ? "bad_scope" : costMultipleDenied(body.value) ?? costAddendDenied(body.addend)
+    : adjustmentDenied(mode, body.value);
   if (denied) {
     res.status(422).json({ type: "invalid_data", reason: denied, message: "Invalid rule." });
     return;
@@ -72,8 +79,10 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
         byCost ? { mode: COST_MULTIPLE_MODE, value: Number(body.value), source: "pricing-panel" } : null,
         actorId
       );
-      // Writes (or removes) the price of every frame with a cost: cost × N.
-      await applyCostMultiple(req.scope, store.storeId, byCost ? Number(body.value) : null, actorId);
+      const rule = byCost ? { multiple: Number(body.value), addend: costAddendOf(body.addend) } : null;
+      if (rule) await setCostRuleAddend(req.scope, store.storeId, rule.addend);
+      // Writes (or removes) the price of every frame with a cost: cost × N + fixed amount.
+      await applyCostMultiple(req.scope, store.storeId, rule, actorId);
     }
     const overview = await loadPricingOverview(req.scope, store.storeId);
     logger.info(`[pricing] rule ${scope} ${mode} on ${store.storeId ?? "master"} by ${actorId ?? "?"}`);

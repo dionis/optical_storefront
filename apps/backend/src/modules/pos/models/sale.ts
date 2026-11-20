@@ -84,4 +84,10 @@ export const PosSale = model.define("pos_sale", {
    * later). Cleared when it is added from the sale (lib/rx-pending.ts).
    */
   rx_pending: model.boolean().default(false),
+  /** The promotion the sale used, copied (lib/promotions.ts AppliedPromotion); null = none. */
+  promotion: model.json().nullable(),
+  /** Patient data the sale was recorded without, still to complete (lib/pos.ts missingCustomerData); null = none. */
+  missing: model.json().nullable(),
+  /** Recorded with an earlier date (lib/sale-date.ts): when it was really recorded, by whom, the day chosen; null = recorded that day. */
+  backdate: model.json().nullable(),
 });

@@ -15,6 +15,7 @@ import {
   type LedgerInput,
   type LedgerItem,
 } from "../src/lib/financial-statement";
+import { detailsOf } from "../src/lib/category-report";
 import { lineEconomics, type InsightLine } from "../src/lib/sales-insights";
 import { cleanCostItem, computePnl, monthlyCharge, normalizedMonthly, perSaleCharge, spreadCents, taxCategoryOf, TAX_CATEGORIES, type CostItemLike } from "../src/lib/store-costs";
 import { planRulesImport, type ImportContext, type StoredCostItem } from "../src/lib/store-costs-import";
@@ -379,5 +380,73 @@ describe("planRulesImport", () => {
   it("a privileged manager can only touch their stores (and no shared cost)", () => {
     const plan = planRulesImport({ costs: [{ row: 2, store: "", kind: "fixed", category: "rent", amount: 1, starts_on: "2026-01-01" }, { row: 3, store: "Op2", kind: "fixed", category: "rent", amount: 1, starts_on: "2026-01-01" }] }, { ...ctx, writableStores: ["est_1"] });
     expect(plan.errors.map((e) => e.reason)).toEqual(["forbidden_store", "forbidden_store"]);
+  });
+});
+
+// ── 3. The accounting report by category (17-nov-2026) ──────────────────────
+
+describe("category report: every detail adds up to its statement line", () => {
+  const ledger = ledgerOf(input());
+  const ENT = ["est_1", "est_2", WEB_ENTITY];
+  const entities = [
+    { id: "est_1", code: "Op1", name: "One", color: null, kind: "store" as const },
+    { id: "est_2", code: "Op2", name: "Two", color: null, kind: "store" as const },
+    { id: WEB_ENTITY, code: "WEB", name: "Online", color: null, kind: "web" as const },
+    { id: "total", code: "TOTAL", name: "Consolidated", color: null, kind: "total" as const },
+  ];
+  for (const group of ["month", "quarter", "year"] as const) {
+    it(`by ${group}: COGS concepts, cost items and sellers = the statement, per period and per entity`, () => {
+      const doc = buildStatement(ledger, group, entities);
+      const det = detailsOf(ledger, group, ENT);
+      for (const period of [...doc.periods, "all"]) {
+        const s = doc.statements[period].total;
+        const at = (a: { total: number; by_period: Record<string, number> }) => (period === "all" ? a.total : a.by_period[period] ?? 0);
+        for (const line of ["frames", "lenses", "treatments", "per_order"] as const) {
+          expect(det.cogs.filter((c) => c.line === line).reduce((a, c) => a + at(c), 0)).toBe(s.cogs[line]);
+        }
+        expect(det.items.filter((i) => i.tax_category === "cost_of_goods").reduce((a, i) => a + at(i), 0)).toBe(s.cogs.items);
+        for (const c of OPEX_CATEGORIES) expect(det.items.filter((i) => i.tax_category === c).reduce((a, i) => a + at(i), 0)).toBe(s.opex[c]);
+        expect(det.sellers.reduce((a, x) => a + at(x), 0)).toBe(s.opex.commissions);
+      }
+      for (const id of ENT) {
+        const s = doc.statements.all[id];
+        const of = (a: { by_entity: Record<string, number> }) => a.by_entity[id] ?? 0;
+        expect(det.cogs.reduce((a, c) => a + of(c), 0)).toBe(s.cogs.total);
+        expect(det.items.reduce((a, i) => a + of(i), 0)).toBe(s.cogs.items + OPEX_CATEGORIES.reduce((a, c) => a + s.opex[c], 0));
+      }
+    });
+  }
+
+  it("names the per-sale rule («lab») and the frame brand as concepts, and keeps one row per cost item", () => {
+    const det = detailsOf(ledger, "month", ENT);
+    expect(det.cogs.find((c) => c.line === "per_order")).toMatchObject({ key: "order_fixed:lab", label: "lab" });
+    expect(det.cogs.some((c) => c.line === "frames")).toBe(true);
+    expect(new Set(det.items.map((i) => i.id)).size).toBe(det.items.length);
+    expect(det.items.find((i) => i.id === "off")).toBeUndefined(); // inactive: never charged
+    // a narrower view: only that store's charges
+    const one = detailsOf(ledger, "month", ["est_2"]);
+    expect(one.items.every((i) => Object.keys(i.by_entity).every((k) => k === "est_2"))).toBe(true);
+  });
+});
+
+// ── 4. «Se cobra» por tienda en los libros y en el Ejecutivo (18-nov-2026) ──
+
+describe("a rule a store switched off is not part of its sales' cost", () => {
+  const toggles = [{ id: "t1", establishment_id: "est_2", ref_kind: "rule", ref_id: "order_fixed:lab", enabled: false }] as never;
+  it("ledger: est_2 carries no lab; est_1 still does", () => {
+    const on = ledgerOf(input())[0];
+    const off = ledgerOf(input({ toggles }))[0];
+    expect(on.entities.get("est_2")!.cogs.per_order).toBe(100);
+    expect(off.entities.get("est_2")!.cogs.per_order).toBe(0);
+    expect(off.entities.get("est_1")!.cogs.per_order).toBe(on.entities.get("est_1")!.cogs.per_order);
+  });
+  it("Executive: the same answer as the ledger", () => {
+    const facts = FACTS.filter((f) => f.order_id === "o4");
+    const lines: InsightLine[] = facts.map((f) => ({ ...f, sale_id: "s_o4", terminal_id: null, title: null, brand: null, brand_slug: "flexure", category: "frame", payment_methods: null, hour: 12 }));
+    const orders = new Map([["o4", { gross: 9000, net: 9000, lines: 1 }]]);
+    const base = { rules: RULES, orders, saleFees: new Map([["s_o4", 0]]), commissionPct: () => null };
+    const withLab = lineEconomics(lines, base)[0].cost;
+    const noLab = lineEconomics(lines, { ...base, toggles })[0].cost;
+    expect(withLab - noLab).toBe(100);
   });
 });

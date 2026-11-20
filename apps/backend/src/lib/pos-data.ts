@@ -1,3 +1,7 @@
+import type { Clinical } from "./visual-acuity";
+import { backdateRecord, type Backdate, type BackdateRecord } from "./sale-date";
+import { saleMissing, type MissingKey } from "./pos";
+import type { AppliedPromotion } from "./promotions";
 import type { ICustomerModuleService, IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import {
@@ -328,7 +332,7 @@ async function upsertCustomer(container: MedusaContainer, c: PosCustomer, custom
   if (customerId && !existing) throw new PosError("customer_not_found", 404);
   // No email given: only the phone can match (an empty email must never "find" someone).
   if (!existing && c.email) existing = (await svc.listCustomers({ email: c.email }, { take: 1, order: { created_at: "ASC" } }))[0];
-  if (!existing) {
+  if (!existing && c.phone) {
     const ids = await customerIdsByPhone(container, c.phone);
     if (ids.length) existing = (await svc.listCustomers({ id: ids }, { take: 1, order: { created_at: "ASC" } }))[0];
   }
@@ -337,19 +341,20 @@ async function upsertCustomer(container: MedusaContainer, c: PosCustomer, custom
     // Never erase a known birth date with a blank one.
     if (!metadata.birth_date && c.birth_date) metadata.birth_date = c.birth_date;
     await svc.updateCustomers(existing.id, {
-      first_name: existing.first_name || c.first_name,
-      last_name: existing.last_name || c.last_name,
-      phone: existing.phone || c.phone,
+      first_name: existing.first_name || c.first_name || null,
+      last_name: existing.last_name || c.last_name || null,
+      phone: existing.phone || c.phone || null,
       email: existing.email || c.email || undefined,
       metadata,
     });
     return existing.id;
   }
+  // A name or phone not given yet stays empty (lenient sale), never "".
   const created = await svc.createCustomers({
     email: c.email || undefined,
-    first_name: c.first_name,
-    last_name: c.last_name,
-    phone: c.phone,
+    first_name: c.first_name || undefined,
+    last_name: c.last_name || undefined,
+    phone: c.phone || undefined,
     has_account: false,
     metadata: { birth_date: c.birth_date, created_at_store: true },
   });
@@ -374,6 +379,8 @@ export interface RxMeta {
   rx_date: string | null;
   rx_date_approx: boolean;
   worn_source: WornSource | null;
+  /** Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts). */
+  clinical?: Clinical | null;
 }
 
 export interface StoredRx {
@@ -390,6 +397,8 @@ export interface StoredRx {
   pd_od: number | null;
   pd_os: number | null;
   seg_height: number | null;
+  /** Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts); null = not recorded. */
+  clinical: Clinical | null;
 }
 
 const n = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
@@ -413,6 +422,7 @@ function toStoredRx(r: Record<string, unknown>): StoredRx {
     pd_od: n(r.pd_od),
     pd_os: n(r.pd_os),
     seg_height: n(r.seg_height),
+    clinical: r.clinical && typeof r.clinical === "object" ? (r.clinical as Clinical) : null,
   };
 }
 
@@ -536,6 +546,7 @@ async function insertPrescriptions(
     worn_source: kind === "worn" ? m.worn_source : null,
     previous_prescription_id: previous,
     rx_number: number,
+    clinical: m.clinical ? JSON.stringify(m.clinical) : null,
   });
   let wornId: string | null = null;
   if (input.worn && meta.worn) {
@@ -552,8 +563,8 @@ async function insertPrescriptions(
  * The NEW prescription of a sale whose prescription came later (lib/rx-pending.ts):
  * the same row the till writes, with the next Rx number. Returns its id and number.
  */
-export async function insertLatePrescription(container: MedusaContainer, customerId: string, rx: Prescription, rxDate: string | null): Promise<{ id: string; rxNumber: string }> {
-  const out = await insertPrescriptions(container, { new: { rx }, worn: null }, { new: { rx_date: rxDate, rx_date_approx: false, worn_source: null }, worn: null }, customerId);
+export async function insertLatePrescription(container: MedusaContainer, customerId: string, rx: Prescription, rxDate: string | null, clinical: Clinical | null = null): Promise<{ id: string; rxNumber: string }> {
+  const out = await insertPrescriptions(container, { new: { rx }, worn: null }, { new: { rx_date: rxDate, rx_date_approx: false, worn_source: null, clinical }, worn: null }, customerId);
   if (!out.newId || !out.rxNumber) throw new PosError("save_failed", 500);
   return { id: out.newId, rxNumber: out.rxNumber };
 }
@@ -1192,12 +1203,22 @@ export interface CreateSaleInput {
    * and the lab ticket waits until the prescription is added from the sale.
    */
   rxPending?: boolean;
+  /** The promotion the sale used (lib/pos-promotion.ts), copied onto the sale. */
+  promotion?: AppliedPromotion | null;
+  /** Patient data recorded as missing (lib/pos.ts missingCustomerData). */
+  missing?: MissingKey[];
+  /** The sale happened on an earlier day (lib/sale-date.ts); null/absent = now. */
+  backdate?: Backdate | null;
   idempotencyKey: string | null;
 }
 
 export interface CreatedSale {
   id: string;
   number: string;
+  /** The day it was recorded as, when backdated (lib/sale-date.ts). */
+  sold_on?: string | null;
+  /** Set when the backdated sale was recorded as already delivered. */
+  delivered_at?: string | null;
   order_id: string;
   display_id: number | null;
   total: number;
@@ -1219,6 +1240,8 @@ export interface CreatedSale {
   replayed?: boolean;
   /** Sold with the prescription pending (lib/rx-pending.ts): the lab ticket waits for it. */
   rx_pending?: boolean;
+  /** What the sale was recorded without (lib/pos.ts saleMissing): the till says it and how to complete it. */
+  missing?: MissingKey[];
 }
 
 /** Sales currently being recorded, by idempotency key (one process; the unique index covers the rest). */
@@ -1262,6 +1285,7 @@ async function replayOf(container: MedusaContainer, key: string): Promise<Create
     optical_change: null,
     replayed: true,
     rx_pending: sale.rx_pending === true,
+    missing: saleMissing(sale.missing, { rx_pending: sale.rx_pending === true, paid: Number(sale.paid_cents) / 100, insurance: Number(sale.insurance_cents) / 100, total: Number(sale.total_cents) / 100 }),
   };
 }
 
@@ -1315,14 +1339,16 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
   // none waits for the others. The order's stamp below needs the tray. The
   // approval was already claimed (status "used") before the order was placed;
   // only the link to the sale is written now that the sale exists.
+  const b = input.backdate ?? null;
+  // An old sale recorded as already delivered takes no tray: the glasses are not in the store.
   const [tray] = await Promise.all([
-    withLenses
+    withLenses && !b?.delivered
       ? takeTray(container, store.id, sale.id).then(async (n) => {
           await svc.updatePosSales({ id: sale.id, tray_number: n });
           return n;
         })
       : Promise.resolve(null),
-    writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments }),
+    writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments, paidAt: b && b.moneyOn === "sale" ? b.soldAt : null }),
     approval ? svc.updateDiscountApprovals({ id: approval.id, sale_id: sale.id } as never) : Promise.resolve(),
   ]);
 
@@ -1344,6 +1370,13 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
 
   // Dashboards (sale_fact), after the order carries the sale's id.
   await projectOrder(container, orderId);
+
+  // Recorded as already delivered (lib/sale-date.ts): delivered as of that day, silently.
+  let deliveredAt: string | null = null;
+  if (b?.delivered && p.balance_cents === 0) {
+    const row = await getSale(container, sale.id);
+    if (row) deliveredAt = (await markDelivered(container, row, { actorId: input.sellerId, at: b.soldAt, silent: true })).delivered_at;
+  }
 
   logger.info(`[pos] sale ${number} (order ${orderId}) by ${input.sellerCode ?? input.sellerId ?? "?"} at ${input.terminal.code}: ${quote.total_cents} cents, paid ${p.paid_cents}, balance ${p.balance_cents}`);
 
@@ -1371,6 +1404,9 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     promised_on: promisedOn,
     optical_change: change,
     rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true,
+    sold_on: input.backdate?.date ?? null,
+    delivered_at: deliveredAt,
+    missing: saleMissing(input.missing, { rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true, paid: p.paid_cents / 100, insurance: p.insurance_cents / 100, total: quote.total }),
     ...(framePhotoFailed ? { frame_photo_failed: true } : {}),
   };
 }
@@ -1422,9 +1458,9 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
   }
 
   const address = {
-    first_name: customer.first_name,
-    last_name: customer.last_name,
-    phone: customer.phone,
+    first_name: customer.first_name || undefined,
+    last_name: customer.last_name || undefined,
+    phone: customer.phone || undefined,
     ...(customer.address
       ? {
           address_1: customer.address.address_1,
@@ -1460,9 +1496,9 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
         // The two switches of the pay step. No email on file = nothing to mail.
         notify_email: input.notifyEmail && Boolean(customer.email),
         notify_sms: input.notifySms === true,
-        patient_phone: customer.phone,
+        patient_phone: customer.phone || null,
         // Where the stage SMS goes (lib/order-stage-transition.ts reads `phone`), only when asked for.
-        ...(input.notifySms === true ? { phone: customer.phone } : {}),
+        ...(input.notifySms === true && customer.phone ? { phone: customer.phone } : {}),
         delivery: input.delivery,
         // The prescription comes later (lib/rx-pending.ts): the order board and the lab ticket wait for it.
         ...(input.rxPending === true ? { rx_pending: true } : {}),
@@ -1539,7 +1575,8 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
   const withLenses = quote.lines.some((l) => l.lens_category);
   // Counted on the store's calendar: a sale at 7 pm in Texas is still "today"
   // there although the UTC date has already moved on (lib/pos.ts promisedDate).
-  const promisedOn = promisedDate(new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
+  // A backdated sale was promised from the day it happened (lib/sale-date.ts).
+  const promisedOn = promisedDate(input.backdate?.soldAt ?? new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
   const p = input.payments;
   const sale = await pos(container).createPosSales({
     number,
@@ -1566,8 +1603,25 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
     // Only the private keys (the patient's frames): a store frame's photo is a public URL.
     own_frame_photo_keys: photoKeys.filter((k, i) => k && input.lines[i]?.kind === "own_frame") as unknown as Record<string, unknown>,
     rx_pending: input.rxPending === true && withLenses && !rx.newId,
+    promotion: (input.promotion ?? null) as unknown as Record<string, unknown> | null,
+    missing: (input.missing?.length ? input.missing : null) as unknown as Record<string, unknown> | null,
   });
+  if (input.backdate) await backdateSale(container, sale.id, orderId, input.backdate, input.sellerId);
   return { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed };
+}
+
+/**
+ * The sale happened on an earlier day (lib/sale-date.ts): its row and its
+ * Medusa order carry THAT instant as their date — every report, the receipt and
+ * the dashboards (projected right after, from `pos_sale.created_at`) read it
+ * from there — and the row keeps when it was really recorded. The payments
+ * follow `money_on` (see writePayments).
+ */
+async function backdateSale(container: MedusaContainer, saleId: string, orderId: string, b: Backdate, actorId: string | null): Promise<void> {
+  const pg = pgOf(container);
+  const record = backdateRecord(b, new Date(), actorId);
+  await pg("pos_sale").where({ id: saleId }).update({ created_at: b.soldAt, backdate: JSON.stringify(record) });
+  await pg("order").where({ id: orderId }).update({ created_at: b.soldAt });
 }
 
 export async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {
@@ -1610,11 +1664,27 @@ async function ledgerCashPayments(
 /** Writes payments to the ledger; an insurer's part also opens its claim (HU-113). */
 async function writePayments(
   container: MedusaContainer,
-  args: { saleId: string; orderId: string | null; establishmentId: string; terminalId: string | null; actorId: string | null; kind: "deposit" | "balance"; payments: PosPayment[] }
+  args: {
+    saleId: string;
+    orderId: string | null;
+    establishmentId: string;
+    terminalId: string | null;
+    actorId: string | null;
+    kind: "deposit" | "balance";
+    payments: PosPayment[];
+    /**
+     * A backdated sale whose money was collected THAT day (lib/sale-date.ts,
+     * `money_on: "sale"`): the payments carry that instant and enter no
+     * register — the day's register was counted (or closed) without the system,
+     * and today's would show cash that is not in the drawer.
+     */
+    paidAt?: Date | null;
+  }
 ): Promise<void> {
   const svc = pos(container);
   if (!args.payments.length) return;
-  const cashSession = args.payments.some((p) => p.counts_as_cash) ? await openCashSession(container, { establishmentId: args.establishmentId, terminalId: args.terminalId, actorId: args.actorId }) : null;
+  const offRegister = Boolean(args.paidAt);
+  const cashSession = !offRegister && args.payments.some((p) => p.counts_as_cash) ? await openCashSession(container, { establishmentId: args.establishmentId, terminalId: args.terminalId, actorId: args.actorId }) : null;
   const written = await svc.createPosSalePayments(
     args.payments.map((p) => ({
       sale_id: args.saleId,
@@ -1626,11 +1696,15 @@ async function writePayments(
       received_by: args.actorId,
       fee_cents: p.fee_cents,
       counts_as_cash: p.counts_as_cash,
-      details: p.details as unknown as Record<string, unknown>,
+      details: (offRegister ? { ...p.details, backdated: true } : p.details) as unknown as Record<string, unknown>,
       cash_session_id: p.counts_as_cash ? cashSession : null,
     }))
   );
-  await ledgerCashPayments(container, { sessionId: cashSession, saleId: args.saleId, terminalId: args.terminalId, actorId: args.actorId, rows: written });
+  if (offRegister) {
+    await pgOf(container)("pos_sale_payment").whereIn("id", written.map((w) => w.id)).update({ created_at: args.paidAt });
+  } else {
+    await ledgerCashPayments(container, { sessionId: cashSession, saleId: args.saleId, terminalId: args.terminalId, actorId: args.actorId, rows: written });
+  }
   for (const p of args.payments.filter((x) => x.insurance)) {
     await svc.createInsuranceClaims({
       sale_id: args.saleId,
@@ -1696,6 +1770,20 @@ export interface SaleRow {
   wearing_photo_at: string | null;
   /** Lenses sold before the prescription exists; it is added from the sale (lib/rx-pending.ts). */
   rx_pending: boolean;
+  /** The promotion it used (lib/promotions.ts), as it was then; null = none. */
+  promotion: AppliedPromotion | null;
+  /** What is still to complete (lib/pos.ts saleMissing): patient data, prescription, deposit. [] = complete. */
+  missing: MissingKey[];
+  /** Recorded with an earlier date: when it was really recorded and the day chosen (lib/sale-date.ts); null = that day. */
+  backdate: BackdateRecord | null;
+  /**
+   * When the sale was really written into the system (owner, 19-nov-2026: «se debe
+   * incluir la fecha en la que se registró, así se sabe si fue una actualización o
+   * una venta del día»): the backdate's `recorded_at`, else `created_at`.
+   */
+  recorded_at: string;
+  /** True when it was recorded on a later day than the one it is of. */
+  backdated: boolean;
   /**
    * The live payment rows. `id` and `details` are what the payment correction
    * (lib/payment-correction.ts) sends back for a row it keeps; `corrected_at`
@@ -1761,6 +1849,11 @@ export function toSale(s: Record<string, unknown>, payments: Array<Record<string
     has_wearing_photo: typeof s.wearing_photo_key === "string" && s.wearing_photo_key.length > 0,
     wearing_photo_at: iso(s.wearing_photo_at),
     rx_pending: s.rx_pending === true,
+    promotion: s.promotion && typeof s.promotion === "object" ? (s.promotion as AppliedPromotion) : null,
+    missing: saleMissing(s.missing, { rx_pending: s.rx_pending === true, paid: Number(s.paid_cents ?? 0) / 100, insurance: Number(s.insurance_cents ?? 0) / 100, total: Number(s.total_cents ?? 0) / 100, status: String(s.status) }),
+    backdate: s.backdate && typeof s.backdate === "object" ? (s.backdate as BackdateRecord) : null,
+    recorded_at: s.backdate && typeof s.backdate === "object" && (s.backdate as BackdateRecord).recorded_at ? (s.backdate as BackdateRecord).recorded_at : new Date(s.created_at as string).toISOString(),
+    backdated: Boolean(s.backdate && typeof s.backdate === "object"),
     payments: payments
       .filter((p) => p.sale_id === s.id)
       .map((p) => ({
@@ -1965,7 +2058,7 @@ const DELIVERY_STAGES = ["shipped", "in_transit", "delivered"] as const;
  * logged and the delivery stands — the sale is delivered in our records and
  * the board shows it so from `delivered_at` anyway.
  */
-async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow, actorId: string | null): Promise<boolean> {
+async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow, actorId: string | null, silent = false): Promise<boolean> {
   if (!sale.order_id) return false;
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   try {
@@ -1981,7 +2074,7 @@ async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow
     const steps = DELIVERY_STAGES.slice(first);
     for (const stage of steps) {
       try {
-        await transitionOrderStage(container, sale.order_id, { stage, actorId: actorId ?? "pos", noNotification: stage !== "delivered" });
+        await transitionOrderStage(container, sale.order_id, { stage, actorId: actorId ?? "pos", noNotification: silent || stage !== "delivered" });
       } catch (e) {
         const why = e instanceof StageError ? `${e.reason}: ${e.message}` : (e as Error).message;
         logger.warn(`[pos] sale ${sale.number}: order ${sale.order_id} not moved to '${stage}': ${why}`);
@@ -2002,14 +2095,24 @@ async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow
  * it is, nothing is rewritten. `balance_due` while money is owed — collect it
  * first, or in the same step with `collectAndDeliver` (HU-32).
  */
-export async function markDelivered(container: MedusaContainer, sale: SaleRow, opts: { actorId?: string | null } = {}): Promise<SaleRow> {
+export async function markDelivered(
+  container: MedusaContainer,
+  sale: SaleRow,
+  opts: {
+    actorId?: string | null;
+    /** The instant it was handed over, when earlier than now (a backdated sale recorded as delivered). */
+    at?: Date | null;
+    /** No message to the patient on the way to "delivered" (it happened long ago). */
+    silent?: boolean;
+  } = {}
+): Promise<SaleRow> {
   // Cheap early exits on what the caller saw; the UPDATE below is the real gate.
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
   if (sale.balance > 0) throw new PosError("balance_due", 409, { balance: sale.balance });
   if (sale.delivered_at) return sale;
   const actorId = opts.actorId ?? null;
   // The order first: once delivered_at exists the board refuses every move.
-  const stageMoved = await advanceOrderToDelivered(container, sale, actorId);
+  const stageMoved = await advanceOrderToDelivered(container, sale, actorId, opts.silent === true);
   const plan = deliveryClaimPlan(sale.id);
   const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ delivered_at: unknown }>;
   if (!res.rows[0]) {
@@ -2020,6 +2123,7 @@ export async function markDelivered(container: MedusaContainer, sale: SaleRow, o
     if (now.balance > 0) throw new PosError("balance_due", 409, { balance: now.balance });
     return now; // delivered meanwhile: the other hand-over counts
   }
+  if (opts.at) await pgOf(container)("pos_sale").where({ id: sale.id }).update({ delivered_at: opts.at });
   await releaseTray(container, sale.id);
   await recordAudit(container, {
     actorId,
@@ -2027,7 +2131,7 @@ export async function markDelivered(container: MedusaContainer, sale: SaleRow, o
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
-    after: { delivery: sale.delivery, order_stage_moved: stageMoved },
+    after: { delivery: sale.delivery, order_stage_moved: stageMoved, ...(opts.at ? { delivered_on: opts.at.toISOString(), backdated: true } : {}) },
   });
   return (await getSale(container, sale.id)) as SaleRow;
 }

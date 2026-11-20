@@ -11,6 +11,7 @@ import { disabledIds, loadCostToggles, loadDefaultCommissionPct } from "./store-
 import { brandOf } from "./store-assortment";
 import { defaultLensFinish, LENS_FINISHES, parseLensFinish, type LensFinish } from "./lens-finish";
 import { brandOfTarget, isActiveAt, type PriceRuleLike } from "./store-pricing";
+import { costRuleAddends } from "./cost-multiple";
 import { openRules, productPrices, type PriceRuleRow } from "./store-pricing-data";
 import { STORE_COST_MODULE } from "../modules/store-cost";
 import type StoreCostModuleService from "../modules/store-cost/service";
@@ -317,21 +318,31 @@ export interface FrameRuleView {
   inherited: boolean;
   /** cost_multiple only: how many models sell at cost × N today. */
   applied?: number;
+  /** cost_multiple only: dollars added after the multiple (cost × N + addend). */
+  addend?: number;
+}
+
+/** The store's live «N × costo» rule row, if any. */
+function costMultipleRuleOf(rules: PriceRuleRow[], storeId: string | null, now: Date): PriceRuleRow | null {
+  if (!storeId) return null;
+  return rules.filter((r) => r.establishment_id === storeId && r.scope === "frame" && r.target == null && r.mode === "cost_multiple" && isActiveAt(r, now)).sort((a, b) => toMs(b.valid_from) - toMs(a.valid_from))[0] ?? null;
 }
 
 function frameRuleView(
   rules: PriceRuleRow[],
   storeId: string | null,
   scope: "frame" | "case",
-  now: Date
+  now: Date,
+  addends: Map<string, number> = new Map()
 ): FrameRuleView | null {
   // The store's «N × costo» rule is its frame rule: it is what prices its frames.
-  const multiple = storeId && scope === "frame" ? rules.filter((r) => r.establishment_id === storeId && r.scope === "frame" && r.target == null && r.mode === "cost_multiple" && isActiveAt(r, now)).sort((a, b) => toMs(b.valid_from) - toMs(a.valid_from))[0] : null;
+  const multiple = scope === "frame" ? costMultipleRuleOf(rules, storeId, now) : null;
   if (multiple) {
     return {
       scope: "frame",
       mode: "cost_multiple",
       value: Number(multiple.value),
+      addend: addends.get(multiple.id) ?? 0,
       since: multiple.valid_from ? new Date(multiple.valid_from).toISOString() : null,
       inherited: false,
       applied: rules.filter((r) => r.establishment_id === storeId && r.mode === "override" && r.source === "cost_multiple" && r.target && isActiveAt(r, now)).length,
@@ -474,6 +485,9 @@ export async function loadPricingOverview(
   ]);
 
   // ── Frames and cases ──
+  // The fixed amount of a «N × costo + $» rule lives outside the ORM model (lib/cost-multiple.ts).
+  const costRule = costMultipleRuleOf(rules, effectiveStore, now);
+  const addends = costRule ? await costRuleAddends(container, [costRule.id]) : new Map<string, number>();
   // A brand price (`brand:<slug>`, v2) is not a model's price: the matrix shows it in the brand header.
   // Prices derived from a «N × costo» rule are the rule's, not prices the owner typed: they are not listed as his.
   const liveOverrides = rules.filter((r) => r.mode === "override" && r.target && !brandOfTarget(r.target) && r.source !== "cost_multiple" && isActiveAt(r, now));
@@ -594,7 +608,7 @@ export async function loadPricingOverview(
   return {
     store: store ? { id: store.id, code: String(store.code ?? ""), name: String(store.name ?? "") } : null,
     frames: {
-      rule: frameRuleView(rules, effectiveStore, "frame", now),
+      rule: frameRuleView(rules, effectiveStore, "frame", now, addends),
       case_rule: frameRuleView(rules, effectiveStore, "case", now),
       overrides,
       counts: {

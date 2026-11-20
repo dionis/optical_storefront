@@ -1,4 +1,4 @@
-import { costMultipleDenied, costMultiplePrice, planCostMultiple, COST_MULTIPLE_SOURCE } from "../src/lib/cost-multiple";
+import { costAddendDenied, costAddendOf, costMultipleDenied, costMultiplePrice, planCostMultiple, COST_MULTIPLE_SOURCE } from "../src/lib/cost-multiple";
 import { RULE_MODES } from "../src/lib/store-pricing";
 
 const frame = (id: string, cost: number | null) => ({ product_id: id, is_case: false, cost_cents: cost });
@@ -76,6 +76,37 @@ describe("«N veces el costo»: a store's frame rule", () => {
     const plan = planCostMultiple(3, [frame("a", 2500)], [derived("r1", "a", 75), derived("r2", "a", 75)]);
     expect(plan.close.sort()).toEqual(["r1", "r2"]);
     expect(plan.set).toEqual([{ product_id: "a", price: 75 }]);
+  });
+
+  it("accepts a fixed amount of 0…500 dollars with at most two decimals, empty = 0", () => {
+    for (const ok of [undefined, null, "", 0, 1, "1.00", 0.5, 499.99, 500]) expect(costAddendDenied(ok)).toBeNull();
+    for (const bad of [-1, 500.01, 1.005, "x", Number.NaN, true, {}]) expect(costAddendDenied(bad)).toBe("bad_addend");
+    expect(costAddendOf(undefined)).toBe(0);
+    expect(costAddendOf("")).toBe(0);
+    expect(costAddendOf("1.00")).toBe(1);
+    expect(costAddendOf(0.1)).toBe(0.1);
+  });
+
+  it("prices cost × N + fixed amount to the cent", () => {
+    expect(costMultiplePrice(2000, 2.9, 1)).toBe(59);
+    expect(costMultiplePrice(1833, 2.9, 1)).toBe(54.16);
+    expect(costMultiplePrice(1999, 2.9, 0.99)).toBe(58.96);
+    expect(costMultiplePrice(2500, 3, 0)).toBe(costMultiplePrice(2500, 3));
+  });
+
+  it("writes cost × N + fixed amount and replaces prices when only the amount changes", () => {
+    const fresh = planCostMultiple(2.9, [frame("a", 2000)], [], 1);
+    expect(fresh.set).toEqual([{ product_id: "a", price: 59 }]);
+    const same = planCostMultiple(2.9, [frame("a", 2000)], [derived("r1", "a", 59)], 1);
+    expect(same.set).toEqual([]);
+    expect(same.close).toEqual([]);
+    const moved = planCostMultiple(2.9, [frame("a", 2000)], [derived("r1", "a", 58)], 1);
+    expect(moved.set).toEqual([{ product_id: "a", price: 59 }]);
+    expect(moved.close).toEqual(["r1"]);
+  });
+
+  it("a rule without the amount prices exactly as before", () => {
+    expect(planCostMultiple(3, [frame("a", 2500)], [])).toEqual(planCostMultiple(3, [frame("a", 2500)], [], 0));
   });
 
   it("removing the rule removes every derived price and no typed one", () => {

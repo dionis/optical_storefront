@@ -5,14 +5,14 @@ import { STORE_COST_MODULE } from "../modules/store-cost";
 import type StoreCostModuleService from "../modules/store-cost/service";
 import { localParts } from "./alerts";
 import { commissionResolverOf } from "./commission-pct";
-import { computeCostSheet, isPaymentFeeRule, lineGroup, lineKind, listCostRules, type CostOrderLike, type CostRule } from "./costing";
+import { computeCostSheet, conceptKey, isPaymentFeeRule, lineGroup, lineKind, listCostRules, rulesInStore, type CostOrderLike, type CostRule } from "./costing";
 import { listEstablishments, type EstablishmentRow } from "./establishments";
 import { pickOnlineStore } from "./online-store";
 import { loadProductMetadata } from "./frame-specs";
 import { parseLensFinish } from "./lens-finish";
 import { listSellers } from "./sellers";
 import { profilesByUser } from "./staff-profile-data";
-import { loadDefaultCommissionPct } from "./store-cost-toggle";
+import { loadCostToggles, loadDefaultCommissionPct, type CostToggleRow } from "./store-cost-toggle";
 import { allocateShared, monthlyCharge, perSaleCharge, taxCategoryOf, TAX_CATEGORIES, type CostItemLike, type TaxCategory } from "./store-costs";
 import { tenant } from "./tenant";
 
@@ -119,8 +119,9 @@ export interface SellerCommission {
  * `pctOf` is the SAME precedence lib/sales-insights.ts uses
  * (lib/commission-pct.ts: profile, seller record, default), so a referral-only
  * seller with no panel user still earns in the store result, instead of
- * earning in Ejecutivo and nowhere else. Amounts in cents; the base is the NET
- * (total − sales tax), never the gross; rounded per line.
+ * earning in Ejecutivo and nowhere else. The base is the NET (total − sales
+ * tax), never the gross; rounded per line. `byStore` is in CENTS; each
+ * seller's `net_sales` and `commission` are in DOLLARS (cents ÷ 100 once).
  */
 export function commissionsOf(
   facts: readonly CommissionFactLike[],
@@ -240,6 +241,14 @@ export interface EntityMonth {
   payment_fees: number;
   commissions: number;
   costs: CostCharge[];
+  /**
+   * The cost of goods by concept (lib/costing.ts `conceptKey`: a frame model or
+   * brand, a lens design, a material, a treatment, each per-sale rule such as
+   * «Laboratorio»), in cents. Σ of a `line` = that `cogs` field, to the cent
+   * (same rounding). Read by the accounting report by category
+   * (lib/category-report.ts); nothing else needs it. Absent = nothing sold.
+   */
+  cogs_lines?: Record<string, { label: string; line: keyof Omit<CogsCents, "total">; cents: number }>;
 }
 
 export interface LedgerMonth {
@@ -266,6 +275,8 @@ export interface LedgerFact {
   lens_ar: string | null;
   lens_finish: string | null;
   sold_date_local: string;
+  /** Lab surcharge of the line for a high power (lib/lab-surcharge.ts), cents; part of the lenses' cost. */
+  lab_surcharge_cents?: number;
 }
 
 export interface LedgerItem extends CostItemLike {
@@ -277,6 +288,12 @@ export interface LedgerInput {
   facts: readonly LedgerFact[];
   pays: readonly FeeRowLike[];
   rules: CostRule[];
+  /**
+   * The stores' «Se cobra» switches (lib/store-cost-toggle.ts): a rule a store
+   * switched off is not part of ITS sales' cost (lib/costing.ts rulesInStore).
+   * Absent = every rule everywhere.
+   */
+  toggles?: readonly CostToggleRow[];
   items: readonly LedgerItem[];
   /** brand slug (or collection slug) of each product id. */
   brandOf: (productId: string | null) => string | null;
@@ -332,6 +349,15 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
   const gatewayPct = active.filter(isPaymentFeeRule).reduce((s, r) => s + r.amount, 0);
   const gatewayFixed = active.filter((r) => r.kind === "payment_fixed").reduce((s, r) => s + Math.round(r.amount * 100), 0);
 
+  // Each store's rules, once: the ones it has not switched off.
+  const byStore = new Map<string, CostRule[]>();
+  const rulesOf = (storeId: string | null): CostRule[] => {
+    if (!storeId || !input.toggles?.length) return rules;
+    let r = byStore.get(storeId);
+    if (!r) byStore.set(storeId, (r = rulesInStore(rules, storeId, input.toggles)));
+    return r;
+  };
+
   const out: LedgerMonth[] = [];
   for (const month of months) {
     const entities = new Map<string, EntityMonth>();
@@ -378,12 +404,28 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
           lens: l.lens_design ? { design_code: l.lens_design, material_code: l.lens_material, photo_code: l.lens_photo, ar_code: l.lens_ar, finish: parseLensFinish(l.lens_finish) } : null,
         })),
       };
-      const sheet = computeCostSheet(order, rules, null, null, null);
+      const sheet = computeCostSheet(order, rulesOf(order.establishment_id ?? null), null, null, null);
       for (const l of sheet.lines) {
         if (lineGroup(l) !== "material") continue;
         const cents = Math.round(Number(l.subtotal) * 100);
-        ent.cogs[cogsLineOf(lineKind(l))] += cents;
+        const cogsLine = cogsLineOf(lineKind(l));
+        ent.cogs[cogsLine] += cents;
         ent.cogs.total += cents;
+        if (cents) {
+          const lines = (ent.cogs_lines ??= {});
+          const key = conceptKey(l);
+          const row = (lines[key] ??= { label: String(l.label ?? key), line: cogsLine, cents: 0 });
+          row.cents += cents;
+        }
+      }
+      // High-power lab surcharges of the order's lens jobs (lib/lab-surcharge.ts): lenses' cost.
+      const surcharge = group.reduce((a, l) => a + (Number(l.lab_surcharge_cents) || 0), 0);
+      if (surcharge) {
+        ent.cogs.lenses += surcharge;
+        ent.cogs.total += surcharge;
+        const lines = (ent.cogs_lines ??= {});
+        const row = (lines["lab_surcharge"] ??= { label: "Recargo de laboratorio (graduación alta)", line: "lenses", cents: 0 });
+        row.cents += surcharge;
       }
       const gross = group.reduce((s, l) => s + l.total_cents, 0);
       ent.gross_sales += gross;
@@ -684,6 +726,8 @@ export interface LoadedLedger {
   rules: CostRule[];
   /** THE online store, when the owner has one: the web's orders are booked on it. */
   onlineStoreId: string | null;
+  /** The live cost items the ledger charged from (descriptions, vendors, owners for the reports). */
+  items: LedgerItem[];
 }
 
 export interface ShippingRow {
@@ -758,7 +802,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     })
     .where("sold_date_local", ">=", first)
     .where("sold_date_local", "<=", last)
-    .select("order_id", "channel", "establishment_id", "seller_id", "seller_code", "product_id", "sku", "qty", "total_cents", "tax_cents", "lens_design", "lens_material", "lens_photo", "lens_ar", "lens_finish", "sold_date_local")) as Array<Record<string, unknown>>;
+    .select("order_id", "channel", "establishment_id", "seller_id", "seller_code", "product_id", "sku", "qty", "total_cents", "tax_cents", "lens_design", "lens_material", "lens_photo", "lens_ar", "lens_finish", "sold_date_local", "lab_surcharge_cents")) as Array<Record<string, unknown>>;
   const lines: LedgerFact[] = facts.map((f) => ({
     order_id: String(f.order_id),
     channel: String(f.channel),
@@ -776,6 +820,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     lens_ar: (f.lens_ar as string | null) ?? null,
     lens_finish: (f.lens_finish as string | null) ?? null,
     sold_date_local: String(f.sold_date_local),
+    lab_surcharge_cents: Number(f.lab_surcharge_cents) || 0,
   }));
 
   // Delivery charged on the web's orders (the order's shipping lines of its
@@ -788,7 +833,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
   const winFrom = new Date(Date.parse(`${first}T00:00:00Z`) - 2 * 86400_000);
   const winTo = new Date(Date.parse(`${last}T00:00:00Z`) + 3 * 86400_000);
   const sellerIds = [...new Set(lines.map((l) => l.seller_id).filter((v): v is string => Boolean(v)))];
-  const [rules, meta, pays, items, profiles, sellerRows, defaultPct] = await Promise.all([
+  const [rules, meta, pays, items, profiles, sellerRows, defaultPct, toggles] = await Promise.all([
     listCostRules(container),
     loadProductMetadata(pg, [...new Set(lines.map((l) => String(l.product_id ?? "")).filter(Boolean))]),
     pg("pos_sale_payment as p")
@@ -801,6 +846,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     profilesByUser(container, sellerIds),
     listSellers(container).catch(() => []),
     loadDefaultCommissionPct(container),
+    loadCostToggles(container).catch(() => [] as CostToggleRow[]),
   ]);
   const sellerByCode = new Map(sellerRows.map((s) => [s.code, { commission_pct: s.commission_pct }]));
   const pctOf = commissionResolverOf(profiles, sellerByCode, defaultPct);
@@ -834,6 +880,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     facts: lines,
     pays: pays as unknown as FeeRowLike[],
     rules,
+    toggles,
     items: liveItems.map((it) => ({ ...it, amount_cents: Number(it.amount_cents) })),
     brandOf: (id) => {
       const m = meta.get(String(id ?? "")) ?? {};
@@ -857,7 +904,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
       return Boolean(e && (e.net_sales || e.shipping_income || e.cogs.total || e.payment_fees || e.commissions || e.sales_count || e.costs.some((c) => c.cents)));
     });
   const shownStores = inView.filter((s) => s.is_active || hasFigures(s.id));
-  return { ledger, stores: everyStore, shownStores, rules, onlineStoreId: online };
+  return { ledger, stores: everyStore, shownStores, rules, onlineStoreId: online, items: liveItems };
 }
 
 /** The statement document for a span, a store selection and a grouping (cents). */

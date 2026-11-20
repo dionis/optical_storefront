@@ -63,7 +63,7 @@ import "./empty-period.css";
  * ── PESTAÑA POR PESTAÑA ────────────────────────────────────────────────────
  * Con las tres piezas (dinero por tienda y período, y un informe que sacar):
  *   exec, salesboard, storeorders, possales, pendingbalances, cash, statement,
- *   sellers, storecosts, mysales.
+ *   sellers, storecosts, finreport, mysales.
  * Casos con matiz:
  *   pricing      un precio no es un informe → sin período; la tienda SÍ (decide
  *                qué variación se edita sobre el maestro).
@@ -102,6 +102,8 @@ export const BAR_TABS = {
   statement: ALL,
   sellers: ALL,
   storecosts: ALL,
+  // Contabilidad por categorías: tienda y período de la barra (meses completos), PDF/Excel/CSV de lo que se ve.
+  finreport: ALL,
   mysales: ALL,
   // ── Con matiz ──
   pricing: { store: true, period: false, export: true },
@@ -109,6 +111,8 @@ export const BAR_TABS = {
   storestatus: { store: true, period: false, export: true },
   approvals: { store: true, period: false, export: false },
   audit: { store: true, period: true, export: false },
+  // Registro de operaciones: la tienda y el período de la barra lo filtran, y exporta (PDF, Excel, CSV) lo filtrado.
+  oplog: ALL,
   // Pedidos: la tienda de la barra filtra la lista (una tienda, la tienda online o todas); las fechas son las suyas.
   orders: { store: true, period: false, export: false },
   // «Productos y precios» (Productos + Precios y costos, 6-nov-2026): la tienda
@@ -118,6 +122,8 @@ export const BAR_TABS = {
   products: { store: true, period: false, export: true },
   // ── Solo el buscador ──
   stores: NONE,
+  // Promociones: una lista de ofertas con sus propias tiendas y fechas.
+  promotions: NONE,
   team: NONE,
   security: NONE,
   posconfig: NONE,

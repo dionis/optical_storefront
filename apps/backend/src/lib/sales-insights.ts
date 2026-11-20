@@ -3,7 +3,8 @@ import { loadDefaultCommissionPct } from "./store-cost-toggle";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
-import { computeCostSheet, isPaymentFeeRule, loadCostingContext, type CostRule } from "./costing";
+import { computeCostSheet, isPaymentFeeRule, loadCostingContext, rulesInStore, type CostRule } from "./costing";
+import type { CostToggleRow } from "./store-cost-toggle";
 import { listEstablishments } from "./establishments";
 import { frameCostsLoaded } from "./frame-cost";
 import { loadProductMetadata } from "./frame-specs";
@@ -68,6 +69,8 @@ export interface InsightLine {
   lens_ar: string | null;
   /** Stock or surfaced lens; null on rows projected before finishes existed (the design's default). */
   lens_finish?: string | null;
+  /** Lab surcharge for a high power (lib/lab-surcharge.ts), cents; part of the line's material cost. */
+  lab_surcharge_cents?: number;
   payment_methods: string[] | null;
   qty: number;
   total_cents: number;
@@ -96,6 +99,8 @@ export interface EconomicsContext {
   saleCash?: Map<string, { paid: number; balance: number }>;
   /** Commission % of the line's seller; null when none is defined. */
   commissionPct: (line: InsightLine) => number | null;
+  /** The stores' «Se cobra» switches: a rule a store switched off is not part of its sales' cost (lib/costing.ts rulesInStore). */
+  toggles?: readonly CostToggleRow[];
 }
 
 export interface LineEconomics {
@@ -175,9 +180,23 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
   // computeCostSheet drops the inactive rules itself (ruleIndex), so an
   // inactive material rule leaves its line "without a cost defined" — the same
   // answer the Costs tab gives.
-  const materials = ctx.rules.filter((r) => MATERIAL_KINDS.has(r.kind));
+  const materialsAll = ctx.rules.filter((r) => MATERIAL_KINDS.has(r.kind));
   const active = ctx.rules.filter((r) => r.active);
-  const orderFixed = active.filter((r) => r.kind === "order_fixed").reduce((s, r) => s + Math.round(r.amount * 100), 0);
+  // Per store: the rules it has not switched off (same as the books, lib/financial-statement.ts).
+  const perStore = new Map<string, { materials: CostRule[]; orderFixed: number }>();
+  const storeRules = (storeId: string | null) => {
+    if (!storeId || !ctx.toggles?.length) return null;
+    let r = perStore.get(storeId);
+    if (!r) {
+      const live = rulesInStore(ctx.rules, storeId, ctx.toggles);
+      r = { materials: live.filter((x) => MATERIAL_KINDS.has(x.kind)), orderFixed: live.filter((x) => x.active && x.kind === "order_fixed").reduce((a, x) => a + Math.round(x.amount * 100), 0) };
+      perStore.set(storeId, r);
+    }
+    return r;
+  };
+  const materialsOf = (storeId: string | null) => storeRules(storeId)?.materials ?? materialsAll;
+  const orderFixedAll = active.filter((r) => r.kind === "order_fixed").reduce((s, r) => s + Math.round(r.amount * 100), 0);
+  const orderFixedOf = (storeId: string | null) => storeRules(storeId)?.orderFixed ?? orderFixedAll;
   const gatewayPct = active.filter(isPaymentFeeRule).reduce((s, r) => s + r.amount, 0);
   const gatewayFixed = active.filter((r) => r.kind === "payment_fixed").reduce((s, r) => s + Math.round(r.amount * 100), 0);
 
@@ -202,7 +221,7 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
           lens: { design_code: l.lens_design, material_code: l.lens_material, photo_code: l.lens_photo, ar_code: l.lens_ar, finish: parseLensFinish(l.lens_finish) },
         }],
       },
-      materials,
+      materialsOf(l.establishment_id),
       null,
       null,
       null
@@ -241,7 +260,7 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
     // Till sale: the fee recorded with its payments. Web order: the gateway's
     // % of what the customer was charged, plus its fixed fee.
     const feeTotal = first.sale_id ? ctx.saleFees.get(first.sale_id) ?? 0 : Math.round((order.gross * gatewayPct) / 100) + gatewayFixed;
-    const fixedParts = allocateCents(orderFixed * coverage, weights);
+    const fixedParts = allocateCents(orderFixedOf(first.establishment_id) * coverage, weights);
     const feeParts = allocateCents(feeTotal * coverage, weights);
     // Cash, with the same answer /admin/sales-analytics/sales puts on a row
     // (lib/sales-analytics.ts saleListRowOf): a till sale knows what it took and
@@ -261,7 +280,8 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
   return lines.map((l, i) => {
     const net = nets[i];
     const material = materialCost(l);
-    const cost = material.cost + fixedOf[i];
+    // A high power's lab surcharge (lib/lab-surcharge.ts) is part of the lenses' cost, as in the books.
+    const cost = material.cost + fixedOf[i] + (Number(l.lab_surcharge_cents) || 0);
     const fee = feeOf[i];
     const commission = Math.round((net * (ctx.commissionPct(l) ?? 0)) / 100);
     return { net, cost, fee, commission, profit: net - cost - fee - commission, paid: paidOf[i], balance: balanceOf[i], missing_cost: material.missing };
@@ -707,7 +727,7 @@ export function linesQuery(pg: Knex, f: AnalyticsFilter, tz: string): Knex.Query
       "sale_fact.order_id", "sale_fact.sale_id", "sale_fact.channel", "sale_fact.establishment_id", "sale_fact.terminal_id",
       "sale_fact.seller_id", "sale_fact.seller_code", "sale_fact.product_id", "sale_fact.sku", "sale_fact.title", "sale_fact.brand",
       "sale_fact.category", "sale_fact.lens_design", "sale_fact.lens_material", "sale_fact.lens_photo", "sale_fact.lens_ar", "sale_fact.lens_finish",
-      "sale_fact.payment_methods", "sale_fact.qty", "sale_fact.total_cents", "sale_fact.tax_cents", "sale_fact.sold_date_local",
+      "sale_fact.payment_methods", "sale_fact.qty", "sale_fact.total_cents", "sale_fact.tax_cents", "sale_fact.sold_date_local", "sale_fact.lab_surcharge_cents",
       pg.raw("EXTRACT(HOUR FROM sale_fact.sold_at AT TIME ZONE ?)::int AS hour", [tz])
     )
     .orderBy("sale_fact.sold_at", "desc")
@@ -754,6 +774,7 @@ async function loadLines(pg: Knex, f: AnalyticsFilter, tz: string, orderIds?: st
         qty: Number(r.qty),
         total_cents: Number(r.total_cents),
         tax_cents: Number(r.tax_cents),
+        lab_surcharge_cents: Number(r.lab_surcharge_cents) || 0,
         hour: Number(r.hour),
       };
     }),
@@ -799,7 +820,7 @@ export async function orderEconomics(container: MedusaContainer, f: AnalyticsFil
   const pg = pgOf(container);
   const [cur, ctx, costing] = await Promise.all([loadLines(pg, f, tenant().timezone, ids), loadOrderContext(pg, f, ids), loadCostingContext(container)]);
   const commissionPct = await commissionResolver(container, cur.lines, costing);
-  return sumEconomicsByOrder(cur.lines, lineEconomics(cur.lines, { rules: costing.rules, ...ctx, commissionPct }));
+  return sumEconomicsByOrder(cur.lines, lineEconomics(cur.lines, { rules: costing.rules, toggles: costing.toggles, ...ctx, commissionPct }));
 }
 
 /** `by` is the main dimension; `bys` the others to group by in the same pass (one query, many tables). */
@@ -817,8 +838,8 @@ export async function salesInsights(container: MedusaContainer, f: AnalyticsFilt
     listEstablishments(container),
   ]);
   const commissionPct = await commissionResolver(container, [...cur.lines, ...old.lines], costing);
-  const econ = lineEconomics(cur.lines, { rules: costing.rules, ...curOrders, commissionPct });
-  const oldEcon = lineEconomics(old.lines, { rules: costing.rules, ...oldOrders, commissionPct });
+  const econ = lineEconomics(cur.lines, { rules: costing.rules, toggles: costing.toggles, ...curOrders, commissionPct });
+  const oldEcon = lineEconomics(old.lines, { rules: costing.rules, toggles: costing.toggles, ...oldOrders, commissionPct });
   const byStore = new Map(stores.map((s) => [s.id, s]));
   return buildInsights({
     from: f.from,

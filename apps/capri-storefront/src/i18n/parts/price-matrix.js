@@ -237,9 +237,9 @@ export default {
     "adm.pm.rules.adjust": "Ajuste general",
     "adm.pm.rules.adjustHint": "Elige una tienda arriba para su ajuste de lentes; sin tienda se edita la regla del maestro.",
 
-    "adm.pm.promo": "Precio antes {before} · Promoción −{pct} %",
+    "adm.pm.promo": "Precio antes {before} · Descuento −{pct} %",
     "adm.pm.promoBefore": "Precio antes",
-    "adm.pm.promoTag": "Promoción −{pct} %",
+    "adm.pm.promoTag": "Descuento −{pct} %",
 
     "adm.err.pricing.unknown_item": "Ese artículo ya no está en la lista.",
     "adm.err.pricing.price_first": "Pon primero un precio a esa celda.",
@@ -674,9 +674,9 @@ export default {
     "adm.pm.rules.adjust": "Store-wide adjustment",
     "adm.pm.rules.adjustHint": "Pick a store above for its lens adjustment; with no store the master rule is edited.",
 
-    "adm.pm.promo": "Was {before} · Promotion −{pct} %",
+    "adm.pm.promo": "Was {before} · Discount −{pct} %",
     "adm.pm.promoBefore": "Was",
-    "adm.pm.promoTag": "Promotion −{pct} %",
+    "adm.pm.promoTag": "Discount −{pct} %",
 
     "adm.err.pricing.unknown_item": "That item is no longer on the list.",
     "adm.err.pricing.price_first": "Price that cell first.",

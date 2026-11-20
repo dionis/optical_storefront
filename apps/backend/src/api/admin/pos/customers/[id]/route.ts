@@ -2,6 +2,8 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { getCustomer, lastPrescription, listSales, opticalHistory, PosError } from "../../../../../lib/pos-data";
 import { posHandler, posScope } from "../../../../../lib/pos-route";
 import { getPosSettings } from "../../../../../lib/pos-settings";
+import { purchaseSummary } from "../../../../../lib/patient-purchases";
+import { clinicalSummaryOf } from "../../../../../lib/clinical-history";
 
 /**
  * GET /admin/pos/customers/:id — a customer at the counter:
@@ -19,15 +21,21 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     const customer = await getCustomer(req.scope, id);
     if (!customer) throw new PosError("customer_not_found", 404);
     const settings = await getPosSettings(req.scope);
-    const [last, history, sales] = await Promise.all([
+    const [last, history, sales, purchases] = await Promise.all([
       lastPrescription(req.scope, id),
       opticalHistory(req.scope, id, settings.optical_thresholds),
       listSales(req.scope, { establishmentIds: null, customerId: id }, 50),
+      // How many times they bought (every store and the web): a returning patient, and promotions «desde la N.ª compra».
+      purchaseSummary(req.scope, id),
     ]);
     res.json({
       customer,
       last_prescription: last,
+      purchase_summary: purchases,
       history,
+      // The patient's clinical history across their prescriptions (lib/clinical-history.ts): conditions with
+      // the first and last visit, family history, latest medications/allergies and every doctor's note.
+      clinical_summary: clinicalSummaryOf(history),
       // Purchase history across stores: what, where, when, how much — no payments detail.
       sales: sales.map((s) => ({
         id: s.id,

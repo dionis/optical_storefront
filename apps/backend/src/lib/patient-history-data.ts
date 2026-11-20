@@ -4,6 +4,7 @@ import type { Knex } from "@mikro-orm/knex";
 import { examDue, groupPurchases, listRow, PATIENT_RULES, summarize, type PatientFactLike, type PatientListAgg, type Purchase, type PatientSummary } from "./patient-history";
 import { getCustomer, lastPrescription, opticalHistory, searchCustomers, type HistoryEntry, type PosCustomerRow, type StoredRx } from "./pos-data";
 import { getPosSettings } from "./pos-settings";
+import { clinicalSummaryOf, type PatientClinicalSummary } from "./clinical-history";
 
 const pgOf = (c: MedusaContainer) => c.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
 
@@ -167,6 +168,8 @@ export interface PatientFile {
   purchases: Purchase[];
   last_prescription: StoredRx | null;
   history: HistoryEntry[];
+  /** Clinical history across the prescriptions (lib/clinical-history.ts). */
+  clinical_summary: PatientClinicalSummary;
   exam: { due_on: string; overdue: boolean } | null;
 }
 
@@ -206,6 +209,7 @@ export async function patientFile(container: MedusaContainer, customerId: string
     purchases,
     last_prescription: last,
     history,
+    clinical_summary: clinicalSummaryOf(history),
     exam: examDue(last, now),
   };
 }

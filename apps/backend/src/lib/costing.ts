@@ -1,5 +1,6 @@
 import type { IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import type { Knex } from "@mikro-orm/knex";
 import { COSTING_MODULE } from "../modules/costing/index";
 import type CostingModuleService from "../modules/costing/service";
 import { LENS_CONFIG_MODULE } from "../modules/lens-config/index";
@@ -148,7 +149,7 @@ export interface CostRule {
 }
 
 /** What a line is, for the API and the breakdowns (`lineKind`). `tax` is never a rule: it comes from the order. */
-export type CostLineKind = CostKind | "tax" | "seller_commission" | "manual";
+export type CostLineKind = CostKind | "tax" | "seller_commission" | "manual" | "lab_surcharge";
 
 /**
  * Which block of the model a line sits in:
@@ -425,6 +426,11 @@ export interface CostOrderLike {
    * figure. Absent (a web order, a chain-wide projection) means the master.
    */
   establishment_id?: string | null;
+  /**
+   * The lab's surcharge for a high power on this order's lens jobs, in dollars
+   * (lib/lab-surcharge.ts; from `sale_fact.lab_surcharge_cents`). A material line.
+   */
+  lab_surcharge?: number | null;
   items: Array<{
     title?: string;
     quantity?: unknown;
@@ -770,6 +776,11 @@ export function computeCostSheet(
   for (const r of active.filter((x) => x.kind === "order_fixed")) {
     materials.push(lineFromRule(r, `order_fixed:${r.match_key}`, 1));
   }
+  const surcharge = round2(Math.max(0, num(order.lab_surcharge)));
+  if (surcharge > 0) {
+    // After the items: `summarizeCostSheets` pairs the frame lines with the items by position.
+    materials.push({ key: "lab_surcharge:rx", kind: "lab_surcharge", group: "material", label: "Recargo de laboratorio (graduación alta)", amount: surcharge, qty: 1, subtotal: surcharge, source: "rule", match_key: "lab_surcharge", undefined_cost: false });
+  }
   const materials_total = round2(materials.reduce((a, l) => a + l.subtotal, 0));
 
   // ── 3. Distribution of the net base: the owner's percentages, then the seller ──
@@ -826,6 +837,7 @@ export function lineKind(line: Pick<CostLine, "key" | "source"> & { kind?: CostL
   const [head] = line.key.split(":");
   if (head === "frame") return "frame_brand";
   if (head === "tax") return "tax";
+  if (head === "lab_surcharge") return "lab_surcharge";
   return isCostKind(head) ? head : "manual";
 }
 
@@ -834,6 +846,7 @@ export const LINE_KIND_LABEL: Record<CostLineKind, string> = {
   tax: "Impuestos",
   seller_commission: "Comisión de vendedores",
   manual: "Ajustes manuales",
+  lab_surcharge: "Recargo de laboratorio",
 };
 
 /** Group of a line; lines computed here carry it, older stored lines fall back on the kind. */
@@ -1143,6 +1156,17 @@ export async function saveStoredSheet(
   await orders.updateOrders([{ id: orderId, metadata: next }]);
 }
 
+/**
+ * The rules that count in a store: the ones it has not switched off
+ * («Se cobra», pricing panel → Reglas y comisiones). No store (a chain-wide
+ * view) or no toggles = every rule. The books (lib/financial-statement.ts), the
+ * Executive (lib/sales-insights.ts) and the order sheet all filter with this.
+ */
+export function rulesInStore(rules: CostRule[], storeId: string | null | undefined, toggles: readonly CostToggleRow[] = []): CostRule[] {
+  if (!storeId || !toggles.length) return rules;
+  return rules.filter((r) => isEnabled(r.id ?? `${r.kind}:${r.match_key}`, storeId, toggles as CostToggleRow[]));
+}
+
 /** Sheet of a projected board order (rules + seller + stored override). Best effort on the seller lookup. */
 export async function costSheetForOrder(
   container: MedusaContainer,
@@ -1156,7 +1180,7 @@ export async function costSheetForOrder(
   const stored = readStoredSheet(metadata);
   // A store may switch a cost rule off for itself (pricing panel → Costos).
   // Without toggles every rule counts, which is what the chain-wide views want.
-  const live = rules.filter((r) => isEnabled(r.id ?? `${r.kind}:${r.match_key}`, order.establishment_id, toggles));
+  const live = rulesInStore(rules, order.establishment_id, toggles);
   return computeCostSheet(
     {
       total: order.total,
@@ -1166,11 +1190,24 @@ export async function costSheetForOrder(
       // The store is what decides WHICH frame cost this sale is priced with.
       establishment_id: order.establishment_id ?? null,
       items: order.items,
+      lab_surcharge: await labSurchargeOf(container, (order as { id?: string }).id ?? null),
     },
     live,
     seller,
     stored
   );
+}
+
+/** The lab surcharge projected for an order (dollars; 0 when none or unreadable). */
+async function labSurchargeOf(container: MedusaContainer, orderId: string | null): Promise<number> {
+  if (!orderId) return 0;
+  try {
+    const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+    const row = (await pg("sale_fact").where({ order_id: orderId }).sum({ c: "lab_surcharge_cents" }).first()) as { c?: unknown } | undefined;
+    return (Number(row?.c) || 0) / 100;
+  } catch {
+    return 0;
+  }
 }
 
 /** Rules + seller commission map in one call; empty on failure (callers degrade). */

@@ -30,6 +30,8 @@ export const NAV_GROUPS = [
   { key: "stores", icon: "store", items: [
     { key: "stores", icon: "store" },
     { key: "storecosts", icon: "costs" },
+    // Toda la contabilidad del período por categorías, con cada partida y PDF (solo dueño y superadmin).
+    { key: "finreport", icon: "layers" },
     { key: "statement", icon: "clipboard" },
     { key: "posconfig", icon: "settings" },
   ] },
@@ -44,6 +46,8 @@ export const NAV_GROUPS = [
     { key: "patients", icon: "user" },
     { key: "products", icon: "prices" },
     { key: "costs", icon: "percent" },
+    // Promociones por tienda con fechas (compre 2 lleve 1, examen gratis…): no son los descuentos (docs/PROMOCIONES.md).
+    { key: "promotions", icon: "tag" },
     { key: "sellers", icon: "sellers" },
   ] },
   { key: "admin", icon: "security", items: [
@@ -59,6 +63,8 @@ export const NAV_GROUPS = [
     // supervisor sigue configurando LAS SUYAS (navGroupsFor, más abajo).
     { key: "alerts", icon: "bell" },
     { key: "audit", icon: "history" },
+    // Cada escritura en la base de datos, con quién y desde dónde (docs/OPERATION-LOG.md): solo dueño y superadmin.
+    { key: "oplog", icon: "database" },
     { key: "security", icon: "security" },
     // Créditos y consumo de los proveedores de IA: solo dueño y superadmin.
     { key: "aiusage", icon: "sparkles" },

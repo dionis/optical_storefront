@@ -445,7 +445,7 @@ export default function LensProcess() {
   const { t, tv, lang } = useLang();
   useFrameMediaVersion();
   const { toast } = useFeedback();
-  const { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT } = useLensCatalog();
+  const { DESIGNS, MATERIALS, BASE, BASE_MATERIALS, PHOTO, AR, TREAT } = useLensCatalog();
   const NON_PROG_DESIGNS = DESIGNS.filter((d) => d.cat !== "prog");
   const PROG_GAMAS = DESIGNS.filter((d) => d.cat === "prog");
   const { productBySlug, products, loading } = useCatalog();
@@ -743,9 +743,18 @@ export default function LensProcess() {
     if (product?.attributes?.age === "Niños") return MATERIALS.find((m) => m.id === "poly");
     return MATERIALS.find((m) => maxAbs <= m.maxAbs) || MATERIALS[MATERIALS.length - 1];
   }, [maxAbs, product?.attributes?.age, MATERIALS]);
-  // Mostramos TODOS los materiales para que el cliente pueda elegir cualquiera;
-  // el recomendado según su graduación se resalta con ★ (y el banner de arriba).
-  const suitableMats = useMemo(() => MATERIALS, [MATERIALS]);
+  // Solo los materiales con precio ACTIVO para el diseño elegido: así el panel
+  // admin manda — una casilla (diseño × material) apagada en opticaelrancho.com/admin
+  // deja de aparecer aquí, en lugar de ofrecerse a "$0". Si todavía no hay
+  // diseño elegido, se muestran los materiales que tengan al menos una casilla
+  // activa en cualquier diseño (la lista ya viene filtrada así desde el matrix).
+  // El recomendado según su graduación se resalta con ★ (y el banner de arriba).
+  const suitableMats = useMemo(() => {
+    if (!designId || !BASE_MATERIALS) return MATERIALS;
+    const allowed = new Set(BASE_MATERIALS[designId] || []);
+    if (allowed.size === 0) return MATERIALS;
+    return MATERIALS.filter((m) => allowed.has(m.id));
+  }, [MATERIALS, BASE_MATERIALS, designId]);
   // Si la graduación sube y el material elegido deja de ser apto, se deselecciona
   // (evita quedar con un material que ya no aparece en la lista).
   useEffect(() => {
