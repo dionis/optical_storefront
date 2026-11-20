@@ -1,0 +1,21 @@
+/* Agudeza visual y ojo dominante (VisualAcuityCard.jsx). Tokens --adm-*. Táctil ≥ 44 px. */
+.va-card { border: 1px solid var(--adm-line); border-radius: 12px; padding: 10px 12px; margin: 10px 0 0; display: grid; gap: 8px; min-width: 0; }
+.va-card legend { display: inline-flex; align-items: center; gap: 5px; padding: 0 6px; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--adm-muted); }
+.va-grid { border-collapse: collapse; width: 100%; max-width: 460px; }
+.va-grid th { font-size: 11.5px; font-weight: 800; color: var(--adm-muted); text-align: left; padding: 4px 6px; white-space: nowrap; }
+.va-grid thead th { text-align: center; text-transform: uppercase; letter-spacing: .03em; font-size: 10.5px; }
+.va-grid td { padding: 3px 4px; text-align: center; }
+.va-grid input { width: 100%; min-width: 92px; height: 40px; padding: 0 8px; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); color: var(--adm-ink); font: 600 15px var(--adm-font); text-align: center; font-variant-numeric: tabular-nums; }
+.va-grid input[aria-invalid="true"] { border-color: var(--adm-red); background: var(--adm-red-soft, rgba(220, 38, 38, .06)); }
+.va-err { color: var(--adm-red); font-size: 12px; font-weight: 600; }
+.va-gain { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12.5px; color: var(--adm-muted); }
+.va-gain span { font-weight: 700; color: var(--adm-ink); }
+.va-gain span.up, .va-grid td.up { color: var(--adm-green, #15803D); }
+.va-gain span.down { color: var(--adm-red); }
+.va-dom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; font-weight: 700; color: var(--adm-ink); }
+.va-dom button { min-width: 64px; height: 40px; border: 1px solid var(--adm-line); background: var(--adm-surface); color: var(--adm-ink); border-radius: 999px; font: 800 14px var(--adm-font); cursor: pointer; }
+.va-dom button.on { background: var(--adm-navy, #1F2A44); border-color: var(--adm-navy, #1F2A44); color: #fff; }
+.va-dom small { font-weight: 500; }
+.va-view { display: grid; gap: 4px; margin-top: 6px; }
+.va-grid.ro td { font-weight: 700; font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--adm-line); padding: 4px 8px; }
+.va-dom-ro { margin: 0; font-size: 12.5px; }

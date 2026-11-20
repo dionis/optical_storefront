@@ -1,9 +1,8 @@
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
-import { updateProductVariantsWorkflow } from "@medusajs/medusa/core-flows";
 import type { Knex } from "@mikro-orm/knex";
 import type { CatalogProduct, ImportPlan, LensKnown } from "./price-import";
-import { replaceRule } from "./store-pricing-data";
+import { replaceRule, setVariantPrices } from "./store-pricing-data";
 
 /**
  * Reads what planOwnerPriceImport needs and applies its plan. The plan is
@@ -68,10 +67,10 @@ export async function applyImportPlan(container: MedusaContainer, plan: ImportPl
       filters: { id: [...price.keys()] },
     });
     const updates = (data as Array<{ id: string; variants?: Array<{ id: string }> }>).flatMap((p) =>
-      (p.variants ?? []).map((v) => ({ id: v.id, prices: [{ amount: price.get(p.id) as number, currency_code: "usd" }] }))
+      (p.variants ?? []).map((v) => ({ variant_id: v.id, product_id: p.id, prices: [{ amount: price.get(p.id) as number, currency_code: "usd" }] }))
     );
     for (let i = 0; i < updates.length; i += 100) {
-      await updateProductVariantsWorkflow(container).run({ input: { product_variants: updates.slice(i, i + 100) as never } });
+      await setVariantPrices(container, updates.slice(i, i + 100));
     }
     variants = updates.length;
   }
@@ -79,10 +78,15 @@ export async function applyImportPlan(container: MedusaContainer, plan: ImportPl
   const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
   let lensCells = 0;
   await pg.transaction(async (trx) => {
+    // The owner's file prices each (design, material) once: that is the
+    // design's DEFAULT finish (stock; a progressive's single digital cell).
+    // A digital single-vision / bifocal cell is typed in the panel, never here.
+    const progCodes = trx("lens_design").select("code").where({ category: "prog" }).whereNull("deleted_at");
     for (const b of plan.lens.base) {
       lensCells += await trx("lens_base_price")
         .where({ design_code: b.design_code, material_code: b.material_code })
         .whereNull("deleted_at")
+        .where((q) => q.where({ finish: "stock" }).orWhereIn("design_code", progCodes))
         .update({ price_cents: b.price_cents, updated_at: trx.fn.now() });
     }
     for (const p of plan.lens.photo) {

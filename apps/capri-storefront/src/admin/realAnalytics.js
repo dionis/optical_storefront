@@ -10,7 +10,8 @@
 // the date range per call (see order-board route). We page through that window
 // (≤3 calls of 100) and surface `truncated` so the panel can SAY the numbers
 // cover the newest N orders instead of silently under-reporting.
-import { fetchOrders, orderLabel } from "./adminOrders.js";
+import { adminFetch } from "./adminApi.js";
+import { orderLabel } from "./adminOrders.js";
 
 // ---- date helpers (LOCAL time — toISOString would shift the day near midnight) ----
 const ymdLocal = (d) => {
@@ -64,18 +65,21 @@ export function toAnalyticsOrder(o, catalogIndex) {
 const cache = new Map(); // key -> { at, value }
 const CACHE_MS = 60_000;
 
-export async function fetchBoardWindow({ from, to }) {
+// `store`: "" | "all" = every order; "web" = the online store; an establishment
+// id = that store's till sales (the board's `store` param).
+export async function fetchBoardWindow({ from, to, store = "" }) {
   // "all" range (year 2000 sentinel from rangeFor) -> no from filter at all.
   const fromStr = from && from.getFullYear() > 2001 ? ymdLocal(from) : "";
   const toStr = to ? ymdLocal(to) : "";
-  const key = `${fromStr}|${toStr}`;
+  const storeStr = !store || store === "all" ? "" : String(store);
+  const key = `${fromStr}|${toStr}|${storeStr}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
 
   const orders = [];
   let truncated = false, scanLimit = 300, count = 0, offset = 0;
   for (let page = 0; page < 3; page++) {
-    const res = await fetchOrders({ from: fromStr, to: toStr, limit: 100, offset });
+    const res = await adminFetch("/admin/order-board", { query: { from: fromStr, to: toStr, store: storeStr, limit: 100, offset } });
     orders.push(...(res.orders || []));
     truncated = !!res.truncated;
     scanLimit = res.scan_limit || 300;

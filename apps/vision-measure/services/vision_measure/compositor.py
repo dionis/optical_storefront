@@ -33,10 +33,15 @@ from services.vision_measure.config import (
     MissingApiKeyError,
     ProviderSpec,
     get_provider,
+    image_fallback_model_for,
+    image_model_for,
     resolve_api_key,
 )
 
 # Vendors whose image models accept two input images and return an edited one.
+#
+# These are the BUILT-IN render models; VISION_<PROVIDER>_IMAGE_MODEL and
+# VISION_<PROVIDER>_IMAGE_FALLBACK_MODEL replace them without a code change (config.py).
 #
 # Both defaults were a generation or two behind what the vendors' own chat products use,
 # which is most of why a patient rendered here did not look like the same patient
@@ -328,7 +333,7 @@ def describe_image_engines() -> list:
                 "label": f"{spec.label} · imagen generada",
                 "requiresKey": True,
                 "requiresContext": False,
-                "defaultModel": model,
+                "defaultModel": image_model_for(provider_id, model),
             }
         )
     return engines
@@ -615,7 +620,7 @@ def render_ai_tryon(
     glasses_list = list(glasses) if isinstance(glasses, list) else [glasses]
     glasses_list = [g for g in glasses_list if g] or [glasses]
 
-    chosen = (model or "").strip() or IMAGE_CAPABLE[spec.id]
+    chosen = (model or "").strip() or image_model_for(spec.id, IMAGE_CAPABLE[spec.id])
     key = resolve_api_key(spec, api_key)
     started = time.time()
     n = len(glasses_list)
@@ -633,7 +638,7 @@ def render_ai_tryon(
         # the middle of a fitting with nobody to retype it. Retry once on the previous
         # generation, and say so — a silently substituted engine is how you end up
         # comparing two renders that were never made by the same model.
-        spare = IMAGE_FALLBACK.get(spec.id)
+        spare = image_fallback_model_for(spec.id, IMAGE_FALLBACK.get(spec.id))
         # Two reasons to reach for the spare, not one. A retired preview id was always
         # handled; sustained congestion was not, and it is the commoner of the two: the
         # spare is a generally-available model with far more capacity than the top-tier

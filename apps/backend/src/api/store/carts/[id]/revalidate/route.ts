@@ -11,6 +11,8 @@ import {
 import type { Knex } from "@mikro-orm/knex";
 import { computeLensAddonCents, type LensSelection } from "../../../../../lib/lens-quote";
 import { resolveStoreSettings } from "../../../../../lib/store-settings";
+import { quoteWebLine, webPriceContext, webProductPrice } from "../../../../../lib/web-pricing";
+import { loadProductMetadata } from "../../../../../lib/frame-specs";
 
 /**
  * POST /store/carts/:id/revalidate
@@ -30,6 +32,12 @@ import { resolveStoreSettings } from "../../../../../lib/store-settings";
  * add — `computeLensAddonCents` plus the variant's calculated price — and never
  * trusts a client-supplied amount.
  *
+ * With an online store (lib/online-store.ts) "today's catalog" is THAT STORE's:
+ * a configured line is re-quoted in it (lib/web-pricing.ts), and a plain line
+ * (a case, an accessory) — which Medusa added at the variant's master price —
+ * is moved to the store's price of the model here, since this runs on every
+ * cart load and before checkout.
+ *
  * Returns the cart plus a `repriced` list so the storefront can tell the customer
  * a price moved. Changing what someone pays without saying so is the one part of
  * this that must not be silent.
@@ -45,6 +53,8 @@ type ConfiguredMeta = {
   tax_amount?: number;
   tax_rate?: number;
   price_pretax?: number;
+  price_store_id?: string | null;
+  promo?: Record<string, unknown> | null;
 };
 
 type CartItem = {
@@ -132,18 +142,49 @@ export async function POST(
   try {
   if (!locked) {
     const settings = await resolveStoreSettings(req.scope);
+    // The online store's price list, when the owner has one (null = master).
+    const web = await webPriceContext(req.scope);
 
     for (const item of cart.items ?? []) {
       const md = (item.metadata ?? {}) as ConfiguredMeta;
       if (md.kind !== "configured-frame" || !md.lens_config || !item.variant_id) {
-        // Plain variant lines are handled by refreshCartItemsWorkflow below.
+        // Plain variant lines: Medusa prices them (refreshCartItemsWorkflow
+        // below) at the variant's master price. With an online store, its
+        // price of the model is what the shopper pays.
+        if (web && item.variant_id && md.kind !== "configured-frame") {
+          const { data: plain } = await query.graph({
+            entity: "variant",
+            fields: ["id", "product_id", "calculated_price.calculated_amount"],
+            filters: { id: item.variant_id },
+            context: { calculated_price: QueryContext({ region_id: cart.region_id, currency_code: cart.currency_code }) },
+          });
+          const pv = plain?.[0] as { product_id?: string | null; calculated_price?: { calculated_amount?: number } } | undefined;
+          const master = pv?.calculated_price?.calculated_amount;
+          if (pv?.product_id && typeof master === "number") {
+            const metadata = await loadProductMetadata(pg, [pv.product_id]);
+            const target = webProductPrice(web, { id: pv.product_id, metadata: metadata.get(pv.product_id) ?? null }, master).price;
+            const current = Number(item.unit_price ?? 0);
+            // Untouched while the store charges the master's price and the line
+            // carries it: the line stays a regular Medusa-priced line.
+            if (cents(current) !== cents(target) && (cents(target) !== cents(master) || md.price_store_id)) {
+              await updateLineItemInCartWorkflow(req.scope).run({
+                input: {
+                  cart_id,
+                  item_id: item.id,
+                  update: { unit_price: target, metadata: { ...md, price_store_id: web.store.id, repriced_at: new Date().toISOString() } as unknown as Record<string, unknown> },
+                },
+              });
+              repriced.push({ item_id: item.id, title: item.title ?? null, from: current, to: target });
+            }
+          }
+        }
         continue;
       }
 
       // Frame price — today's server-computed price for this cart's region.
       const { data: variants } = await query.graph({
         entity: "variant",
-        fields: ["id", "calculated_price.calculated_amount"],
+        fields: ["id", "product_id", "calculated_price.calculated_amount"],
         filters: { id: item.variant_id },
         context: {
           calculated_price: QueryContext({
@@ -152,19 +193,30 @@ export async function POST(
           }),
         },
       });
-      const calculated = (
-        variants?.[0] as { calculated_price?: { calculated_amount?: number } } | undefined
-      )?.calculated_price?.calculated_amount;
-      if (typeof calculated !== "number") {
+      const variant = variants?.[0] as { product_id?: string | null; calculated_price?: { calculated_amount?: number } } | undefined;
+      const master = variant?.calculated_price?.calculated_amount;
+      if (typeof master !== "number") {
         // The variant no longer prices for this region (unpublished, price
         // removed). Same policy as an unknown lens design: flag, don't guess.
         stale.push({ item_id: item.id, title: item.title ?? null });
         continue;
       }
 
+      // The online store's price of the frame and the lenses; the master's without one.
+      let calculated = master;
       let lensCents: number;
+      let promo: Record<string, unknown> | null = null;
+      let pricedBy: string | null = null;
       try {
-        lensCents = await computeLensAddonCents(pg, md.lens_config);
+        if (web && variant?.product_id) {
+          const line = await quoteWebLine(req.scope, web, { productId: variant.product_id, base: master, selection: md.lens_config });
+          calculated = line.frame;
+          lensCents = line.lens_cents;
+          promo = line.promo as Record<string, unknown> | null;
+          pricedBy = web.store.id;
+        } else {
+          lensCents = await computeLensAddonCents(pg, md.lens_config);
+        }
       } catch {
         stale.push({ item_id: item.id, title: item.title ?? null });
         continue;
@@ -202,6 +254,8 @@ export async function POST(
               tax_amount: taxAmount,
               tax_rate: taxRate,
               price_pretax: preTax,
+              price_store_id: pricedBy,
+              promo,
               // Breadcrumb for support: this line's price is no longer the one
               // the customer first saw, and this is when it moved.
               repriced_at: new Date().toISOString(),

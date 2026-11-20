@@ -17,7 +17,8 @@ import {
   resolveLegacySelection,
   LensCompatError,
 } from "../src/lib/lens-compat";
-import { computeLensBreakdown } from "../src/lib/lens-quote";
+import { LensFinishError } from "../src/lib/lens-finish";
+import { computeLensBreakdown, LensOptionError } from "../src/lib/lens-quote";
 
 // ── Fixtures: the rows SeedLens2026Data3 puts in the database ────────────────
 
@@ -46,14 +47,23 @@ const BASE_USD: Record<string, Record<string, number>> = {
   "prog-high": { cr39: 240, poly: 240, "1.56": 240, "1.61": 240, "1.67": 280, "1.74": 300 },
 };
 
-const BASE_PRICES = Object.entries(BASE_USD).flatMap(([design_code, row]) =>
-  Object.entries(row).map(([material_code, usd]) => ({
-    design_code,
-    material_code,
-    price_cents: usd * 100,
-    deleted_at: null,
-  }))
-);
+/** Which finish each seeded cell has after UpgradeLensListFinish8: progressives are digital, the rest stock. */
+const finishOf = (design_code: string) => (design_code.startsWith("prog") ? "digital" : "stock");
+
+const BASE_PRICES = [
+  ...Object.entries(BASE_USD).flatMap(([design_code, row]) =>
+    Object.entries(row).map(([material_code, usd]) => ({
+      design_code,
+      material_code,
+      finish: finishOf(design_code),
+      price_cents: usd * 100,
+      cost_cents: null as number | null,
+      deleted_at: null,
+    }))
+  ),
+  // The owner priced ONE surfaced single-vision cell so far (with its lab cost).
+  { design_code: "sv", material_code: "cr39", finish: "digital", price_cents: 9500, cost_cents: 3100, deleted_at: null },
+];
 
 const PHOTOS = [
   { code: "photo-grey", label_es: "Fotocromático Grey", label_en: "Photochromic Grey", colors: ["grey"], price_sv_cents: c(85), price_bifocal_cents: c(110), price_prog_cents: c(90), sort: 0, is_active: true, deleted_at: null },
@@ -148,7 +158,9 @@ describe("refractiveIndexOf", () => {
 describe("listCompatLensOptions", () => {
   it("returns one row per priced (design, material) cell", async () => {
     const options = await listCompatLensOptions(pg);
-    expect(options).toHaveLength(BASE_PRICES.length); // 4 designs × 6 materials
+    // 4 designs × 6 materials: the legacy contract knows no finish, so the
+    // extra digital sv cell does not add a row.
+    expect(options).toHaveLength(BASE_PRICES.filter((b) => b.finish === finishOf(b.design_code)).length);
   });
 
   it("prices each row from the matrix, in cents", async () => {
@@ -388,15 +400,57 @@ describe("legacy request pricing", () => {
     expect(b.photo_cents).toBe(9000); // photo-grey prog  = $90, not the sv $85
   });
 
-  it("charges nothing for a photochromic the design cannot have", async () => {
-    // photo-brown has no single-vision price (N/A in the 2026 list).
-    const b = await computeLensBreakdown(pg, {
-      design_code: "sv",
-      material_code: "cr39",
-      photo_code: "photo-brown",
+  it("refuses a photochromic the design cannot have instead of charging $0 for it", async () => {
+    // photo-brown has no single-vision price (N/A in the 2026 list): the
+    // browser hides it; a request that carries it anyway is not quoted.
+    const attempt = computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39", photo_code: "photo-brown" });
+    await expect(attempt).rejects.toBeInstanceOf(LensOptionError);
+    await expect(attempt).rejects.toMatchObject({ reason: "photo_unavailable", code: "photo-brown", design_code: "sv", category: "sv" });
+    // The same photochromic on a bifocal is priced normally.
+    const ok = await computeLensBreakdown(pg, { design_code: "bifocal", material_code: "cr39", photo_code: "photo-brown" });
+    expect(ok.photo_cents).toBe(11000);
+  });
+
+  it("refuses a photochromic code the list does not have", async () => {
+    await expect(computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39", photo_code: "photo-nope" })).rejects.toMatchObject({
+      reason: "photo_unavailable",
+      code: "photo-nope",
     });
-    expect(b.photo_cents).toBe(0);
-    expect(b.total_cents).toBe(6000);
+  });
+
+  it("refuses an AR outside the design's group instead of charging it at $0", async () => {
+    // "adequate" is a bifocal/progressive AR; "ar-green-basic" a single-vision one.
+    await expect(computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39", ar_code: "adequate" })).rejects.toMatchObject({
+      reason: "ar_unavailable",
+      code: "adequate",
+      design_code: "sv",
+      category: "sv",
+    });
+    await expect(computeLensBreakdown(pg, { design_code: "prog-mid", material_code: "cr39", ar_code: "ar-green-basic" })).rejects.toMatchObject({
+      reason: "ar_unavailable",
+      category: "prog",
+    });
+    await expect(computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39", ar_code: "ar-nope" })).rejects.toBeInstanceOf(LensOptionError);
+    // In its own group it is priced.
+    const sv = await computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39", ar_code: "ar-green-basic" });
+    expect(sv.ar_cents).toBe(6000);
+    const bif = await computeLensBreakdown(pg, { design_code: "bifocal", material_code: "cr39", ar_code: "adequate" });
+    expect(bif.ar_cents).toBe(5000);
+  });
+
+  it("serves an `all` AR group to every design", async () => {
+    const withAll = makeKnex({ ...TABLES, lens_ar_option: [...ARS, { code: "ar-any", label_es: "AR", label_en: "AR", ar_group: "all", price_cents: 7000, sort: 9, is_active: true, deleted_at: null }] });
+    for (const design_code of ["sv", "bifocal", "prog-high"]) {
+      const b = await computeLensBreakdown(withAll, { design_code, material_code: "cr39", ar_code: "ar-any" });
+      expect(b.ar_cents).toBe(7000);
+    }
+  });
+
+  it("reports whether the design needs an ADD", async () => {
+    expect((await computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39" })).requires_add).toBe(false);
+    expect((await computeLensBreakdown(pg, { design_code: "bifocal", material_code: "cr39" })).requires_add).toBe(true);
+    expect((await computeLensBreakdown(pg, { design_code: "prog-mid", material_code: "cr39" })).requires_add).toBe(true);
+    expect((await computeLensBreakdown(pg, { design_code: "frame-only" })).requires_add).toBe(false);
   });
 
   it("agrees with the storefront's static matrix for a plain sv/cr39 lens", async () => {
@@ -413,5 +467,35 @@ describe("legacy request pricing", () => {
     await expect(
       computeLensBreakdown(pg, { design_code: "nope", material_code: "cr39" })
     ).rejects.toThrow(/Unknown lens design/);
+  });
+
+  it("quotes the stock cell by default and the digital one on request", async () => {
+    const stock = await computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39" });
+    expect(stock.finish).toBe("stock");
+    expect(stock.lens_base_cents).toBe(6000);
+    expect(stock.cost_cents).toBeNull();
+    const digital = await computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39", finish: "digital" });
+    expect(digital.finish).toBe("digital");
+    expect(digital.lens_base_cents).toBe(9500);
+    expect(digital.cost_cents).toBe(3100);
+  });
+
+  it("refuses a finish the list does not price instead of quoting it at 0", async () => {
+    await expect(computeLensBreakdown(pg, { design_code: "sv", material_code: "poly", finish: "digital" })).rejects.toBeInstanceOf(LensFinishError);
+    await expect(computeLensBreakdown(pg, { design_code: "prog-mid", material_code: "cr39", finish: "stock" })).rejects.toMatchObject({ reason: "finish_unavailable" });
+  });
+
+  it("treats a progressive as digital whether or not the client says so", async () => {
+    const implicit = await computeLensBreakdown(pg, { design_code: "prog-mid", material_code: "cr39" });
+    const explicit = await computeLensBreakdown(pg, { design_code: "prog-mid", material_code: "cr39", finish: "digital" });
+    expect(implicit.finish).toBe("digital");
+    expect(explicit.lens_base_cents).toBe(implicit.lens_base_cents);
+  });
+
+  it("keeps the legacy option list on the default (stock) cell, so the web wizard is unchanged", async () => {
+    const options = await listCompatLensOptions(pg, "single_vision_distance");
+    const cr39 = options.filter((o) => o.design_code === "sv" && o.material_code === "cr39");
+    expect(cr39).toHaveLength(1);
+    expect(cr39[0].price_modifier_cents).toBe(6000);
   });
 });

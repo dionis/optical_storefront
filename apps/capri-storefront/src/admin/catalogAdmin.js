@@ -6,6 +6,8 @@
 // Regla del módulo: sin hook de idioma. Lo que llegue a la pantalla viaja como
 // CLAVE de diccionario y lo traduce quien pinta.
 import { adminFetch } from "./adminApi.js";
+import { resolveImage } from "../data/imageUrl.js";
+import { TENANT } from "../config/tenant.js";
 
 /**
  * Descontinuar / reactivar una montura.
@@ -75,11 +77,13 @@ export async function fetchDiscontinued() {
   const out = [];
   let offset = 0;
   for (let page = 0; page < 10; page++) {
+    // Medusa validates `status` as an ARRAY: `status=draft` is a 400
+    // ("Expected type: 'array'") and the list came back empty forever.
     const data = await adminFetch(`/admin/products`, {
-      query: { status: "draft", limit: 100, offset, fields: "id,title,handle,thumbnail,status" },
+      query: { "status[]": "draft", limit: 100, offset, fields: "id,title,handle,thumbnail,status" },
     });
     const items = data?.products || [];
-    out.push(...items.map((p) => ({ medusaId: p.id, name: p.title, slug: p.handle, image: p.thumbnail })));
+    out.push(...items.map((p) => ({ medusaId: p.id, name: p.title, slug: p.handle, image: resolveImage(p.thumbnail) })));
     if (items.length < 100) break;
     offset += 100;
   }
@@ -130,7 +134,7 @@ export function exportCatalogCsv(products, cases) {
   const esc = (v) => '"' + String(v).replace(/"/g, '""') + '"';
   const head = EXPORT_COLUMNS.map(([k]) => esc(k)).join(";");
   const body = rows(products, cases).map((r) => r.map(esc).join(";")).join("\r\n");
-  downloadBlob("\uFEFF" + head + "\r\n" + body, "text/csv;charset=utf-8", `catalogo-rubilens-${stamp()}.csv`);
+  downloadBlob("\uFEFF" + head + "\r\n" + body, "text/csv;charset=utf-8", `catalogo-${TENANT.slug}-${stamp()}.csv`);
   return (products?.length || 0) + (cases?.length || 0);
 }
 
@@ -142,6 +146,6 @@ export function exportCatalogExcel(products, cases) {
     .map((r) => "<tr>" + r.map((v) => `<td style="padding:4px 8px;border:1px solid #ccd;mso-number-format:'\\@'">${esc(v)}</td>`).join("") + "</tr>")
     .join("");
   const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Catalogo</x:Name><x:WorksheetOptions/></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table>${"<thead><tr>" + head + "</tr></thead><tbody>" + body + "</tbody>"}</table></body></html>`;
-  downloadBlob(html, "application/vnd.ms-excel", `catalogo-rubilens-${stamp()}.xls`);
+  downloadBlob(html, "application/vnd.ms-excel", `catalogo-${TENANT.slug}-${stamp()}.xls`);
   return (products?.length || 0) + (cases?.length || 0);
 }

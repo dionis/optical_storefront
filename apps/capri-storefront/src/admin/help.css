@@ -1,0 +1,62 @@
+/* Ayuda contextual del panel (HelpTip.jsx): botón «?» y botón «Ayuda». La
+   ventana (fondo desenfocado, hoja en tablet vertical) está en help-modal.css.
+   Solo tokens --adm-*: hereda el color de la tienda y el modo oscuro porque el
+   portal cuelga de `.adm-shell`. */
+
+.adm-help-root { display: contents; }
+
+/* ── Botón «?» ─────────────────────────────────────────────────────────── */
+.adm-help-btn {
+  --adm-help-size: 14px;
+  display: inline-grid; place-items: center; box-sizing: content-box;
+  width: var(--adm-help-size); height: var(--adm-help-size); padding: 0; margin: 0 0 0 4px;
+  border-radius: 999px; border: 1px solid var(--adm-line); background: var(--adm-surface-2);
+  color: var(--adm-faint); font: 800 calc(var(--adm-help-size) * .68)/1 var(--adm-font);
+  cursor: help; vertical-align: middle; flex: none; line-height: 1;
+  transition: color .15s, border-color .15s, background .15s, transform .14s var(--adm-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.adm-help-btn.inline { vertical-align: -1px; }
+.adm-help-btn span { display: block; transform: translateY(-.5px); }
+.adm-help-btn:hover, .adm-help-btn:focus-visible, .adm-help-btn.on {
+  color: var(--adm-accent-ink); border-color: var(--adm-accent-line); background: var(--adm-accent-soft); transform: scale(1.08);
+}
+.adm-help-btn:focus-visible { outline: none; box-shadow: var(--adm-shadow-glow); }
+/* En cabeceras de tabla y etiquetas en mayúsculas el «?» no debe gritar. */
+th .adm-help-btn, .ex-kpi .adm-help-btn, label .adm-help-btn, legend .adm-help-btn { opacity: .75; }
+th .adm-help-btn:hover, .ex-kpi .adm-help-btn:hover, label .adm-help-btn:hover, legend .adm-help-btn:hover { opacity: 1; }
+/* Pantallas táctiles: zona de toque de 44 px (WCAG 2.5.5) sin agrandar el
+   dibujo: el «?» mide 12–16 px y el ::after invisible lo rodea hasta 44. */
+@media (pointer: coarse) {
+  .adm-help-btn { position: relative; }
+  .adm-help-btn::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); border-radius: 999px; }
+}
+
+/* Botón de texto «Ayuda» para cabeceras. */
+.adm-help-text {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 9px;
+  border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); color: var(--adm-muted);
+  font: 600 12px/1.2 var(--adm-font); cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s, background .15s;
+}
+.adm-help-text:hover, .adm-help-text:focus-visible { color: var(--adm-accent-ink); border-color: var(--adm-accent-line); background: var(--adm-accent-soft); outline: none; }
+
+/* Fila auxiliar: un control y su «?» alineados (p. ej. el selector de tipo de receta). */
+.adm-help-row { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
+.adm-help-row > :first-child { min-width: 0; flex: 1 1 auto; }
+.adm-help-row > .adm-help-btn { margin-left: 0; }
+.pos-rx .adm-help-row, .adm-team-form .adm-help-row { display: flex; }
+/* Pasos del POS: el «?» del paso activo va pegado a su botón. */
+.pos-steps li { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+/* KPI del ejecutivo: el botón «ir a» ocupa la tarjeta y el «?» queda en la esquina. */
+.ex-kpi .ex-kpi-go { all: unset; display: flex; flex-direction: column; gap: 1px; min-width: 0; width: 100%; cursor: pointer; box-sizing: border-box; }
+.ex-kpi .ex-kpi-go:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 2px; border-radius: 6px; }
+.ex-kpi.has-help small { padding-right: 16px; }
+.ex-kpi .ex-kpi-help { position: absolute; top: 5px; right: 5px; margin: 0; }
+/* En cabeceras h2/h3 el «?» va algo separado y centrado con el texto. */
+h2 > .adm-help-btn, h3 > .adm-help-btn { margin-left: 8px; vertical-align: middle; }
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-help-btn { transition: none; }
+}
+
+@media print { .adm-help-btn, .adm-help-text, .adm-help-info { display: none !important; } }

@@ -13,22 +13,63 @@ export const AUDIT_ACTIONS = [
   "price.change",
   "price.import",
   "role.change",
+  "owner.transfer",
+  "password.change",
+  "password.reset",
+  "password.reset_requested",
+  "session.revoke",
   "stores.change",
   "privileges.change",
   "profile.change",
+  "user.deactivate",
+  "user.reactivate",
   "discount.request",
   "discount.approve",
   "discount.reject",
   "sale.void",
   "sale.void_request",
+  "sale.deliver",
+  // After the sale (lib/pos-sale-admin.ts): details corrected, hidden, brought back, moved to another store.
+  "sale.edit",
+  "sale.delete",
+  "sale.restore",
+  "sale.move",
+  // The patient wearing the frame (lib/pos-wearing-photo.ts): taken / replaced / removed, and each time it is shown.
+  "sale.wearing_photo",
+  "sale.wearing_photo_view",
   "payment.method",
   "payment.collect",
+  // A registration mistake in the payments of a sale (lib/payment-correction-data.ts).
+  "payment.correct",
   "insurance.paid",
   "document.print",
+  "document.email",
   "cost.change",
+  "cash.open",
   "cash.close",
+  "cash.approve",
   "settings.change",
   "alert.rule",
+  "assortment.change",
+  "catalog.sync",
+  "catalog.create",
+  // v2 (docs/PRICE-MATRIX.md): a model, a brand or a treatment edited / removed from «Productos y precios».
+  "catalog.update",
+  "catalog.delete",
+  "ai_credit.change",
+  "ai_alert.change",
+  "tenant.profile",
+  "tenant.bootstrap",
+  "tenant.brand",
+  // Opening a patient file (docs/PATIENTS.md): who read whose health data. No values stored.
+  "patient.view",
+  // Promotions per store (lib/promotions-data.ts): created / edited / switched on or off, removed.
+  "promotion.change",
+  "promotion.delete",
+  // Opening hours of a store (Tiendas → Horario).
+  "store.hours",
+  // A sale recorded with an earlier date (lib/sale-date.ts): the day chosen, the real day, the note.
+  "sale.backdate",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

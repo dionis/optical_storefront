@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Óptica El Rancho · RUBI LENS · Informe integral 5-nov-2026</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm 18mm 14mm; }
+  :root { --navy:#182a4e; --blue:#0E5AD0; --ink:#17203a; --muted:#5b6472; --line:#dde3ee; --soft:#f4f7fc;
+          --ok:#116633; --okbg:#e6f6ec; --mid:#7a5b00; --midbg:#fff4d6; --bad:#8a1c1c; --badbg:#fde8e8; --gold:#b8860b; --green:#2e7d32; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:10.4pt/1.45 "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--ink); }
+  h1 { font-size:25pt; margin:0 0 6px; color:var(--navy); }
+  h2 { font-size:14.5pt; margin:18px 0 8px; color:var(--navy); border-bottom:2px solid var(--line); padding-bottom:4px; page-break-after:avoid; }
+  h3 { font-size:11.3pt; margin:13px 0 4px; color:var(--blue); page-break-after:avoid; }
+  p { margin:5px 0 8px; }
+  .cover { height:228mm; display:flex; flex-direction:column; justify-content:center; page-break-after:always; }
+  .kicker { color:var(--gold); font-weight:700; letter-spacing:.14em; text-transform:uppercase; font-size:9.5pt; }
+  .sub { font-size:12.5pt; color:var(--muted); margin-top:8px; }
+  .meta { margin-top:34px; font-size:10pt; color:var(--muted); line-height:1.7; }
+  .box { margin-top:30px; border-left:5px solid var(--gold); background:var(--soft); padding:14px 18px; }
+  table { width:100%; border-collapse:collapse; font-size:9.2pt; margin:6px 0 12px; }
+  tr { page-break-inside:avoid; }
+  th { text-align:left; background:var(--soft); color:var(--muted); font-weight:700; border-bottom:1.5px solid var(--line); }
+  th, td { padding:5px 7px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td.c { text-align:center; white-space:nowrap; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:999px; font-size:8.4pt; font-weight:700; white-space:nowrap; }
+  .ok { background:var(--okbg); color:var(--ok); } .mid { background:var(--midbg); color:var(--mid); } .bad { background:var(--badbg); color:var(--bad); }
+  .new { background:#e8efff; color:#1b3f9e; } .who { background:#eef1f6; color:#3b4760; }
+  code { font-family: Consolas, "Courier New", monospace; font-size:8.7pt; background:#f2f5fa; border:1px solid var(--line); border-radius:4px; padding:0 4px; }
+  ul { margin:4px 0 8px; padding-left:18px; } li { margin:2px 0; }
+  .kpis { display:flex; gap:10px; margin:10px 0 14px; }
+  .kpi { flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .kpi b { display:block; font-size:19pt; color:var(--navy); line-height:1.1; }
+  .kpi span { color:var(--muted); font-size:8.8pt; }
+  .note { border-left:4px solid var(--blue); background:var(--soft); padding:8px 12px; margin:8px 0 12px; }
+  .warn { border-left:4px solid var(--gold); background:var(--midbg); padding:8px 12px; margin:8px 0 12px; }
+  .crit { border-left:4px solid var(--bad); background:var(--badbg); padding:8px 12px; margin:8px 0 12px; }
+  .muted { color:var(--muted); }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .arch { font-family: Consolas, "Courier New", monospace; font-size:8.6pt; background:#f7f9fd; border:1px solid var(--line); border-radius:8px; padding:10px 12px; white-space:pre-wrap; word-break:break-all; line-height:1.35; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="kicker">Óptica El Rancho · RUBI LENS · Fry Family Clinic</div>
+  <h1>Informe integral del proyecto</h1>
+  <div class="sub">Qué espera el cliente (documento «Gestión de Tiendas RUBI LENS v2.2»), qué hay desplegado hoy en opticaelrancho.com, rubilens.com, Vercel y Coolify, qué está bien, qué está mal y cómo se resuelve, y el plan de mejoras con responsables. Sirve también como puesta al día para Dionis (Eyewear Dev).</div>
+  <div class="box">
+    <b>Idea central.</b> El negocio son tres cosas que hoy viven en tres sitios: la tienda online <b>rubilens.com</b> (backend de producción), las dos ópticas físicas <b>Katy y Houston</b> con su punto de venta (backend de <i>staging</i>) y la <b>landing opticaelrancho.com</b> (proyecto aparte, Google Sheets y Calendar). El cliente quiere administrarlo todo desde <b>opticaelrancho.com/admin</b>. El panel ya existe y ya se sirve en esa dirección; lo que falta es que hable con <b>una sola base de datos de producción</b>, que lleve la identidad correcta y que la clínica Fry Family y las citas de la landing entren en el mismo flujo. Este informe dice cómo.
+  </div>
+  <div class="meta">
+    Fecha: jueves 5 de noviembre de 2026, 13:00 (Houston) · Para: Daniel (dueño) y Dionis (Eyewear Dev)<br>
+    Roles de la revisión: QA senior · ingeniería fullstack senior · jefe de proyecto senior · dueño de tienda senior · diseño web/responsive senior<br>
+    Código revisado: <code>dionis/optical_storefront</code> rama <code>develop_optical_storepos</code> hasta <code>8f2c968</code> (24 commits sobre lo que Dionis subió el 4-nov) · <code>dacostar-creator/OPTICA-ELRANCHO</code> rama <code>main</code> hasta <code>73a0b10</code><br>
+    Verificación: 68 suites / 1.197 pruebas en verde · i18n 5.472 claves × 2 · builds de panel y landing · sondeos en vivo de los seis dominios y APIs
+  </div>
+</div>
+
+<h2>1. Resumen ejecutivo</h2>
+<div class="kpis">
+  <div class="kpi"><b>6</b><span>piezas desplegadas; todas responden (ver §2)</span></div>
+  <div class="kpi"><b>2</b><span>bases de datos cuando debería ser 1 para el negocio</span></div>
+  <div class="kpi"><b>54 / 17 / 9</b><span>historias del documento hechas / parciales / faltan</span></div>
+  <div class="kpi"><b>13 + 7</b><span>fallos corregidos hoy (mañana) + integrados de la auditoría paralela (tarde)</span></div>
+</div>
+<table>
+  <tr><th style="width:26%">Pieza</th><th style="width:12%">Estado</th><th>Lectura en una línea</th></tr>
+  <tr><td>Tienda online rubilens.com</td><td><span class="tag ok">Bien</span></td><td>Vende con Stripe LIVE; SEO (robots, sitemap, JSON-LD) y accesibilidad entran con el siguiente despliegue; precios públicos aún calculados en el navegador (§5 C8).</td></tr>
+  <tr><td>Landing opticaelrancho.com</td><td><span class="tag ok">Bien</span></td><td>Rápida (Lighthouse móvil 84/100/100/100), con cabeceras de seguridad, citas → Google Calendar, contacto → Sheets + correo. No conoce al cliente del POS.</td></tr>
+  <tr><td>Panel y POS en opticaelrancho.com/admin</td><td><span class="tag mid">Funciona, en staging</span></td><td>Proxy al panel de la rama de desarrollo y a la API de staging. Marca RUBI LENS en vez de la óptica. Es el panel de verdad del negocio físico pero corre en el entorno «de pruebas».</td></tr>
+  <tr><td>Backend producción (Coolify, <code>main</code>)</td><td><span class="tag mid">Atrasado</span></td><td>Commit del 26-oct; sin multi-tienda, sin POS. Solo sirve a rubilens.com.</td></tr>
+  <tr><td>Backend staging (Coolify, <code>develop_optical_storepos</code>)</td><td><span class="tag ok">Al día</span></td><td>Redesplegado hoy 12:31 con el push de Daniel (<code>e08ad9e</code>); faltan 2 commits de esta tarde (0032, 0033) → otro push + redeploy.</td></tr>
+  <tr><td>Bases de datos (Supabase)</td><td><span class="tag bad">Decidir</span></td><td>Producción y staging son bases distintas. Las tiendas, el equipo, los clientes y las ventas del mostrador están en la de staging; los pedidos web en la de producción. El panel único exige unirlas (§5 C1).</td></tr>
+  <tr><td>Fry Family Clinic</td><td><span class="tag bad">No existe en el sistema</span></td><td>Ni en el código ni en los datos: no hay forma de registrar un examen, una referencia o una receta «de la clínica». Hay que decidir el modelo (§5 C5).</td></tr>
+  <tr><td>Seguridad</td><td><span class="tag mid">Buena base, 5 pendientes</span></td><td>Roles en servidor, auditoría, límites de intentos, sesiones revocables (hoy). Pendientes: rotar secretos expuestos, <code>SECURITY_STRICT=1</code>, copia de seguridad real, panel nativo de Medusa expuesto, decisión sobre quién ve recetas.</td></tr>
+</table>
+<div class="crit"><b>Las dos decisiones que lo cambian todo:</b> (1) <b>unificar en producción</b> — promover el código a <code>main</code>, migrar la base de producción y mover los datos del mostrador desde staging con una ventana de congelación (runbook en §7); (2) <b>modelar la clínica Fry Family</b> — qué es para el negocio (socio que refiere, origen de recetas, sede de exámenes) decide tablas, permisos y comisiones. Todo lo demás de este informe se puede hacer sin esperar.</div>
+
+<h2>2. Arquitectura real hoy y arquitectura objetivo</h2>
+<h3>Hoy</h3>
+<table>
+  <tr><th style="width:24%">Dirección</th><th style="width:30%">Qué sirve</th><th style="width:26%">Backend</th><th>Base de datos</th></tr>
+  <tr><td>www.rubilens.com</td><td>Tienda online (Vercel, rama <code>develop</code>)</td><td><code>/medusa</code> → Coolify <code>api.161…</code>, rama <code>main</code> (26-oct)</td><td>Supabase <b>producción</b></td></tr>
+  <tr><td>opticaelrancho.com</td><td>Landing (Vercel, repo OPTICA-ELRANCHO)</td><td><code>/api</code> → FastAPI serverless</td><td>Google Sheets + Calendar + Gmail (sin base propia)</td></tr>
+  <tr><td>opticaelrancho.com/admin</td><td>Proxy → <code>rubilens-staging.vercel.app</code> (rama <code>develop_optical_storepos</code>)</td><td><code>/medusa-staging</code> → Coolify <code>api-staging.161…</code>, misma rama (hoy)</td><td>Supabase <b>staging</b> — con las tiendas, el equipo, los clientes y las ventas reales</td></tr>
+  <tr><td>api.opticaelrancho.com</td><td>DNS → 161.153.9.98 sin aplicación</td><td>503</td><td>—</td></tr>
+</table>
+<h3>Objetivo («un solo panel»)</h3>
+<table>
+  <tr><th style="width:24%">Dirección</th><th style="width:30%">Qué sirve</th><th style="width:26%">Backend</th><th>Base de datos</th></tr>
+  <tr><td>www.rubilens.com</td><td>Tienda online (rama <code>develop</code> = la actual <code>develop_optical_storepos</code> promovida)</td><td><code>/medusa</code> → Coolify <code>api.161…</code>, rama <code>main</code> con multi-tienda</td><td>Supabase producción, <b>única</b></td></tr>
+  <tr><td>opticaelrancho.com</td><td>Landing igual + citas y contactos que crean o enlazan clientes del POS por API</td><td>FastAPI + llamada a Medusa</td><td>La misma</td></tr>
+  <tr><td>opticaelrancho.com/admin</td><td>Proxy → panel de producción, con identidad «Óptica El Rancho» por dominio</td><td><code>/medusa</code> → producción</td><td>La misma</td></tr>
+  <tr><td>Fry Family Clinic</td><td>Establecimiento de tipo «clínica» (o socio que refiere) dentro del mismo panel</td><td>—</td><td>La misma</td></tr>
+  <tr><td>staging</td><td>Solo pruebas: datos sembrados, nunca ventas reales</td><td><code>api-staging</code></td><td>Supabase staging</td></tr>
+</table>
+<p class="muted">Ramas: <code>develop</code> está contenida íntegra en <code>develop_optical_storepos</code> (0 commits de diferencia hacia atrás; 113 hacia delante) y <code>main</code> va 35 commits detrás de <code>develop</code>. La promoción es lineal, sin conflictos de contenido: <code>develop_optical_storepos → develop → main</code> por <i>pull request</i> con el CI en verde.</p>
+
+<h2>3. Expectativas del cliente frente a la realidad</h2>
+<p>El documento v2.2 (25-oct) describe 20 módulos, un POS de 7 pasos, ~80 historias de usuario y 22 decisiones. Se contrastó cada punto con el código (no con la documentación) y después se corrigió lo corregible. Estado al cierre de hoy:</p>
+<table>
+  <tr><th>Bloque</th><th class="c">Hecho</th><th class="c">Parcial</th><th class="c">Falta</th><th>Lo que falta o cojea</th></tr>
+  <tr><td>Acceso y establecimientos (HU-01…05, 70…73, permisos, perfil)</td><td class="c">10</td><td class="c">2</td><td class="c">1</td><td>Elegir tienda al entrar (HU-05, un vendedor = una tienda por diseño); copia de seguridad real (HU-72); códigos <code>Op#</code> en vez de <code>T#</code> (se conservan).</td></tr>
+  <tr><td>Catálogo y precios (HU-06…17, costos, lentes)</td><td class="c">11</td><td class="c">3</td><td class="c">4</td><td>Carga desde Excel (HU-06), alta manual de montura (HU-07), etiquetas y cámara (HU-09), precios a futuro (HU-14); precio de venta derivado del costo editado.</td></tr>
+  <tr><td>Clientes, ventas, laboratorio (HU-18…34, documentos)</td><td class="c">13</td><td class="c">7</td><td class="c">3</td><td>Devolución/cambio (HU-29), rehecho por garantía (HU-34), recordatorio de receta anual (HU-21), etapa «listo para recoger» (HU-31), ficha de cliente con historial (HU-20).</td></tr>
+  <tr><td>Caja, alertas, paneles (HU-38…68, ejecutivo, contabilidad)</td><td class="c">20</td><td class="c">5</td><td class="c">1</td><td>Alertas configurables por el encargado (HU-47), exportar un filtro a Sheets (HU-65), recordatorio de saldo al cliente (HU-24).</td></tr>
+</table>
+<div class="note"><b>Lo que el documento no contempla y el cliente sí espera:</b> un solo panel bajo su dominio, la tienda online dentro del mismo panel (ya lo está: la web es un canal más en el Ejecutivo), y la relación con Fry Family Clinic. Son los tres puntos de §5.</div>
+
+<h2>4. Críticas y cómo resolverlas</h2>
+<p>Ordenadas por impacto en el negocio. «Quién» indica quién debería hacerlo: <span class="tag who">Daniel</span> decisiones e infraestructura, <span class="tag who">Dionis</span> catálogo/scraper/IA/producción web, <span class="tag who">Panel</span> este equipo (POS, contabilidad, panel).</p>
+<table>
+  <tr><th style="width:4%">#</th><th style="width:24%">Crítica</th><th style="width:28%">Por qué importa</th><th>Cómo se resuelve</th><th style="width:9%">Quién</th></tr>
+  <tr><td class="c">C1</td><td><b>El mostrador funciona en «staging»</b>: dos bases de datos, y la de pruebas tiene las tiendas, el equipo, los clientes, las recetas y las ventas reales.</td><td>Staging no tiene las garantías de producción (se redespliega a mano, admite scripts de siembra, no hay compromiso de copias). Y el panel único es imposible con dos bases.</td><td>Runbook de salida (§7): promover el código, migrar la base de producción, <b>mover los datos del mostrador</b> con un script verificado (tiendas, cajas, equipo, vendedores, clientes, recetas, ventas, pagos, caja, alertas, auditoría) en una ventana de 2 h sin ventas, apuntar <code>opticaelrancho.com/admin</code> al panel de producción y dejar staging solo para pruebas.</td><td><span class="tag who">Daniel</span> <span class="tag who">Panel</span></td></tr>
+  <tr><td class="c">C2</td><td><b>Tres ramas y una promoción que nunca se hizo.</b> <code>main</code> es del 26-oct; 113 commits esperan.</td><td>Cuanto más tiempo pase, más grande y arriesgado es el salto (hoy ya son 9 migraciones nuevas y 62 en total).</td><td>Dos PR consecutivos (<code>develop_optical_storepos → develop</code>, <code>develop → main</code>) con el CI obligatorio que ya existe; después, una regla: lo que entra en <code>develop_optical_storepos</code> se promueve <b>cada semana</b>.</td><td><span class="tag who">Daniel</span> <span class="tag who">Dionis</span></td></tr>
+  <tr><td class="c">C3</td><td><b>Trabajo duplicado entre sesiones.</b> Una auditoría paralela (4-nov, rama <code>audit/estabilizacion-pos</code>) implementó tres cosas que hoy también se implementaron aquí.</td><td>Dos versiones de «recuperar contraseña» o de «desactivar usuario» en ramas distintas = conflictos, confusión y horas perdidas.</td><td>Hecho hoy: se portó a la rama principal lo que faltaba de esa rama (fechas en hora de Texas, recibos a precio de lista, anulación atómica, cierre de sesiones, costos fuera del bundle, SEO, CI) y se documentó qué queda sustituido (<code>docs/ESTABILIZACION-2026-11-04.md</code>). <b>Ese PR debe cerrarse sin fusionar.</b> Regla: un área, un responsable; todo por PR contra <code>develop_optical_storepos</code>.</td><td><span class="tag who">Daniel</span></td></tr>
+  <tr><td class="c">C4</td><td><b>Identidad del panel.</b> En opticaelrancho.com/admin aparece «RUBI LENS».</td><td>El personal de las ópticas entra en «su» panel y ve otra marca; recibos y correos salen con la identidad configurada en el inquilino, no en el dominio.</td><td>Inquilino por dominio en el storefront (<code>tenant.js</code> elige nombre, logo y colores según <code>location.hostname</code>): opticaelrancho.com → Óptica El Rancho; rubilens.com → RUBI LENS. Medio día. Los documentos (recibo, ficha) ya usan los datos de cada tienda.</td><td><span class="tag who">Panel</span></td></tr>
+  <tr><td class="c">C5</td><td><b>Fry Family Clinic no está modelada.</b></td><td>«Trabajan en conjunto» puede significar cuatro cosas distintas con consecuencias de datos y dinero diferentes.</td><td>Decisión de Daniel entre: (a) <b>establecimiento de tipo clínica</b> (sede donde se hace el examen; la receta nace allí y la venta se hace en la óptica) — encaja con <code>establishment.kind</code> que ya existe; (b) <b>socio que refiere</b> (código de referido + comisión por venta) — encaja con el módulo de vendedores/referidos; (c) <b>origen de recetas</b> (campo «quién la emitió» en la receta, con el nombre del optometrista) — un campo y un filtro; (d) combinación. Propuesta: (a)+(c), 2–3 días. Mientras tanto, no se inventa nada.</td><td><span class="tag who">Daniel</span></td></tr>
+  <tr><td class="c">C6</td><td><b>Landing y POS no se hablan.</b> Una cita o un contacto de opticaelrancho.com vive en Google Sheets/Calendar; el cliente del POS es otro registro.</td><td>Se pierde el hilo «pidió cita → vino → compró»; el vendedor vuelve a teclear nombre y teléfono.</td><td>Ruta en Medusa <code>POST /store/appointments</code> (clave pública + límite) que crea o enlaza al cliente del POS y una «cita» que el POS muestra en el paso Cliente («tiene cita hoy a las 10:30, examen con la clínica»). La landing la llama además de lo que ya hace con Google. 2 días.</td><td><span class="tag who">Panel</span> <span class="tag who">Dionis</span></td></tr>
+  <tr><td class="c">C7</td><td><b>Seguridad: cinco pendientes concretos.</b></td><td>Un secreto de webhook y una contraseña aparecieron en capturas; el arranque solo avisa si falta un secreto; no hay copia de seguridad verificada de Supabase; el panel nativo de Medusa (<code>/app</code>) está publicado en ambos backends; la receta de cualquier cliente la lee cualquier rol del POS.</td><td>(1) Rotar <code>whsec_…</code> en Stripe y la contraseña del admin — hoy. (2) <code>SECURITY_STRICT=1</code> en Coolify. (3) Copia diaria de Supabase a R2 (tarea programada en Coolify con <code>pg_dump</code> por el <i>pooler</i>) y una restauración de prueba al mes. (4) <code>admin.disable: true</code> en producción si todo se opera desde nuestro panel (consultar a Dionis: ¿usa el admin nativo para el catálogo?). (5) Decisión 15 del documento: receta visible solo para quien vende en esa tienda; auditar la lectura de la ficha de laboratorio.</td><td><span class="tag who">Daniel</span> <span class="tag who">Panel</span></td></tr>
+  <tr><td class="c">C8</td><td><b>Precios públicos calculados en el navegador</b> (costo × 3 desde una tabla empaquetada).</td><td>Aunque desde hoy el bundle ya no lleva <code>supplierPrice</code>, el costo se deduce dividiendo el precio entre 3. Y los precios del panel (banda, exactos) no son los que ve el cliente web.</td><td>Activar el catálogo desde Medusa en Vercel (<code>VITE_USE_MEDUSA=true</code> + clave publicable) tras comparar en staging los 550 modelos; retirar <code>capriPrices.js</code> del bundle. Entonces un solo motor de precios para web y mostrador. 1–2 días + verificación.</td><td><span class="tag who">Dionis</span></td></tr>
+  <tr><td class="c">C9</td><td><b>Faltantes funcionales del documento</b> (ver §3).</td><td>Operativa fina: devoluciones, garantías, «listo para recoger», recordatorios, catálogo propio.</td><td>Plan por hitos en §6, con tamaño.</td><td><span class="tag who">Panel</span></td></tr>
+  <tr><td class="c">C10</td><td><b>Infra suelta:</b> <code>api.opticaelrancho.com</code> responde 503; <code>publicar-*.bat</code> empujan directo a <code>develop</code>/<code>main</code>; el auto-deploy de Coolify staging no dispara.</td><td>Un subdominio muerto confunde y un push directo salta el CI.</td><td>Quitar el registro DNS <code>api</code> o apuntarlo a la API real; retirar los <code>.bat</code> de push directo (queda <code>sync-repo.bat</code>, que hace push normal a la rama de trabajo); revisar el webhook de GitHub → Coolify en la app de staging.</td><td><span class="tag who">Daniel</span></td></tr>
+  <tr><td class="c">C11</td><td><b>Datos de las tiendas incompletos</b> (dirección y teléfono de Op2/Op3 según la auditoría del 4-nov).</td><td>Salen en recibos y fichas de laboratorio.</td><td>Tiendas → Editar. Cinco minutos. No se tocó por indicación del dueño.</td><td><span class="tag who">Daniel</span></td></tr>
+</table>
+
+<h2>5. Lo hecho hoy (para que Dionis sepa qué cambió)</h2>
+<table>
+  <tr><th style="width:12%">Commit</th><th>Qué</th><th style="width:30%">Toca</th></tr>
+  <tr><td><code>226e97a</code></td><td>Privilegio «Ver costos» alcanza costos de montura y banda.</td><td><code>lib/staff-roles.ts</code></td></tr>
+  <tr><td><code>a3fd890</code></td><td>Usuario borrado/desactivado sin acceso en su siguiente petición; Desactivar/Reactivar (HU-04).</td><td><code>lib/staff-scope.ts</code>, <code>team/[id]/status</code>, migración <code>StaffProfileDisabled4</code></td></tr>
+  <tr><td><code>23e3d00</code></td><td>Aprobación de descuento de un solo uso; cobros de saldo atómicos; reproyección de <code>sale_fact</code>.</td><td><code>lib/pos-data.ts</code></td></tr>
+  <tr><td><code>34ff37b</code></td><td>Importes por etapa redactados en servidor; filtro Atrasados (HU-33); SKU y <code>price_cents</code>; opt-out de correo.</td><td><code>lib/order-board.ts</code>, <code>StoreOrders.jsx</code></td></tr>
+  <tr><td><code>069e1b8</code></td><td>Lentes stock vs tallado digital con precio y costo por celda; progresivos digitales.</td><td><code>lib/lens-finish.ts</code>, migraciones <code>UpgradeLensListFinish8</code>, <code>ExtendSaleFactLensFinish2</code></td></tr>
+  <tr><td><code>803a641</code></td><td>Total acumulado por paso, plantillas de lentes, aviso de cliente repetido, reglas lente×receta en servidor.</td><td><code>PosSale.jsx</code>, <code>lib/pos-lens-rules.ts</code></td></tr>
+  <tr><td><code>27ebe66</code></td><td>Recuperar contraseña (HU-03), modelo en todas las tiendas (HU-13), historial de precios (HU-15), cobrar y entregar (HU-32), aviso de anulación (HU-28), resumen diario, reconciliador <code>sale_fact</code>, meta por vendedor.</td><td><code>lib/password-reset.ts</code>, <code>pricing/frames/across</code>, <code>jobs/sale-fact-reconcile.ts</code></td></tr>
+  <tr><td><code>1e08fcf</code> <code>1d1a332</code> <code>98c633a</code></td><td>Enlace por número de venta; <code>documentacion.html</code>; informe de estado (HTML).</td><td>docs</td></tr>
+  <tr><td><code>d62a776</code></td><td>Integración de la auditoría paralela: fechas en hora de Texas, recibos a precio de lista, anulación atómica, revocación de sesiones (cambio de contraseña, remoto, «todos mis equipos»), costos fuera del bundle público, accesibilidad, SEO de rubilens.com, CI, estado de migraciones en <code>/version</code>, <code>ADMIN_PANEL_URL</code>.</td><td><code>lib/session-control.ts</code>, migración <code>StaffProfileSessions5</code>, <code>scripts/gen-seo.mjs</code>, <code>.github/workflows/ci.yml</code>; <b>se eliminan</b> <code>vercel.json</code> y <code>scripts/vercel-build.sh</code> de la raíz</td></tr>
+  <tr><td><code>8f2c968</code></td><td>El POS lee la lista de lentes del servidor (<code>GET /admin/pos/lens-matrix</code>) y no del bundle: sin esto, los precios de lentes del dueño nunca llegaban al mostrador y «tallado digital» no se podía activar.</td><td><code>lib/lens-matrix.ts</code>, <code>data/lensCatalog.js</code></td></tr>
+</table>
+<div class="warn"><b>Para Dionis:</b> (1) los ficheros <code>vercel.json</code> y <code>scripts/vercel-build.sh</code> de la raíz ya no existen y <code>check-vercel-config.mjs</code> falla si reaparecen; (2) <code>translations.js</code> ya no se toca para el panel: cada módulo tiene su diccionario en <code>src/i18n/parts/</code>; (3) todo lo que escribe dinero en <code>pos_sale</code>/<code>discount_approval</code> va por <code>UPDATE … WHERE</code> con guarda (ver <code>*ClaimPlan</code> en <code>lib/pos-data.ts</code>): no añadir caminos de lectura-y-escritura; (4) la rama <code>audit/estabilizacion-pos</code> no se fusiona; (5) áreas tuyas que no se tocaron: catálogo/scraper, sincronización, consumo de IA, probador.</div>
+
+<h2>6. Plan de mejoras por hitos</h2>
+<table>
+  <tr><th style="width:11%">Hito</th><th>Contenido</th><th style="width:10%">Tamaño</th><th style="width:12%">Quién</th></tr>
+  <tr><td><b>H10</b> Cierre de hoy</td><td>Push de los 2 commits de la tarde + redeploy staging; verificación en vivo rol por rol (dueño, supervisor, encargado, vendedor) con la sesión de Daniel; rotar secretos; <code>SECURITY_STRICT=1</code>; teclear celdas «digital»; datos de Op2/Op3; <code>ANTHROPIC_API_KEY</code>.</td><td class="c">S</td><td><span class="tag who">Daniel</span> <span class="tag who">Panel</span></td></tr>
+  <tr><td><b>H11</b> Identidad y clínica</td><td>Inquilino por dominio (C4); decisión y modelo de Fry Family Clinic (C5): tipo de establecimiento «clínica», origen de la receta, referidos si aplica; permisos.</td><td class="c">M</td><td><span class="tag who">Daniel</span> <span class="tag who">Panel</span></td></tr>
+  <tr><td><b>H12</b> Salida a producción</td><td>Runbook §7: PRs, migración de la base de producción, traslado de datos del mostrador, cambio del proxy de <code>/admin</code>, copias de seguridad, staging solo pruebas. Prueba de compra real por Daniel.</td><td class="c">L</td><td><span class="tag who">Daniel</span> <span class="tag who">Dionis</span> <span class="tag who">Panel</span></td></tr>
+  <tr><td><b>H13</b> Un solo cliente</td><td>Citas de la landing → clientes del POS (C6); ficha de cliente con historial (HU-20); recordatorio de saldo (HU-24) y de receta anual (HU-21).</td><td class="c">M</td><td><span class="tag who">Panel</span> <span class="tag who">Dionis</span></td></tr>
+  <tr><td><b>H14</b> Posventa</td><td>Devolución/cambio (HU-29), rehecho por garantía (HU-34) con efecto en caja y margen; etapa «listo para recoger» (HU-31).</td><td class="c">L</td><td><span class="tag who">Panel</span></td></tr>
+  <tr><td><b>H15</b> Precios únicos</td><td>Catálogo y precios públicos desde Medusa (C8); retirar la tabla de costos del bundle; recalcular precio de venta desde el costo editado con vista previa.</td><td class="c">M</td><td><span class="tag who">Dionis</span> <span class="tag who">Panel</span></td></tr>
+  <tr><td><b>H16</b> Catálogo propio</td><td>Alta manual de montura (HU-07), importación desde Excel con validación (HU-06), etiquetas y lectura con cámara (HU-09), precios programados (HU-14), alertas del encargado (HU-47).</td><td class="c">M–L</td><td><span class="tag who">Panel</span></td></tr>
+</table>
+<p class="muted">S = horas · M = 1–3 días · L = más de 3 días. Todo con pruebas, documentación en <code>docs/</code> y <code>documentacion.html</code>, y por PR.</p>
+
+<h2>7. Runbook de salida a producción (H12)</h2>
+<table>
+  <tr><th style="width:4%">#</th><th>Paso</th><th style="width:34%">Comprobación</th></tr>
+  <tr><td class="c">1</td><td>Congelar cambios 48 h antes; anunciar a las tiendas una ventana de 2 h sin ventas (p. ej. domingo 7:00).</td><td>Nadie con sesión abierta en el POS.</td></tr>
+  <tr><td class="c">2</td><td>PR <code>develop_optical_storepos → develop</code> y PR <code>develop → main</code> con CI en verde (incluye «Backend migrates and boots on an empty database» y «Production build compiles»).</td><td>Checks verdes; Vercel despliega <code>develop</code> → www.rubilens.com con el panel multi-tienda (las pestañas aparecen solo si el backend dice <code>multistore</code>).</td></tr>
+  <tr><td class="c">3</td><td>Copia completa de la base de producción y de la de staging (pg_dump) antes de tocar nada.</td><td>Dos ficheros con fecha, restaurables.</td></tr>
+  <tr><td class="c">4</td><td>Coolify producción: variables nuevas (<code>ANTHROPIC_API_KEY</code>, <code>SECURITY_STRICT=1</code>, <code>ADMIN_PANEL_URL=https://opticaelrancho.com/admin</code>, alertas, Sheets), <i>Redeploy</i> de <code>main</code>: <code>db:migrate</code> aplica las 62 migraciones que falten.</td><td><code>/version</code> muestra el commit nuevo, <code>migrations: ok</code> y <code>features: ["multistore"]</code>.</td></tr>
+  <tr><td class="c">5</td><td>Traslado de datos del mostrador staging → producción con un script de una sola pasada (tablas: <code>establishment</code>, <code>pos_terminal</code>, <code>staff_*</code>, <code>seller</code>, usuarios del equipo y sus identidades, <code>pos_customer</code>, <code>prescription</code>, <code>pos_sale</code> + pagos + contadores, <code>cash_*</code>, <code>store_*</code> (precios, costos, banda, surtido), <code>lens_*</code>, <code>alert_*</code>, <code>audit_event</code>, <code>sale_fact</code>), respetando ids y con los pedidos Medusa asociados.</td><td>Conteos iguales tabla por tabla; una venta al azar abre igual en los dos; el estado de cuenta del mes coincide al centavo.</td></tr>
+  <tr><td class="c">6</td><td>Landing: en <code>vercel.json</code> cambiar el host del proxy <code>/admin</code> de <code>rubilens-staging.vercel.app</code> a www.rubilens.com (y <code>/medusa-staging</code> deja de usarse).</td><td>opticaelrancho.com/admin → panel de producción; login; una venta de prueba anulada después.</td></tr>
+  <tr><td class="c">7</td><td>Staging: sembrar datos de prueba (<code>seed-demo-sales</code>) y prohibir ventas reales; cartel en el login de staging.</td><td>Nadie confunde los entornos.</td></tr>
+  <tr><td class="c">8</td><td>Vuelta atrás si algo falla antes del paso 6: producción sigue sirviendo rubilens.com con el código nuevo (compatible); el mostrador sigue en staging. Después del paso 6: revertir el proxy (un commit en la landing).</td><td>Documentado antes de empezar.</td></tr>
+</table>
+
+<h2>8. Lectura por rol</h2>
+<div class="two">
+  <div>
+    <h3>QA senior</h3>
+    <ul>
+      <li>1.197 pruebas unitarias; CI con arranque sobre base vacía y build de producción.</li>
+      <li>Pendiente: verificación en vivo en staging con sesión (hoy no se pudo: la sesión del dueño caducó y las credenciales las introduce él); prueba de compra real en rubilens.com (solo Daniel, Stripe LIVE); prueba de restauración de copia.</li>
+    </ul>
+    <h3>Ingeniería fullstack</h3>
+    <ul>
+      <li>Fortalezas: tipos estrictos, roles y redacción en servidor, i18n completa, carreras de dinero resueltas en la base, documentación viva.</li>
+      <li>Deuda: dos motores de precio (web vs panel), venta no transaccional (carrito→pago→pedido→venta encadenados; idempotencia mitiga), panel nativo de Medusa expuesto, <code>sellers/stats</code> sobre otra fuente que el Ejecutivo.</li>
+    </ul>
+    <h3>Jefe de proyecto</h3>
+    <ul>
+      <li>Riesgo 1: el mostrador en staging (C1). Riesgo 2: tres actores (Daniel, Dionis, sesiones de Claude) sin un flujo único de PR → duplicidades (C3). Mitigación: responsables por área, promoción semanal, cierre del PR duplicado.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Dueño de tienda</h3>
+    <ul>
+      <li>Puede operar hoy las dos tiendas: vender, cobrar anticipos, imprimir, cerrar caja, ver ventas, márgenes y liquidaciones. Lo que le falta de verdad: devoluciones/garantías, ficha del cliente con historial y que la clínica aparezca.</li>
+      <li>Cinco minutos de su parte valen mucho: datos de Op2/Op3, celdas «digital», rotar secretos.</li>
+    </ul>
+    <h3>Diseño web / responsive</h3>
+    <ul>
+      <li>Landing: 84/100/100/100 móvil, 99/100/100/100 escritorio, CLS 0. Panel: tablas responsive, objetivos táctiles de 44 px (hoy), contraste corregido (hoy), franja de total y plantillas comprobadas a 390 px.</li>
+      <li>Mejora: identidad de la óptica en el panel bajo su dominio (C4); etiqueta «listo para recoger» en el seguimiento del cliente.</li>
+    </ul>
+    <h3>Seguridad</h3>
+    <ul>
+      <li>Hecho: usuario borrado sin acceso, sesiones revocables, límites en recuperación de contraseña, costos fuera del bundle, importes redactados en servidor, cabeceras en API, landing y panel.</li>
+      <li>Pendiente (Daniel): rotar secretos, <code>SECURITY_STRICT=1</code>, copias de Supabase, decidir <code>/app</code> y quién ve recetas.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>9. Decisiones que necesitamos de Daniel</h2>
+<table>
+  <tr><th style="width:4%">#</th><th style="width:38%">Decisión</th><th>Opciones y recomendación</th></tr>
+  <tr><td class="c">1</td><td>Fecha de la ventana de salida a producción (H12).</td><td>Un domingo por la mañana, con 48 h de congelación. Recomendado: el próximo tras verificar H10 en vivo.</td></tr>
+  <tr><td class="c">2</td><td>Qué es Fry Family Clinic en el sistema.</td><td>(a) establecimiento tipo clínica + (c) origen de la receta — recomendado; (b) socio que refiere con comisión si hay reparto de dinero.</td></tr>
+  <tr><td class="c">3</td><td>Identidad del panel en opticaelrancho.com.</td><td>Óptica El Rancho por dominio (recomendado); RUBI LENS en rubilens.com.</td></tr>
+  <tr><td class="c">4</td><td>Quién ve las recetas (decisión 15 del documento).</td><td>Quien vende en esa tienda + dueño/supervisor; lectura auditada. Recomendado.</td></tr>
+  <tr><td class="c">5</td><td>Panel nativo de Medusa (<code>/app</code>) en producción.</td><td>Desactivar si Dionis no lo usa para el catálogo; si lo usa, restringir por IP en Traefik.</td></tr>
+  <tr><td class="c">6</td><td>Precios públicos desde Medusa (C8).</td><td>Sí, tras comparar en staging; lo ejecuta Dionis.</td></tr>
+  <tr><td class="c">7</td><td>Las cuatro diferencias con el documento que ya decidiste (encargado 15 %, aprobación solo dueño, códigos <code>Op#</code>, material como recomendación).</td><td>Se mantienen salvo que digas lo contrario.</td></tr>
+</table>
+
+<h2>10. Anexo</h2>
+<h3>Inventario de direcciones</h3>
+<table>
+  <tr><th>Dirección</th><th>Qué es</th><th>Estado 5-nov 13:00</th></tr>
+  <tr><td>https://www.rubilens.com</td><td>Tienda online (Vercel, <code>develop</code>)</td><td>OK · habla con producción</td></tr>
+  <tr><td>https://api.161-153-9-98.sslip.io</td><td>Backend producción (Coolify, <code>main</code>)</td><td>OK · <code>efce7ec</code> (26-oct)</td></tr>
+  <tr><td>https://api-staging.161-153-9-98.sslip.io</td><td>Backend staging (Coolify, <code>develop_optical_storepos</code>)</td><td>OK · <code>e08ad9e</code> (hoy 12:31); faltan 0032/0033</td></tr>
+  <tr><td>https://rubilens-staging.vercel.app</td><td>Panel y tienda de la rama (Vercel)</td><td>OK · bundle <code>index-d5ZTOxna.js</code> con lo de hoy</td></tr>
+  <tr><td>https://opticaelrancho.com</td><td>Landing (Vercel, repo OPTICA-ELRANCHO)</td><td>OK · <code>/api/health</code> correo, Sheets y Calendar configurados</td></tr>
+  <tr><td>https://opticaelrancho.com/admin</td><td>Proxy al panel de staging</td><td>OK · login visible; identidad RUBI LENS</td></tr>
+  <tr><td>https://api.opticaelrancho.com</td><td>DNS sin aplicación</td><td>Falla (503 / sin TLS)</td></tr>
+</table>
+<h3>Migraciones nuevas que aplica producción al promover</h3>
+<p><code>CreateStoreFrameCost4/5</code>, <code>CreateStorePriceBand6</code>, <code>CreateAiUsage1</code>, <code>StaffProfileDisabled4</code>, <code>StaffProfileSessions5</code>, <code>UpgradeLensListFinish8</code>, <code>ExtendSaleFactLensFinish2</code> y todas las anteriores del multi-tienda que producción nunca vio (62 en total en el repo). Todas aditivas e idempotentes; <code>GET /version</code> dirá <code>migrations: failed</code> si alguna no entra.</p>
+<h3>Documentación</h3>
+<p><code>documentacion.html</code> · <code>docs/HITOS-PANEL-TIENDA.md</code> (hitos 1–9) · <code>docs/ADMIN-PANEL.md</code> · <code>docs/CONTABILIDAD.md</code> · <code>docs/ENTORNOS-Y-RAMAS.md</code> · <code>docs/ESTABILIZACION-2026-11-04.md</code> · <code>docs/SEGURIDAD-PRECIOS.md</code> · landing: <code>DEPLOY.md</code>, <code>README.md</code>, <code>GUIA-GOOGLE.md</code> · informes: <code>docs/informes/</code> y la carpeta «Claude outputs» de Daniel · proyecto Claude: auditoría historia por historia y estado de entrega.</p>
+<h3>Pendiente inmediato de Daniel</h3>
+<ul>
+  <li><code>sync-repo.bat</code> → S (2 commits) y Redeploy de Coolify staging; luego iniciar sesión en el panel para la verificación en vivo.</li>
+  <li>Rotar el secreto del webhook de Stripe y la contraseña del admin; <code>SECURITY_STRICT=1</code>; <code>ANTHROPIC_API_KEY</code>.</li>
+  <li>Responder las 7 decisiones de §9 y cerrar el PR de <code>audit/estabilizacion-pos</code> sin fusionar.</li>
+</ul>
+</body>
+</html>

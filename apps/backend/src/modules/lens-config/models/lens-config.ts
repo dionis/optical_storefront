@@ -47,6 +47,11 @@ export const LensDesign = model.define("lens_design", {
   requires_add: model.boolean().default(false),
   sort: model.number().default(0),
   is_active: model.boolean().default(true),
+  /** Named progressive designs: the owner's tier label ("Básico" … "Elite"). */
+  tier: model.text().nullable(),
+  /** Short "who is it for" text shown next to the tier. */
+  use_es: model.text().nullable(),
+  use_en: model.text().nullable(),
 });
 
 /** Lens material (columns of the matrix). `max_abs` = max recommended Rx magnitude. */
@@ -62,12 +67,22 @@ export const LensMaterial = model.define("lens_material", {
   is_active: model.boolean().default(true),
 });
 
-/** Base lens price for a (design, material) cell of the matrix. */
+/**
+ * Base lens price for a (design, material, finish) cell of the matrix.
+ * `finish` "stock" | "digital" (lib/lens-finish.ts): single vision and bifocals
+ * may hold both; progressives only a digital cell. `cost_cents` is the lab's
+ * price to the shop for that cell (null = unknown → cost rules apply); it is
+ * read with cost privileges only and never leaves on the public matrix.
+ */
 export const LensBasePrice = model.define("lens_base_price", {
   id: model.id().primaryKey(),
   design_code: model.text(),
   material_code: model.text(),
+  finish: model.text().default("stock"),
   price_cents: model.number().default(0),
+  cost_cents: model.number().nullable(),
+  /** false = hidden: the shop does not do this work for now (not offered at the till or on the web). */
+  is_active: model.boolean().default(true),
 });
 
 /** Photochromic / Transitions add-on, priced per design category (null = N/A). */
@@ -80,6 +95,15 @@ export const LensPhotoOption = model.define("lens_photo_option", {
   price_sv_cents: model.number().nullable(),
   price_bifocal_cents: model.number().nullable(),
   price_prog_cents: model.number().nullable(),
+  /**
+   * Legacy single lab cost (before costs per category). Still read as the
+   * fallback of a category with no cost of its own; new writes go per category.
+   */
+  cost_cents: model.number().nullable(),
+  /** What the lab charges per design category (a bifocal or progressive blank costs more); null = unknown. Never public. */
+  cost_sv_cents: model.number().nullable(),
+  cost_bifocal_cents: model.number().nullable(),
+  cost_prog_cents: model.number().nullable(),
   sort: model.number().default(0),
   is_active: model.boolean().default(true),
 });
@@ -92,6 +116,8 @@ export const LensArOption = model.define("lens_ar_option", {
   label_en: model.text(),
   ar_group: model.text(), // "sv" | "bifprog" | "all"
   price_cents: model.number().default(0),
+  /** What the lab charges for it; null = unknown. Never public. */
+  cost_cents: model.number().nullable(),
   sort: model.number().default(0),
   is_active: model.boolean().default(true),
 });
@@ -108,4 +134,22 @@ export const LensTreatmentPrice = model.define("lens_treatment_price", {
   material_code: model.text(),
   treatment_code: model.text(),
   price_cents: model.number().default(0),
+});
+
+/**
+ * A store's variation of the master lens list (pricing panel, "Lentes" per
+ * store). `item_kind` "adjust" = one percentage over the whole master
+ * (`item_key` "all", `value` = percent); "base" = exact cents of a
+ * (design, material) cell (`item_key` "<design>:<material>"); "photo" = exact
+ * cents of a photochromic option in a category (`item_key` "<code>:<sv|bifocal|prog>");
+ * "ar" = exact cents of an AR option (`item_key` "<code>"). A cell override
+ * wins over the percentage. Read by lens-quote.ts when quoting for a store.
+ */
+export const LensStorePrice = model.define("lens_store_price", {
+  id: model.id().primaryKey(),
+  establishment_id: model.text(),
+  item_kind: model.text(),
+  item_key: model.text(),
+  value: model.float(),
+  created_by: model.text().nullable(),
 });

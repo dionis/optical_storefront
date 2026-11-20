@@ -1,13 +1,20 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { isAddressChoice, saveFromSeller, sellerWithAddress } from "../../../../lib/seller-address";
 import { findSellerById, projectSeller, sellerService } from "../../../../lib/sellers";
 import { SellerInputError, validateSellerBody, type SellerBody } from "../route";
+import { invalidateStaffScope, writeStaffAssignment } from "../../../../lib/staff-scope";
 
 /**
  *   PATCH  /admin/sellers/:id — partial update → { seller }.
  *   DELETE /admin/sellers/:id — soft delete → { id, deleted: true }. The code
  *                               is freed; past orders keep their seller_code.
+ *                               Refused while a panel user sells as this
+ *                               seller (reason `seller_linked`).
+ *
+ * A record linked to a panel user drives that user: changing its store moves
+ * their Equipo store with it, and deactivating it stops them at the counter.
  */
 
 export async function PATCH(req: AuthenticatedMedusaRequest<SellerBody>, res: MedusaResponse): Promise<void> {
@@ -18,9 +25,27 @@ export async function PATCH(req: AuthenticatedMedusaRequest<SellerBody>, res: Me
     const current = await findSellerById(req.scope, id);
     if (!current) throw new SellerInputError("not_found", `Seller '${id}' not found.`, 404);
     const data = await validateSellerBody(req, body, current);
+    // One address with the person's profile, unless someone decided otherwise.
+    const choice = isAddressChoice(body.address_choice) ? body.address_choice : null;
+    if (data["address"] !== undefined || choice) {
+      const saved = await saveFromSeller(req.scope, current, data["address"] as string | null | undefined, choice, req.auth_context?.actor_id ?? null);
+      if (saved.conflict) {
+        res.status(409).json({ type: "not_allowed", reason: "address_conflict", other: saved.other, message: "The address differs from the one on the person's profile." });
+        return;
+      }
+      data["address"] = saved.address;
+      data["address_separate"] = saved.separate;
+    }
     const svc = sellerService(req.scope);
     const [updated] = (await svc.updateSellers([{ id, ...data }])) as unknown as Record<string, unknown>[];
-    res.json({ seller: projectSeller(updated ?? { ...current, ...data }) });
+    if (current.user_id) {
+      const store = (data["establishment_id"] as string | null | undefined) ?? current.establishment_id;
+      if (store && store !== current.establishment_id) {
+        await writeStaffAssignment(req.scope, { userId: current.user_id, role: "seller", establishmentIds: [store], actorId: req.auth_context?.actor_id ?? null });
+      }
+      invalidateStaffScope(current.user_id);
+    }
+    res.json({ seller: await sellerWithAddress(req.scope, projectSeller(updated ?? { ...current, ...data })) });
   } catch (error) {
     if (error instanceof SellerInputError) {
       res.status(error.status).json({ type: "invalid_data", reason: error.reason, message: error.message });
@@ -38,6 +63,10 @@ export async function DELETE(req: AuthenticatedMedusaRequest, res: MedusaRespons
     const current = await findSellerById(req.scope, id);
     if (!current) {
       res.status(404).json({ type: "not_found", reason: "not_found", message: `Seller '${id}' not found.` });
+      return;
+    }
+    if (current.user_id) {
+      res.status(409).json({ type: "not_allowed", reason: "seller_linked", message: "A panel user sells as this seller; change their role or delete them first." });
       return;
     }
     await sellerService(req.scope).softDeleteSellers([id]);

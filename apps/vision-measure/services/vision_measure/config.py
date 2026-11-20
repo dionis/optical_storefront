@@ -195,7 +195,7 @@ PROVIDERS: Tuple[ProviderSpec, ...] = (
         ),
         env_keys=("OPENROUTER_API_KEY",),
         docs_url="https://openrouter.ai/keys",
-        extra_headers={"X-Title": "RUBILENS VTO"},
+        extra_headers={"X-Title": f"{os.environ.get('STORE_NAME', '').strip() or 'RUBILENS'} VTO"},
     ),
 )
 
@@ -210,6 +210,81 @@ def get_provider(provider_id: str) -> ProviderSpec:
             f"Proveedor multimodal no soportado: '{provider_id}'. Disponibles: {valid}"
         )
     return spec
+
+
+# ── Model selection by environment ────────────────────────────────────────────
+# Which model answers is an operating decision (price, quality, a vendor retiring a
+# preview id), not a code change. Every default below can be replaced from the
+# environment — Coolify, or apps/vision-measure/.env in development — and a model named
+# in the request still wins over all of them. The built-in values are only what runs
+# when nobody configured anything.
+#
+#   VISION_DEFAULT_PROVIDER        provider used when the request names none
+#   VISION_<PROVIDER>_MODEL        measurement model for that provider
+#   VISION_DEFAULT_IMAGE_ENGINE    render engine when the request names none
+#   VISION_<PROVIDER>_IMAGE_MODEL  render model for that provider
+#   VISION_<PROVIDER>_IMAGE_FALLBACK_MODEL  spare render model (retired id / congestion)
+#
+# <PROVIDER> is the registry id in upper case: GEMINI, OPENAI, ANTHROPIC, OPENROUTER…
+
+# What a caller that names no provider gets. The storefront is that caller, and it has
+# always measured with Gemini.
+BUILTIN_DEFAULT_PROVIDER = "gemini"
+BUILTIN_DEFAULT_IMAGE_ENGINE = "gemini"
+
+
+def _env(name: str) -> str:
+    load_env_files()
+    return (os.environ.get(name) or "").strip()
+
+
+def _provider_env(provider_id: str, suffix: str) -> str:
+    return _env(f"VISION_{provider_id.strip().upper()}_{suffix}")
+
+
+def default_provider_id() -> str:
+    """Provider for a request that names none: VISION_DEFAULT_PROVIDER, else Gemini."""
+    configured = _env("VISION_DEFAULT_PROVIDER").lower()
+    if configured and configured in PROVIDERS_BY_ID:
+        return configured
+    if configured:
+        print(
+            f"[VISION] VISION_DEFAULT_PROVIDER='{configured}' no es un proveedor conocido; "
+            f"se usa '{BUILTIN_DEFAULT_PROVIDER}'."
+        )
+    return BUILTIN_DEFAULT_PROVIDER
+
+
+def resolve_provider_id(requested: Optional[str]) -> str:
+    """The request's provider when it names one, the configured default otherwise."""
+    return (requested or "").strip().lower() or default_provider_id()
+
+
+def default_model_for(spec: ProviderSpec) -> str:
+    """Measurement model when the request leaves it empty: VISION_<ID>_MODEL > registry."""
+    return _provider_env(spec.id, "MODEL") or spec.default_model
+
+
+def resolve_model(spec: ProviderSpec, requested: Optional[str]) -> str:
+    return (requested or "").strip() or default_model_for(spec)
+
+
+def default_image_engine() -> str:
+    """Render engine for a request that names none: VISION_DEFAULT_IMAGE_ENGINE > Gemini."""
+    return _env("VISION_DEFAULT_IMAGE_ENGINE").lower() or BUILTIN_DEFAULT_IMAGE_ENGINE
+
+
+def resolve_image_engine(requested: Optional[str]) -> str:
+    return (requested or "").strip().lower() or default_image_engine()
+
+
+def image_model_for(provider_id: str, builtin: str) -> str:
+    """Render model: VISION_<ID>_IMAGE_MODEL > the compositor's built-in id."""
+    return _provider_env(provider_id, "IMAGE_MODEL") or builtin
+
+
+def image_fallback_model_for(provider_id: str, builtin: Optional[str]) -> Optional[str]:
+    return _provider_env(provider_id, "IMAGE_FALLBACK_MODEL") or builtin
 
 
 def env_key_for(spec: ProviderSpec) -> Optional[str]:
@@ -272,7 +347,9 @@ def describe_providers() -> List[Dict[str, object]]:
             "id": spec.id,
             "label": spec.label,
             "adapter": spec.adapter,
-            "defaultModel": spec.default_model,
+            "defaultModel": default_model_for(spec),
+            # True when the default came from VISION_<ID>_MODEL rather than the registry
+            "defaultModelFromEnv": default_model_for(spec) != spec.default_model,
             "suggestedModels": list(spec.suggested_models),
             "envKeys": list(spec.env_keys),
             "hasServerKey": env_key_for(spec) is not None,

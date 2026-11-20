@@ -10,7 +10,9 @@
  * these templates are a read-only view of what the order module settled on.
  */
 
-import { tenantName } from "../tenant";
+import { DEFAULT_EMAIL_BRAND, ownerBrand, tenant, tenantName } from "../tenant";
+import { recolorHtml, type EmailPalette } from "../tenant-brand";
+import { normalizeColor, storeBanner, storeSubjectTag, type StoreLabel } from "../store-color";
 import { t, type EmailLocale } from "./copy";
 import type { EnrichedItem, FrameSpecs, PaymentInfo, TrackingInfo } from "./order-enrich";
 import type { ImageRef } from "./order-images";
@@ -27,6 +29,8 @@ export interface OrderEmailExtras {
    * with a prescription ride on PrescriptionForEmail). Attached to the message.
    */
   itemImages?: Record<number, ImageRef>;
+  /** Admin copy of a till sale: the store it belongs to, shown in its color. */
+  store?: StoreLabel | null;
 }
 
 /**
@@ -103,15 +107,26 @@ export interface RenderedEmail {
   text: string;
 }
 
-/** Paleta de la tienda (azul marino + dorado), la misma de rubilens.com. */
-export const BRAND = "#0b2f66";
+/** `hex` mixed with white (`amount` of white, 0–1): the soft tint of a brand colour. */
+function tint(hex: string, amount: number): string {
+  const ch = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `#${ch.map((c) => Math.round(c + (255 - c) * amount).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Paleta de los correos: la de la óptica (TENANT_BRAND_PRIMARY/ACCENT), con el
+ * azul marino y el dorado de siempre por defecto. Los tonos suaves conservan sus
+ * valores afinados a mano cuando la marca es la de por defecto.
+ */
+const EMAIL_BRAND = tenant().brand;
+export const BRAND = EMAIL_BRAND.emailPrimary;
 export const MUTED = "#5b6472";
 export const BORDER = "#e7eaf0";
-export const GOLD = "#b8921e";
-export const GOLD_LIGHT = "#f6efd9";
+export const GOLD = EMAIL_BRAND.emailAccent;
+export const GOLD_LIGHT = GOLD === DEFAULT_EMAIL_BRAND.emailAccent ? "#f6efd9" : tint(GOLD, 0.85);
 export const BONE = "#f5f2ec";
 export const INK = "#1e2733";
-export const NAVY_SOFT = "#eef2f8";
+export const NAVY_SOFT = BRAND === DEFAULT_EMAIL_BRAND.emailPrimary ? "#eef2f8" : tint(BRAND, 0.92);
 export const GREEN = "#1e6b3a";
 export const GREEN_LIGHT = "#e3f5e9";
 
@@ -146,7 +161,24 @@ export function emailStoreName(): string {
  * clients, and the header has to look the same in every message.
  */
 export function emailLogoUrl(): string {
+  // A logo the owner uploaded in the panel wins; mail clients need an absolute URL.
+  const owner = ownerBrand()?.logo_url;
+  if (owner) return owner.startsWith("/") ? `${storefrontOrigin()}${owner}` : owner;
   return process.env.EMAIL_LOGO_URL?.trim() || `${storefrontOrigin()}/logo-oficial.png`;
+}
+
+/** The palette every template is written with (deployment colours, fixed at boot). */
+const DEPLOY_PALETTE: EmailPalette = { primary: BRAND, accent: GOLD, primarySoft: NAVY_SOFT, accentSoft: GOLD_LIGHT };
+
+/**
+ * The owner's brand from the panel, applied to an already rendered email: the
+ * templates keep using the boot-time constants and this swaps them, so a brand
+ * change reaches every email without a restart. Unchanged when no brand is saved.
+ */
+export function recolorEmail(html: string): string {
+  const b = ownerBrand();
+  if (!b) return html;
+  return recolorHtml(html, DEPLOY_PALETTE, { primary: b.primary, accent: b.accent, primarySoft: tint(b.primary, 0.92), accentSoft: tint(b.accent, 0.85) });
 }
 
 /**
@@ -394,7 +426,13 @@ function renderAddress(order: OrderEmailData, locale: EmailLocale): string {
   <div style="font-size:14px;line-height:1.7;color:${INK}">${body}</div>`;
 }
 
-export function shell(title: string, preheader: string, inner: string, locale: EmailLocale, opts?: { printTicket?: boolean }): string {
+export function shell(title: string, preheader: string, inner: string, locale: EmailLocale, opts?: { printTicket?: boolean; accent?: string | null }): string {
+  return recolorEmail(shellHtml(title, preheader, inner, locale, opts));
+}
+
+function shellHtml(title: string, preheader: string, inner: string, locale: EmailLocale, opts?: { printTicket?: boolean; accent?: string | null }): string {
+  // A store's email wears its color: a stripe on top, the title's edge and the footer's line.
+  const accent = normalizeColor(opts?.accent);
   const site = storefrontOrigin().replace(/^https?:\/\//, "");
   const printCss = opts?.printTicket
     ? `<style>@media print{@page{size:letter;margin:.4in .5in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{background:#fff!important;margin:0!important;padding:0!important}body>table{background:#fff!important}body>table>tbody>tr>td{padding:0!important}}</style>`
@@ -408,9 +446,10 @@ export function shell(title: string, preheader: string, inner: string, locale: E
       <tr>
         <td align="center" style="padding:28px 12px">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;max-width:620px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(11,47,102,.10)">
+            ${accent ? `<tr><td height="12" bgcolor="${accent}" style="background:${accent};height:12px;font-size:0;line-height:0">&nbsp;</td></tr>` : ""}
             ${brandHeaderRow()}
             <tr>
-              <td style="background:${NAVY_SOFT};padding:18px 32px;border-left:6px solid ${GOLD}">
+              <td style="background:${NAVY_SOFT};padding:18px 32px;border-left:${accent ? `10px solid ${accent}` : `6px solid ${GOLD}`}">
                 <div style="color:${BRAND};font-size:20px;font-weight:800;letter-spacing:.01em;line-height:1.3">${esc(title)}</div>
               </td>
             </tr>
@@ -418,7 +457,7 @@ export function shell(title: string, preheader: string, inner: string, locale: E
               <td style="padding:26px 32px 30px">${inner}</td>
             </tr>
             <tr>
-              <td style="background:${BRAND};padding:18px 32px;border-top:3px solid ${GOLD}">
+              <td style="background:${BRAND};padding:18px 32px;border-top:${accent ? `6px solid ${accent}` : `3px solid ${GOLD}`}">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
                   <tr>
                     <td style="font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#ffffff">${esc(emailStoreName())}</td>
@@ -748,7 +787,7 @@ function hasUnloadedPrescription(
 }
 
 /** Renders every distinct prescription referenced by the order's line items. */
-function renderPrescriptions(
+export function renderPrescriptions(
   order: OrderEmailData,
   prescriptions: Record<string, PrescriptionForEmail> | undefined,
   locale: EmailLocale,
@@ -771,7 +810,7 @@ function renderPrescriptions(
  * Plain-text version of the prescriptions. Carries exactly the same fields as
  * the HTML block — this half is what gets forwarded to a lab or an optician.
  */
-function rxTextLines(
+export function rxTextLines(
   order: OrderEmailData,
   prescriptions: Record<string, PrescriptionForEmail> | undefined,
   locale: EmailLocale,
@@ -989,7 +1028,7 @@ function renderPaymentAdmin(payment: PaymentInfo | null | undefined, locale: Ema
  * Plain-language glossary of the Rx table, for the CUSTOMER copy only. The store
  * copy goes to people who read these values for a living.
  */
-function renderRxGlossary(hasRx: boolean, hasHeight: boolean, locale: EmailLocale): string {
+export function renderRxGlossary(hasRx: boolean, hasHeight: boolean, locale: EmailLocale): string {
   if (!hasRx) return "";
   const lines = [
     t(locale, "rx_gloss_sph"),
@@ -1140,6 +1179,7 @@ export function renderAdminOrderNotification(
 
   const phone = order.shipping_address?.phone ? ` · ${order.shipping_address.phone}` : "";
   const inner = `
+    ${extras?.store ? storeBanner(extras.store) : ""}
     <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:${INK}">${esc(t(locale, "admin_order_intro"))}</p>
     ${renderTicketHeader(displayId, formatDateTime(order.created_at, locale), locale, { text: total, bg: GREEN_LIGHT, fg: GREEN })}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;margin-top:14px;border:1px solid ${BORDER};border-radius:12px;font-size:14px">
@@ -1164,6 +1204,7 @@ export function renderAdminOrderNotification(
     ${renderDeliveryCards(order, extras, locale)}`;
 
   const text = [
+    ...(extras?.store ? [[extras.store.code, extras.store.name].filter(Boolean).join(" · "), ""] : []),
     t(locale, "admin_order_intro"),
     "",
     `${t(locale, "customer")}: ${name ? `${name} · ` : ""}${order.email ?? ""}`,
@@ -1180,11 +1221,11 @@ export function renderAdminOrderNotification(
     ...(imagesNote ? ["", imagesNote] : []),
   ].join("\n");
 
-  const subject = t(locale, "admin_order_subject", { display_id: displayId, total });
+  const subject = `${extras?.store ? `${storeSubjectTag(extras.store)} · ` : ""}${t(locale, "admin_order_subject", { display_id: displayId, total })}`;
 
   return {
     subject,
-    html: shell(t(locale, "admin_order_title"), subject, inner, locale, { printTicket: true }),
+    html: shell(t(locale, "admin_order_title"), subject, inner, locale, { printTicket: true, accent: extras?.store?.color }),
     text,
   };
 }

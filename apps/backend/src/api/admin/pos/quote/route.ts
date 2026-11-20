@@ -1,12 +1,13 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { opticalChange } from "../../../../lib/optical-change";
 import { cleanDiscountPct, cleanLines, cleanRxMeta, discountNeedsApproval, type PosLineInput } from "../../../../lib/pos";
-import { checkPrescriptions, PosError, quoteSale, rxContexts, type RxInput } from "../../../../lib/pos-data";
+import { checkPrescriptions, PosError, rxContexts, rxDesigns, type RxInput } from "../../../../lib/pos-data";
+import { quoteWithPromotion } from "../../../../lib/pos-promotion";
 import { posHandler, posScope, sellableStore } from "../../../../lib/pos-route";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
 
 /**
- * POST /admin/pos/quote — { store, lines, discount_pct?, prescription? }
+ * POST /admin/pos/quote — { store, lines, discount_pct?, promotion_id?, promotion_ref?, prescription? }
  *
  * Each line priced in the store, the discount applied and the total, plus
  * whether the discount needs the owner's or a superadmin's approval. With the
@@ -19,6 +20,11 @@ interface Body {
   store?: string;
   lines?: PosLineInput[];
   discount_pct?: unknown;
+  /** A promotion of the store (lib/promotions.ts) and, for «compre N, lleve M», the paid sale(s). */
+  promotion_id?: string | null;
+  promotion_ref?: string | null;
+  /** The patient, when picked: a promotion «desde la N.ª compra» counts their purchases. */
+  customer_id?: string | null;
   prescription?: RxInput | null;
   worn?: RxInput | null;
 }
@@ -33,13 +39,17 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     const discount = cleanDiscountPct(body.discount_pct);
     if ("reason" in discount) throw new PosError(discount.reason);
 
-    const [quote, settings] = await Promise.all([quoteSale(req.scope, store.id, cleaned.lines, discount.pct), getPosSettings(req.scope)]);
+    const [promoted, settings] = await Promise.all([
+      quoteWithPromotion(req.scope, store.id, cleaned.lines, discount.pct, body.promotion_id, body.promotion_ref, typeof body.customer_id === "string" && body.customer_id ? body.customer_id : null),
+      getPosSettings(req.scope),
+    ]);
+    const { quote } = promoted;
     const limitPct = discountLimitFor(scope, settings.discount_limits);
 
     let rx_check: { fulfillable: boolean; warnings: unknown[]; validation?: unknown } | null = null;
     if (body.prescription?.rx) {
       try {
-        rx_check = { fulfillable: true, ...checkPrescriptions(req.scope, { new: body.prescription, worn: null }, false, rxContexts(quote)) };
+        rx_check = { fulfillable: true, ...checkPrescriptions(req.scope, { new: body.prescription, worn: null }, false, rxContexts(quote), rxDesigns(quote)) };
       } catch (e) {
         if (e instanceof PosError && e.reason === "invalid_prescription") rx_check = { fulfillable: false, warnings: [], validation: e.extra.validation };
         else throw e;
@@ -60,7 +70,10 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
       quote,
       optical_change,
       limit_pct: limitPct,
-      needs_approval: discountNeedsApproval({ isAdmin: scope.is_admin, pct: quote.discount_pct, limitPct, belowMinimum: quote.below_minimum }),
+      // A promotion's percentage was set up by the owner: it never asks for approval.
+      needs_approval: promoted.discount_source === "promotion" ? false : discountNeedsApproval({ isAdmin: scope.is_admin, pct: quote.discount_pct, limitPct, belowMinimum: quote.below_minimum }),
+      promotion: promoted.promotion,
+      discount_source: promoted.discount_source,
       rx_check,
     });
   });

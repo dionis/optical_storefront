@@ -12,11 +12,11 @@ import {
   undefinedCostCount,
   type SummaryEntry,
 } from "../../../../lib/costing";
-import { scanBoardWindow } from "../../../../lib/order-board";
+import { matchesStore, scanBoardWindow } from "../../../../lib/order-board";
 import { tenant } from "../../../../lib/tenant";
 
 /**
- * GET /admin/costing/summary?from&to&seller — gross, deductions, net base,
+ * GET /admin/costing/summary?from&to&seller&store — gross, deductions, net base,
  * cost and profit per order and in total over the board window, plus where
  * the money went:
  *
@@ -33,7 +33,8 @@ import { tenant } from "../../../../lib/tenant";
  *
  * Terminal orders (canceled, refunded, payment pending) are left out of the
  * list and the totals: they cost nothing and earned nothing worth reporting.
- * `seller` filters by code ("none" = unattributed).
+ * `seller` filters by code ("none" = unattributed); `store` keeps one
+ * establishment's till sales or, with "web", the online store.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   const logger = req.scope.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
@@ -46,6 +47,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
   }
   const sellerRaw = String(query.seller ?? "").trim();
   const seller = sellerRaw.toLowerCase() === "none" ? "none" : sellerRaw.toUpperCase();
+  const store = String(query.store ?? "").trim();
 
   try {
     // Same window as the board; the raw rows are kept because the stored
@@ -58,6 +60,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
 
     for (const [i, o] of window.orders.entries()) {
       if (o.terminal) continue;
+      if (store && !matchesStore(o, store)) continue;
       if (seller === "none" && o.seller_code) continue;
       if (seller && seller !== "none" && o.seller_code !== seller) continue;
       const stored = readStoredSheet(window.raw[i]?.["metadata"] as Record<string, unknown> | null);

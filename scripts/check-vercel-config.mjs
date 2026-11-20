@@ -10,9 +10,14 @@
 //   - apps/capri-storefront/backend-target.mjs picks the prefix per build from the
 //     branch: develop/main → /medusa; any other branch → /medusa-staging. The one
 //     exception is BACKEND_TARGET_OVERRIDE=staging, an env var set by hand in a
-//     Vercel project (never in code, so a merge cannot turn it on).
+//     Vercel project (never in code or a manifest, so a merge cannot turn it on);
+//     www.rubilens.com uses it to run on the panel's backend. A new optician can
+//     never use it.
 //   - the app takes the prefix from VITE_BACKEND_PROXY, which scripts/vercel-build.sh
 //     sets from backend-target.mjs (and refuses to build a live branch otherwise).
+//   - every other optician (multi-tenant) gets one more fixed rewrite,
+//     /medusa-t-<slug> → its manifest's domains.api, written by `pnpm tenant
+//     vercel` (scripts/tenant/routing.mjs); its builds use only that prefix.
 // This check fails whenever any of that stops being true.
 //
 // Run: node scripts/check-vercel-config.mjs (part of `pnpm test` and CI).
@@ -23,17 +28,33 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const STOREFRONT = join(ROOT, "apps", "capri-storefront");
 const PRODUCTION = "https://api.161-153-9-98.sslip.io";
-const STAGING = "https://api-staging.161-153-9-98.sslip.io";
-const STAGING_HOST = "api-staging.";
+// Óptica El Rancho's own name for the same Coolify app (13-nov-2026); the old
+// sslip.io name stays on it in Coolify for anything that still calls it.
+const STAGING = "https://api.opticaelrancho.com";
+const STAGING_HOST = new URL(STAGING).host;
+const { readManifests, tenantVercelRules, tenantProxyPath } = await import(pathToFileURL(join(ROOT, "scripts", "tenant", "routing.mjs")).href);
+const MANIFESTS = readManifests(ROOT);
+const TENANT_RULES = tenantVercelRules(MANIFESTS);
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
 const read = (p) => readFileSync(p, "utf8");
+/** Every tenants/<slug>/tenant.json on disk. */
+const readManifestFiles = () => {
+  const dir = join(ROOT, "tenants");
+  return existsSync(dir) ? readdirSync(dir).map((d) => join(dir, d, "tenant.json")).filter(existsSync) : [];
+};
 
 // 1. One static config file, with exactly the two backend rewrites.
 for (const name of ["vercel.ts", "vercel.js", "vercel.mjs", "vercel.cjs", "vercel.mts", "vercel.toml"]) {
   if (existsSync(join(STOREFRONT, name))) fail(`apps/capri-storefront/${name} exists — the storefront uses vercel.json only`);
 }
+// A second vercel.json at the repo root was a hand-maintained copy that Vercel
+// never read (Root Directory = apps/capri-storefront) and that drifted: no
+// staging rewrite, another buildCommand, other headers. One source of truth, or
+// none (removed 2026-11-04, together with the root scripts/vercel-build.sh).
+if (existsSync(join(ROOT, "vercel.json"))) fail("vercel.json at the repo root — Vercel reads apps/capri-storefront/vercel.json only; delete the root copy");
+if (existsSync(join(ROOT, "scripts", "vercel-build.sh"))) fail("scripts/vercel-build.sh at the repo root — the build script is apps/capri-storefront/scripts/vercel-build.sh; delete the root copy");
 const configPath = join(STOREFRONT, "vercel.json");
 let config = null;
 try {
@@ -49,8 +70,21 @@ if (config) {
   const spa = rewrites.findIndex((r) => r.source === "/(.*)");
   if (prod === -1 || rewrites[prod].destination !== `${PRODUCTION}/:path*`) fail("vercel.json: /medusa/:path* must rewrite to the production backend");
   if (stag === -1 || rewrites[stag].destination !== `${STAGING}/:path*`) fail("vercel.json: /medusa-staging/:path* must rewrite to the staging backend");
-  if (backendRules.length !== 2) fail(`vercel.json: expected exactly 2 backend rewrites, found ${backendRules.length}`);
+  const expected = 2 + TENANT_RULES.rewrites.length;
+  if (backendRules.length !== expected) fail(`vercel.json: expected exactly ${expected} backend rewrites (2 + one per optician), found ${backendRules.length} — run \`pnpm tenant vercel\``);
   if (spa !== -1 && (spa < prod || spa < stag)) fail("vercel.json: the SPA fallback /(.*) must come after the backend rewrites");
+  for (const want of TENANT_RULES.rewrites) {
+    const i = rewrites.findIndex((r) => r.source === want.source);
+    if (i === -1 || rewrites[i].destination !== want.destination) fail(`vercel.json: ${want.source} must rewrite to ${want.destination} — run \`pnpm tenant vercel\``);
+    else if (spa !== -1 && spa < i) fail(`vercel.json: ${want.source} must come before the SPA fallback`);
+  }
+  for (const r of backendRules) {
+    if (r.source.startsWith("/medusa-t-") && !TENANT_RULES.rewrites.some((w) => w.source === r.source)) fail(`vercel.json: ${r.source} has no manifest in tenants/ — run \`pnpm tenant vercel\``);
+  }
+  for (const h of TENANT_RULES.headers) {
+    const got = (config.headers ?? []).find((x) => x.source === h.source);
+    if (!got || !got.headers.some((x) => x.key === "Cache-Control" && x.value === "no-store")) fail(`vercel.json: ${h.source} must be served no-store`);
+  }
   for (const prefix of ["/medusa/(.*)", "/medusa-staging/(.*)"]) {
     const h = (config.headers ?? []).find((x) => x.source === prefix);
     if (!h || !h.headers.some((x) => x.key === "Cache-Control" && x.value === "no-store")) fail(`vercel.json: ${prefix} must be served no-store`);
@@ -69,7 +103,8 @@ const CASES = [
   [{ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop_optical_storepos" }, "staging"],
   [{ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "frontend" }, "staging"],
   [{}, "staging"],
-  // The deliberate switch: only the exact value "staging", on any branch.
+  // The deliberate switch (www.rubilens.com on the panel's backend): only the
+  // exact value "staging", on any branch, and only in a Vercel project.
   [{ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop", BACKEND_TARGET_OVERRIDE: "staging" }, "staging"],
   [{ VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main", BACKEND_TARGET_OVERRIDE: "staging" }, "staging"],
   [{ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop", BACKEND_TARGET_OVERRIDE: "" }, "production"],
@@ -89,6 +124,46 @@ for (const bad of ["production", "Staging", "https://api-staging.example", "1"])
 for (const file of [join(ROOT, "vercel.json"), join(STOREFRONT, "vercel.json"), join(STOREFRONT, ".env"), join(STOREFRONT, ".env.production")].filter(existsSync)) {
   if (read(file).includes("BACKEND_TARGET_OVERRIDE")) fail(`${relative(ROOT, file)} sets BACKEND_TARGET_OVERRIDE — it belongs in the Vercel project settings only`);
 }
+for (const file of readManifestFiles()) {
+  if (read(file).includes("BACKEND_TARGET_OVERRIDE")) fail(`${relative(ROOT, file)} mentions BACKEND_TARGET_OVERRIDE — a manifest must never re-point a store`);
+}
+// The two original stores keep the branch rule even with TENANT_FILE set,
+// and the override works for them too (RUBI LENS is the one that uses it).
+for (const [env, want] of [
+  [{ TENANT_FILE: "tenants/rubi-lens/tenant.json", VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "develop" }, "production"],
+  [{ TENANT_FILE: "tenants/el-rancho/tenant.json", VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop_optical_storepos" }, "staging"],
+  [{ TENANT_FILE: "tenants/rubi-lens/tenant.json", VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop", BACKEND_TARGET_OVERRIDE: "staging" }, "staging"],
+]) {
+  const got = resolveBackend(env);
+  if (got.target !== want || got.proxy !== PROXY_PATHS[want]) fail(`${JSON.stringify(env)} → ${got.target} ${got.proxy}, expected ${want}`);
+}
+// Any other optician: its own prefix on every branch, never /medusa.
+const NEW_TENANT = { slug: "optica-nueva", domains: { api: "https://api.optica-nueva.com" } };
+for (const env of [{ VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main" }, { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop" }, {}]) {
+  const got = resolveBackend(env, NEW_TENANT);
+  if (got.target !== "tenant" || got.proxy !== tenantProxyPath("optica-nueva")) fail(`new optician on ${JSON.stringify(env)} → ${got.target} ${got.proxy}, expected tenant ${tenantProxyPath("optica-nueva")}`);
+}
+let refused = false;
+try {
+  resolveBackend({}, { slug: "sin-api", domains: {} });
+} catch {
+  refused = true;
+}
+if (!refused) fail("backend-target.mjs: an optician without an https domains.api must fail the build, not fall back to another backend");
+// A new optician can never be sent to the original stores' backend by the override.
+let overrideRefused = false;
+try {
+  resolveBackend({ VERCEL_GIT_COMMIT_REF: "develop", BACKEND_TARGET_OVERRIDE: "staging" }, NEW_TENANT);
+} catch {
+  overrideRefused = true;
+}
+if (!overrideRefused) fail("backend-target.mjs: BACKEND_TARGET_OVERRIDE on a new optician must fail the build");
+// The tenant branch still demands its optician, override or not.
+for (const env of [{ VERCEL_GIT_COMMIT_REF: "tenant-deploy" }, { VERCEL_GIT_COMMIT_REF: "tenant-deploy", BACKEND_TARGET_OVERRIDE: "staging" }]) {
+  let threw = false;
+  try { resolveBackend(env, null); } catch { threw = true; }
+  if (!threw) fail(`backend-target.mjs: ${JSON.stringify(env)} without TENANT_FILE must fail the build`);
+}
 
 // 3. The build script feeds the app from backend-target.mjs and guards live branches.
 const build = read(join(STOREFRONT, "scripts", "vercel-build.sh"));
@@ -97,7 +172,9 @@ for (const [needle, why] of [
   ["export VITE_BACKEND_TARGET VITE_BACKEND_PROXY", "must export both variables to the app build"],
   ['VITE_VISION_API_BASE="${VITE_BACKEND_PROXY:-/medusa}"', "must give the try-on the same prefix"],
   ['[ "$VITE_BACKEND_PROXY" != "/medusa" ]', "must refuse a live branch that does not use /medusa"],
-  ['[ "$BACKEND_DECIDED_BY" != "override" ]', "must let only the explicit override past the live-branch guard"],
+  ["/medusa-t-*) ;;", "must refuse a tenant build that does not use its own /medusa-t- prefix"],
+  ['TARGET_LINE="$(node backend-target.mjs)"', "must stop the build when backend-target.mjs throws (an assignment carries the exit status)"],
+  ['[ "$BACKEND_DECIDED_BY" = "override" ]', "must let only the explicit override past the live-branch guard"],
 ]) if (!build.includes(needle)) fail(`scripts/vercel-build.sh ${why}`);
 
 // 4. The app builds every backend URL from VITE_BACKEND_PROXY.
@@ -118,7 +195,6 @@ function walk(dir, out = []) {
   return out;
 }
 const scanned = [
-  join(ROOT, "vercel.json"),
   join(STOREFRONT, "backend-target.mjs"),
   ...walk(join(STOREFRONT, "src")),
   ...walk(join(STOREFRONT, "scripts")),

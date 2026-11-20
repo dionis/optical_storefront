@@ -1,16 +1,68 @@
-// Dónde se usa: pestaña Tiendas de /admin — alta y edición de las tiendas físicas
+// Dónde se usa: pestaña Tiendas de /admin — alta y edición de las tiendas
 // (Op1, Op2, Op3…), cada una con su canal de venta. Backend: /admin/establishments.
+// Una de ellas puede ser LA TIENDA ONLINE (Tipo «Tienda online»): la web vende
+// a sus precios y los pedidos de la web son sus ventas (backend lib/online-store.ts).
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchStores, createStore, updateStore } from "./adminStores.js";
+import { fetchStores, createStore, updateStore, freeStoreColor, storeInk, STORE_COLORS } from "./adminStores.js";
+import { formatAddressLine } from "../data/addressAutocomplete.js";
+import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
+import WebStoreCard from "./WebStoreCard.jsx";
+import HelpTip from "./HelpTip.jsx";
 import StorePricing from "./StorePricing.jsx";
+import StoreAssortment from "./StoreAssortment.jsx";
 import PriceImport from "./PriceImport.jsx";
+import StoreTerminals from "./StoreTerminals.jsx";
+import StoreHoursEditor from "./StoreHoursEditor.jsx";
+import { hoursStatus, weekLine, WEEKDAYS } from "./storeHours.js";
+import "./store-hours.css";
+import FieldError from "../components/FieldError.jsx";
+import { LIMITS, phoneProblem, typedPhone } from "../data/fieldRules.js";
 
 const EMPTY = { name: "", address: "", phone: "" };
+/** Icono de cada tipo de tienda: propia, familiar, de un socio o en consignación. */
+const KIND_ICON = { own: "store", family: "team", partner: "share", consignment: "box", online: "globe" };
+/** Tipos que elige el dueño. «online» = la tienda con la que se maneja la web (solo una). */
+const KINDS = ["own", "family", "partner", "consignment", "online"];
+/** Las tiendas que liquidan un % de sus ventas (ni la propia ni la online). */
+const settles = (kind) => Boolean(kind) && kind !== "own" && kind !== "online";
+
+/** «Abierta · cierra 18:00» / «Cerrada · abre lun 09:00» y la semana en una línea (el horario se edita con «Horario»). */
+function HoursFact({ store, tz }) {
+  const { t } = useLang();
+  if (!store.hours) return <span className="adm-store-fact muted" title={t("adm.hours.button")}><Icon name="clock" size={12} />{t("adm.hours.none")}</span>;
+  const st = hoursStatus(store.hours, new Date(), tz);
+  const names = WEEKDAYS.map((d) => t(`adm.hours.short.${d}`));
+  const next = st.next_open && (st.next_open.today ? st.next_open.time : `${t(`adm.hours.short.${WEEKDAYS[(new Date(`${st.next_open.date}T12:00:00Z`).getUTCDay() + 6) % 7]}`)} ${st.next_open.time}`);
+  return (
+    <span className="adm-store-fact sh-fact" title={weekLine(store.hours, names, t("adm.hours.closedWord"))}>
+      <Icon name="clock" size={12} />
+      <span className={`sh-dot ${st.open ? "on" : ""}`} aria-hidden="true" />
+      {st.open ? t("adm.hours.openNow", { time: st.closes_at }) : next ? t("adm.hours.closedNow", { when: next }) : t("adm.hours.closedWord")}
+      {st.special?.label ? ` · ${st.special.label}` : ""}
+    </span>
+  );
+}
+
+/** Muestras de la paleta y, al lado, cualquier otro color. */
+function ColorPicker({ value, onChange, disabled }) {
+  const { t } = useLang();
+  const current = String(value || "").toUpperCase();
+  return (
+    <span className="adm-store-colors" role="group" aria-label={t("adm.stores.color")}>
+      <small className="muted">{t("adm.stores.color")}<HelpTip topic="stores.color" /></small>
+      {STORE_COLORS.map((c) => (
+        <button key={c} type="button" disabled={disabled} className={`adm-store-swatch ${current === c ? "on" : ""}`} style={{ background: c }} aria-label={c} aria-pressed={current === c} title={c} onClick={() => onChange(c)} />
+      ))}
+      <input type="color" disabled={disabled} className="adm-store-swatch-custom" aria-label={t("adm.stores.colorCustom")} title={t("adm.stores.colorCustom")} value={value || STORE_COLORS[0]} onChange={(e) => onChange(e.target.value.toUpperCase())} />
+      <small className="muted">{t("adm.stores.colorHint")}</small>
+    </span>
+  );
+}
 
 /**
  * TIENDAS.
@@ -19,8 +71,9 @@ const EMPTY = { name: "", address: "", phone: "" };
  *  · El recibo lleva los datos del negocio; solo el NOMBRE de la tienda varía
  *    (decisión del dueño). Dirección y teléfono son informativos.
  *  · No se borran: una tienda con ventas solo se desactiva.
+ *  · Cada una nace con un color distinto, el de sus correos; se puede cambiar.
  */
-export default function Stores() {
+export default function Stores({ go = null }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const demo = isDemoLogin();
@@ -31,12 +84,15 @@ export default function Stores() {
   const [editing, setEditing] = useState(null); // id en edición
   const [draft, setDraft] = useState(EMPTY);
   const [pricingId, setPricingId] = useState(null); // tienda con el panel de precios abierto
+  const [assortId, setAssortId] = useState(null); // tienda con el panel de catálogo abierto
+  const [hoursId, setHoursId] = useState(null); // tienda con el horario abierto
+  const [tz, setTz] = useState(undefined); // zona horaria del negocio (el reloj de las tiendas)
 
   const load = () => {
     if (demo) return;
     setState("loading");
     fetchStores()
-      .then((r) => { setStores(r.establishments || []); setState("ok"); })
+      .then((r) => { setStores(r.establishments || []); if (r.timezone) setTz(r.timezone); setState("ok"); })
       .catch(() => setState("error"));
   };
   useEffect(load, [demo]);
@@ -55,13 +111,18 @@ export default function Stores() {
     } finally { setBusy(false); }
   };
 
+  // El color que se propone hasta que la persona elija otro; vuelve a calcularse tras cada alta.
+  const newColor = form.color || freeStoreColor(stores);
+
   const create = async (e) => {
     e.preventDefault();
-    const ok = await run(() => createStore(form), t("adm.stores.created"));
+    if (phoneProblem(form.phone)) return;
+    const ok = await run(() => createStore({ ...form, color: newColor }), t("adm.stores.created"));
     if (ok) setForm(EMPTY);
   };
 
   const save = async (s) => {
+    if (phoneProblem(draft.phone)) return;
     const ok = await run(() => updateStore(s.id, draft), t("adm.stores.saved", { code: s.code }));
     if (ok) setEditing(null);
   };
@@ -86,13 +147,17 @@ export default function Stores() {
         <p className="adm-sub">{t("adm.stores.newSub")}</p>
         <div className="adm-form-grid">
           <label className="adm-field">{t("adm.stores.name")}<input className="adm-input" required maxLength={80} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("adm.stores.namePh")} /></label>
-          <label className="adm-field">{t("adm.stores.address")}<input className="adm-input" maxLength={160} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label>
-          <label className="adm-field">{t("adm.stores.phone")}<input className="adm-input" maxLength={40} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+          <label className="adm-field">{t("adm.stores.address")}<AddressInput className="adm-input" maxLength={160} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} onPick={(p) => setForm((v) => ({ ...v, address: formatAddressLine(p) }))} /></label>
+          <label className="adm-field">{t("adm.stores.phone")}<input className="adm-input" type="tel" maxLength={LIMITS.phone} aria-invalid={phoneProblem(form.phone) ? true : undefined} value={form.phone} onChange={(e) => setForm({ ...form, phone: typedPhone(e.target.value) })} /><FieldError error={phoneProblem(form.phone)} /></label>
         </div>
+        <div style={{ marginTop: 12 }}><ColorPicker value={newColor} disabled={demo || busy} onChange={(color) => setForm({ ...form, color })} /></div>
         <div className="adm-actions" style={{ marginTop: 12 }}>
-          <button className="btn-sm primary" disabled={demo || busy}>{busy ? "…" : t("adm.stores.create")}</button>
+          <button className="btn-sm primary" disabled={demo || busy}><Icon name="plus" size={14} />{busy ? "…" : t("adm.stores.create")}</button>
         </div>
       </form>
+
+      {/* La tienda online: la cuarta tienda del negocio, sin caja ni dirección. */}
+      <WebStoreCard go={go} demo={demo} stores={stores} />
 
       <div className="adm-card">
         <h3><Icon name="store" size={16} />{t("adm.stores.listTitle", { n: stores.length })}</h3>
@@ -100,40 +165,59 @@ export default function Stores() {
         {state === "ok" && stores.length === 0 && <div className="adm-nodata">{t("adm.stores.empty")}</div>}
         <div className="adm-team-rows">
           {stores.map((s) => (
-            <div key={s.id} className="adm-team-row">
-              <span className="adm-team-avatar adm-store-code">{s.code}</span>
+            <div key={s.id} className="adm-team-item">
+            <div className="adm-team-row">
+              {/* El código, en el color de la tienda: el mismo de sus correos. */}
+              <span className="adm-team-avatar adm-store-code" title={`${s.code} · ${s.color || ""}`} style={s.color ? { background: s.color, color: storeInk(s.color) } : undefined}>{s.code}</span>
               {editing === s.id ? (
                 <span className="adm-team-main adm-store-edit">
                   <input className="adm-input" aria-label={t("adm.stores.name")} maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-                  <input className="adm-input" aria-label={t("adm.stores.address")} placeholder={t("adm.stores.address")} maxLength={160} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
-                  <input className="adm-input" aria-label={t("adm.stores.phone")} placeholder={t("adm.stores.phone")} maxLength={40} value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
+                  <AddressInput className="adm-input" aria-label={t("adm.stores.address")} placeholder={t("adm.stores.address")} maxLength={160} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} onPick={(p) => setDraft((v) => ({ ...v, address: formatAddressLine(p) }))} />
+                  <input className="adm-input" type="tel" aria-label={t("adm.stores.phone")} placeholder={t("adm.stores.phone")} maxLength={LIMITS.phone} aria-invalid={phoneProblem(draft.phone) ? true : undefined} value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: typedPhone(e.target.value) })} />
+                  <FieldError error={phoneProblem(draft.phone)} />
+                  <ColorPicker value={draft.color} onChange={(color) => setDraft({ ...draft, color })} />
                   <select className="adm-input" aria-label={t("adm.stores.kind")} title={t("adm.stores.kind")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
-                    {["own", "family", "partner", "consignment"].map((k) => <option key={k} value={k}>{t(`adm.stores.kind.${k}`)}</option>)}
+                    {KINDS.map((k) => <option key={k} value={k}>{t(`adm.stores.kind.${k}`)}</option>)}
                   </select>
-                  {draft.kind !== "own" && (
+                  {draft.kind === "online" && <small className="muted adm-store-online-hint">{t("adm.stores.kind.onlineHint")}</small>}
+                  {settles(draft.kind) && (
                     <input className="adm-input" type="number" min="0" max="100" step="0.5" aria-label={t("adm.stores.settlementPct")} placeholder={t("adm.stores.settlementPct")} value={draft.settlement_pct ?? ""} onChange={(e) => setDraft({ ...draft, settlement_pct: e.target.value === "" ? null : Number(e.target.value) })} />
                   )}
                   <textarea className="adm-input" rows={3} maxLength={600} aria-label={t("adm.stores.receiptNote")} placeholder={t("adm.stores.receiptNote")} value={draft.receipt_note} onChange={(e) => setDraft({ ...draft, receipt_note: e.target.value })} />
                 </span>
               ) : (
-                <span className="adm-team-main">
+                <span className="adm-team-main adm-store-info">
                   <b>{s.name}</b>
-                  <small className="muted">{[t(`adm.stores.kind.${s.kind || "own"}`), s.address, s.phone, shortDate(s.created_at, lang)].filter(Boolean).join(" · ")}</small>
+                  {/* Cada dato con su icono: tipo de tienda, dirección, teléfono, alta y, si no es propia, su % de liquidación. */}
+                  <span className="adm-store-facts">
+                    <span className="adm-store-fact kind" title={t("adm.stores.kind")}><Icon name={KIND_ICON[s.kind || "own"]} size={12} />{t(`adm.stores.kind.${s.kind || "own"}`)}</span>
+                    {s.address && <span className="adm-store-fact" title={t("adm.stores.address")}><Icon name="mapPin" size={12} />{s.address}</span>}
+                    {s.phone && <span className="adm-store-fact" title={t("adm.stores.phone")}><Icon name="phone" size={12} />{s.phone}</span>}
+                    {s.created_at && <span className="adm-store-fact" title={t("adm.scr.store.created")}><Icon name="calendar" size={12} />{shortDate(s.created_at, lang)}</span>}
+                    {settles(s.kind) && s.settlement_pct != null && <span className="adm-store-fact" title={t("adm.stores.settlementPct")}><Icon name="percent" size={12} />{s.settlement_pct} %</span>}
+                    <HoursFact store={s} tz={tz} />
+                  </span>
                 </span>
               )}
               {!s.is_active && <span className="adm-chip bad"><Icon name="alert" size={12} />{t("adm.stores.inactive")}</span>}
               {editing === s.id ? (
                 <>
-                  <button className="btn-xs primary" disabled={busy} onClick={() => save(s)}>{t("adm.stores.save")}</button>
-                  <button className="btn-xs" disabled={busy} onClick={() => setEditing(null)}>{t("adm.stores.cancel")}</button>
+                  <button className="btn-xs primary" disabled={busy} onClick={() => save(s)}><Icon name="save" size={12} />{t("adm.stores.save")}</button>
+                  <button className="btn-xs" disabled={busy} onClick={() => setEditing(null)}><Icon name="close" size={12} />{t("adm.stores.cancel")}</button>
                 </>
               ) : (
                 <>
-                  <button className="btn-xs primary" disabled={demo} onClick={() => setPricingId(pricingId === s.id ? null : s.id)}>{t("adm.stores.prices")}</button>
-                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", kind: s.kind || "own", receipt_note: s.receipt_note || "", settlement_pct: s.settlement_pct ?? null }); }}>{t("adm.stores.edit")}</button>
-                  <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}>{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
+                  <button className={`btn-xs ${pricingId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={pricingId === s.id} onClick={() => { setAssortId(null); setHoursId(null); setPricingId(pricingId === s.id ? null : s.id); }}><Icon name="prices" size={12} />{t("adm.stores.prices")}</button>
+                  <button className={`btn-xs ${assortId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={assortId === s.id} onClick={() => { setPricingId(null); setHoursId(null); setAssortId(assortId === s.id ? null : s.id); }}><Icon name="products" size={12} />{t("adm.stores.catalog")}</button>
+                  <button className={`btn-xs ${hoursId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={hoursId === s.id} onClick={() => { setPricingId(null); setAssortId(null); setHoursId(hoursId === s.id ? null : s.id); }}><Icon name="clock" size={12} />{t("adm.hours.button")}</button>
+                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", color: s.color || STORE_COLORS[0], kind: s.kind || "own", receipt_note: s.receipt_note || "", settlement_pct: s.settlement_pct ?? null }); }}><Icon name="edit" size={12} />{t("adm.stores.edit")}</button>
+                  <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}><Icon name={s.is_active ? "power" : "checkCircle"} size={12} />{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
                 </>
               )}
+            </div>
+            {hoursId === s.id && <StoreHoursEditor key={s.id} store={s} disabled={demo} onClose={() => setHoursId(null)} onSaved={(list) => { if (list) setStores(list); setHoursId(null); }} />}
+            {/* Al editar la tienda se gestionan también sus puntos de venta. */}
+            {editing === s.id && <StoreTerminals store={s} disabled={demo} />}
             </div>
           ))}
         </div>
@@ -144,6 +228,13 @@ export default function Stores() {
         <StorePricing key={pricingId} store={stores.find((s) => s.id === pricingId)} onClose={() => setPricingId(null)} />
       )}
 
+      {assortId && stores.find((s) => s.id === assortId) && (
+        <StoreAssortment key={assortId} store={stores.find((s) => s.id === assortId)} onClose={() => setAssortId(null)} />
+      )}
+
+      {/* TODO: el bloque «PRECIOS DEL DUEÑO COMO PRECIO BASE» se muda al nuevo
+          panel de precios (agente de precios); aquí queda tal cual hasta que ese
+          panel lo sustituya. */}
       {!demo && <PriceImport />}
     </div>
   );

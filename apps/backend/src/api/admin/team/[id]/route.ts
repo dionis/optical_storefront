@@ -5,6 +5,7 @@ import { listTeam } from "../route";
 import { STAFF_MODULE } from "../../../../modules/staff";
 import type StaffModuleService from "../../../../modules/staff/service";
 import { getStaffScope, invalidateStaffScope } from "../../../../lib/staff-scope";
+import { unlinkSellerOf } from "../../../../lib/seller-link";
 
 /**
  * DELETE /admin/team/:id — elimina a un administrador.
@@ -48,6 +49,8 @@ export async function DELETE(
 
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   await users.deleteUsers([target.id]);
+  // Su ficha de vendedor sigue (ventas y enlace de referido), ya sin usuario.
+  await unlinkSellerOf(req.scope, target.id);
 
   // Sus roles se van con él: un usuario nuevo con el mismo id no existirá, pero
   // las filas huérfanas confundirían cualquier reporte del equipo.

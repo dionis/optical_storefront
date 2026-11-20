@@ -19,6 +19,9 @@ const R2_PUBLIC =
 export function resolveImage(key) {
   if (!key) return "";
   if (/^https?:\/\//i.test(key)) return key;
+  // Una foto que todavía está en el navegador (la montura que se acaba de
+  // fotografiar en el POS) ya es la imagen: anteponerle el bucket la rompía.
+  if (/^(data|blob):/i.test(key)) return key;
   return R2_PUBLIC ? `${R2_PUBLIC}/${key.replace(/^\//, "")}` : key;
 }
 

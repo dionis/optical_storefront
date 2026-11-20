@@ -1579,6 +1579,13 @@ haber pagado por imágenes que no se pueden guardar.
 
 ## C.7 Cómo se ejecuta
 
+> **Actualización (noviembre 2026), decisión del dueño:** el sync de catálogo ya no
+> corre en GitHub Actions sino como worker propio en Coolify (mensual + a demanda desde
+> `/admin`), y cada corrida **genera las 4 vistas de los modelos nuevos** con un tope
+> por corrida que fija el dueño (0 = solo encolar), bajo el techo mensual del servidor.
+> Ver `docs/CATALOG-SYNC.md`. El resto de la generación (catálogo completo, vídeo,
+> reintentos) sigue siendo CLI a mano, como describe esta sección.
+
 **Decisión del dueño (septiembre 2026), y esta sección ha cambiado dos veces — así que
 lo que vale es esto:**
 

@@ -20,6 +20,10 @@ export const Seller = model.define("seller", {
   name: model.text(),
   email: model.text().nullable(),
   phone: model.text().nullable(),
+  /** Personal data: returned by the admin routes only, never by the public dashboard. */
+  address: model.text().nullable(),
+  /** Someone chose to keep an address here different from the person's profile (lib/seller-address.ts). */
+  address_separate: model.boolean().default(false),
   /**
    * Uppercase A-Z0-9, 3–12 chars. The referral code. Unique among live rows
    * (partial index in the migration; enforced in code so a soft-deleted seller
@@ -29,6 +33,20 @@ export const Seller = model.define("seller", {
   /** Commission as a percentage of the attributed revenue (0–100). */
   commission_pct: model.float().default(0),
   active: model.boolean().default(true),
+  /**
+   * Store (establishment) and till (pos_terminal) the seller works from. An
+   * active seller always has both, the till inside that store; an inactive one
+   * may have neither. Enforced in code (`sellerPlacementProblem`), not by the
+   * schema: the rule depends on `active`.
+   */
+  establishment_id: model.text().nullable(),
+  terminal_id: model.text().nullable(),
+  /**
+   * Panel user (Equipo) who sells at the counter as this seller. One to one:
+   * every user with the `seller` role has exactly one; a referral-only seller
+   * has none. Unique among live rows (partial index in CreateSeller3).
+   */
+  user_id: model.text().nullable(),
   notes: model.text().nullable(),
   token_version: model.number().default(1),
   /** { instagram?, facebook?, tiktok?, whatsapp? } — handles the seller shares. */

@@ -1,56 +1,117 @@
 // Dónde se usa: pestaña Vendedores de /admin — alta y gestión de vendedores,
 // enlace de referido para redes sociales, enlace a su propio panel (/vendedor)
-// y ventas/comisión por vendedor. Backend: /admin/sellers*.
-import { useEffect, useMemo, useState } from "react";
+// y ventas/comisión por vendedor. Backend: /admin/sellers*. La tienda y el
+// período (ventas y comisión del ranking) son los globales de la barra de
+// filtros del panel; el ranking se exporta desde esa misma barra.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { money as fmtMoney, shortDate, stageErrorText } from "./adminOrders.js";
-import { fetchSellers, createSeller, updateSeller, deleteSeller, rotateSellerLink, fetchSellerStats, copyText } from "./adminSellers.js";
+import { fetchStores } from "./adminStores.js";
+import { listTerminals } from "./posApi.js";
+import { fetchSellers, createSeller, updateSeller, deleteSeller, rotateSellerLink, fetchSellerStats, copyText, onThisOrigin } from "./adminSellers.js";
 import { TENANT } from "../config/tenant.js";
+import { formatAddressLine } from "../data/addressAutocomplete.js";
+import AddressChoice from "./AddressChoice.jsx";
+import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { SOURCE_ICON, SocialLinks } from "./sellerShared.jsx";
+import { SellerChannels, useSellerPanel } from "./SellerPanel.jsx";
 import { Card } from "./ui.jsx";
+import FieldError from "../components/FieldError.jsx";
+import { emailProblem, LIMITS, nameProblem, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
+import { useStoreFilter } from "./StoreFilter.jsx";
+import { usePeriodFilter } from "./periodStore.js";
+import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
+import useDefaultCommission from "./finance/useDefaultCommission.js";
+import "./screens.css";
 
-const ymd = (d) => new Date(d).toISOString().slice(0, 10);
-const RANGES = ["30d", "90d", "ytd", "all"];
-function rangeFrom(k) {
-  if (k === "all") return "";
-  if (k === "ytd") return `${new Date().getFullYear()}-01-01`;
-  return ymd(Date.now() - ({ "30d": 30, "90d": 90 }[k] || 30) * 864e5);
-}
-const EMPTY = { name: "", email: "", phone: "", code: "", commission_pct: "10", notes: "", social: { instagram: "", facebook: "", tiktok: "", whatsapp: "" } };
+// commission_pct "" = la comisión por defecto del dueño (useDefaultCommission; el servidor aplica la misma).
+const EMPTY = { name: "", email: "", phone: "", address: "", code: "", commission_pct: "", notes: "", active: true, establishment_id: "", terminal_id: "", social: { instagram: "", facebook: "", tiktok: "", whatsapp: "" } };
+// Un vendedor activo siempre tiene tienda y un único punto de venta de esa
+// tienda; inactivo puede no tener ninguno. El servidor aplica la misma regla
+// (sellerPlacementProblem); esto solo evita el viaje de ida y vuelta.
+const placementMissing = (f) => (f.active ? (!f.establishment_id ? "store_required" : !f.terminal_id ? "terminal_required" : null) : null);
+const termLabel = (x) => (x ? (x.name ? `${x.code} · ${x.name}` : x.code) : "");
 const initials = (name) => String(name || "?").split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
-function SellerForm({ initial = EMPTY, onSubmit, onCancel, busy }) {
+function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, busy, addressConflict = null }) {
   const { t } = useLang();
-  const [f, setF] = useState({ ...EMPTY, ...initial, social: { ...EMPTY.social, ...(initial.social || {}) }, commission_pct: String(initial.commission_pct ?? "10") });
+  const [f, setF] = useState({ ...EMPTY, ...initial, establishment_id: initial.establishment_id || "", terminal_id: initial.terminal_id || "", social: { ...EMPTY.social, ...(initial.social || {}) }, commission_pct: String(initial.commission_pct ?? "") });
+  // Alta: arranca con la comisión por defecto («Reglas y comisiones»), la única fuente.
+  const defaultPct = useDefaultCommission();
+  useEffect(() => { if (!initial.id && defaultPct !== "") setF((x) => (x.commission_pct === "" ? { ...x, commission_pct: defaultPct } : x)); }, [defaultPct, initial.id]);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const setS = (k, v) => setF((x) => ({ ...x, social: { ...x.social, [k]: v } }));
+  // Cambiar de tienda suelta el punto de venta: el anterior es de otra tienda.
+  const setStore = (id) => setF((x) => {
+    const own = terminals.filter((p) => p.establishment_id === id && p.is_active);
+    return { ...x, establishment_id: id, terminal_id: own.length === 1 ? own[0].id : "" };
+  });
+  // Solo tiendas/puntos activos, salvo el que ya tenía (para que se vea qué hay que cambiar).
+  const storeOpts = stores.filter((x) => x.is_active || x.id === f.establishment_id);
+  const termOpts = terminals.filter((p) => p.establishment_id === f.establishment_id && (p.is_active || p.id === f.terminal_id));
+  const missing = placementMissing(f);
+  const problems = { name: nameProblem(f.name, true), email: emailProblem(f.email), phone: phoneProblem(f.phone), whatsapp: phoneProblem(f.social.whatsapp) };
+  const [showErrors, setShowErrors] = useState(false);
+  const shown = (k) => (showErrors || (f[k] ?? f.social[k]) ? problems[k] : null);
+  const submit = (extra = {}) => {
+    if (Object.values(problems).some(Boolean)) { setShowErrors(true); return; }
+    if (missing) return;
+    const { address_link: _link, ...rest } = f;
+    onSubmit({ ...rest, ...extra, code: undefined, establishment_id: f.establishment_id || null, terminal_id: f.terminal_id || null, commission_pct: String(f.commission_pct).trim() === "" ? undefined : Number(f.commission_pct) || 0 });
+  };
+  // Lo que respondió el servidor al guardar manda sobre lo que se vio al abrir.
+  const addrLink = addressConflict ? { state: "conflict", other: addressConflict.other } : initial.address_link;
   return (
-    <form className="adm-card" onSubmit={(e) => { e.preventDefault(); onSubmit({ ...f, commission_pct: Number(f.commission_pct) || 0, code: f.code.trim().toUpperCase() || undefined }); }}>
+    <form className="adm-card" onSubmit={(e) => { e.preventDefault(); submit(); }}>
       <h3><Icon name={initial.id ? "edit" : "plus"} size={16} />{initial.id ? t("adm.sel.editTitle", { name: initial.name }) : t("adm.sel.newTitle")}</h3>
       <div className="adm-form-grid">
-        <label className="adm-field">{t("adm.sel.name")}<input className="adm-input" required value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("adm.sel.namePh")} /></label>
-        <label className="adm-field">{t("adm.sel.code")}<input className="adm-input" value={f.code} onChange={(e) => set("code", e.target.value.toUpperCase())} placeholder={t("adm.sel.codePh")} maxLength={12} /></label>
+        <label className="adm-field">{t("adm.sel.name")}<input className="adm-input" required maxLength={LIMITS.name} aria-invalid={shown("name") ? true : undefined} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("adm.sel.namePh")} /><FieldError error={shown("name")} /></label>
+        {/* El código lo genera el sistema y no cambia: va en los enlaces de referido ya compartidos. */}
+        <div className="adm-field">{t("adm.sel.code")}
+          {initial.id ? <span className="sel-code adm-code-ro" title={t("adm.sel.codeFixed")}>{initial.code}</span> : <span className="muted adm-code-ro">{t("adm.sel.codeAuto")}</span>}
+        </div>
         <label className="adm-field">{t("adm.sel.commission")}<input className="adm-input" type="number" min="0" max="100" step="0.5" value={f.commission_pct} onChange={(e) => set("commission_pct", e.target.value)} /></label>
-        <label className="adm-field">{t("adm.login.email")}<input className="adm-input" type="email" value={f.email || ""} onChange={(e) => set("email", e.target.value)} /></label>
-        <label className="adm-field">{t("adm.sel.phone")}<input className="adm-input" value={f.phone || ""} onChange={(e) => set("phone", e.target.value)} /></label>
+        <label className="adm-field">{t("adm.login.email")}<input className="adm-input" type="email" maxLength={LIMITS.email} aria-invalid={shown("email") ? true : undefined} value={f.email || ""} onChange={(e) => set("email", typedEmail(e.target.value))} /><FieldError error={shown("email")} /></label>
+        <label className="adm-field">{t("adm.sel.phone")}<input className="adm-input" type="tel" maxLength={LIMITS.phone} aria-invalid={shown("phone") ? true : undefined} value={f.phone || ""} onChange={(e) => set("phone", typedPhone(e.target.value))} /><FieldError error={shown("phone")} /></label>
+        <label className="adm-field">{t("adm.sel.address")}<AddressInput className="adm-input" maxLength={200} value={f.address || ""} onChange={(e) => set("address", e.target.value)} onPick={(p) => set("address", formatAddressLine(p))} /></label>
+        {addrLink && <div style={{ gridColumn: "1 / -1" }}><AddressChoice state={addrLink.state} other={addrLink.other} place="profile" busy={busy} onChoose={(address_choice) => submit({ address_choice })} /></div>}
         <label className="adm-field">Instagram<input className="adm-input" value={f.social.instagram} onChange={(e) => setS("instagram", e.target.value)} placeholder="@usuario" /></label>
         <label className="adm-field">Facebook<input className="adm-input" value={f.social.facebook} onChange={(e) => setS("facebook", e.target.value)} /></label>
         <label className="adm-field">TikTok<input className="adm-input" value={f.social.tiktok} onChange={(e) => setS("tiktok", e.target.value)} placeholder="@usuario" /></label>
-        <label className="adm-field">WhatsApp<input className="adm-input" value={f.social.whatsapp} onChange={(e) => setS("whatsapp", e.target.value)} placeholder="+1 …" /></label>
+        <label className="adm-field">WhatsApp<input className="adm-input" type="tel" maxLength={LIMITS.phone} aria-invalid={shown("whatsapp") ? true : undefined} value={f.social.whatsapp} onChange={(e) => setS("whatsapp", typedPhone(e.target.value))} placeholder="+1 …" /><FieldError error={shown("whatsapp")} /></label>
+        <label className="adm-field">{t("adm.sel.status")}
+          <select className="adm-input" value={f.active ? "1" : "0"} onChange={(e) => set("active", e.target.value === "1")}>
+            <option value="1">{t("adm.sel.statusActive")}</option>
+            <option value="0">{t("adm.sel.statusInactive")}</option>
+          </select>
+        </label>
+        <label className="adm-field">{t("adm.sel.store")}{f.active && " *"}
+          <select className="adm-input" required={f.active} value={f.establishment_id} onChange={(e) => setStore(e.target.value)}>
+            <option value="">{t("adm.sel.storeNone")}</option>
+            {storeOpts.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}{x.is_active ? "" : ` (${t("adm.sel.off")})`}</option>)}
+          </select>
+        </label>
+        <label className="adm-field">{t("adm.pos.terminal")}{f.active && " *"}
+          <select className="adm-input" required={f.active} disabled={!f.establishment_id} value={f.terminal_id} onChange={(e) => set("terminal_id", e.target.value)}>
+            <option value="">{f.establishment_id && !termOpts.length ? t("adm.sel.terminalNoneInStore") : t("adm.sel.terminalNone")}</option>
+            {termOpts.map((p) => <option key={p.id} value={p.id}>{termLabel(p)}{p.is_active ? "" : ` (${t("adm.sel.off")})`}</option>)}
+          </select>
+        </label>
         <label className="adm-field" style={{ gridColumn: "1 / -1" }}>{t("adm.sel.notes")}<input className="adm-input" value={f.notes || ""} onChange={(e) => set("notes", e.target.value)} /></label>
       </div>
+      <p className={missing ? "adm-login-err" : "muted"} style={{ fontSize: 12, margin: "10px 0 0" }}>{missing ? t(`adm.err.stage.${missing}`) : t("adm.sel.placementHint")}</p>
       <div className="adm-actions" style={{ marginTop: 12 }}>
-        <button className="btn-sm primary" disabled={busy}><Icon name="save" size={14} />{t("adm.sel.save")}</button>
+        <button className="btn-sm primary" disabled={busy || !!missing}><Icon name="save" size={14} />{t("adm.sel.save")}</button>
         {onCancel && <button type="button" className="btn-sm" onClick={onCancel}>{t("adm.ord.cancel")}</button>}
       </div>
     </form>
   );
 }
 
-function SellerCard({ s, stat, lang, onEdit, onToggle, onDelete, onRotate }) {
+function SellerCard({ s, stat, lang, store, terminal, onEdit, onToggle, onDelete, onRotate, onOpen }) {
   const { t } = useLang();
   const { toast } = useFeedback();
   const text = t("adm.sel.shareText", { name: TENANT.name });
@@ -62,12 +123,17 @@ function SellerCard({ s, stat, lang, onEdit, onToggle, onDelete, onRotate }) {
         <div className="sel-name"><b>{s.name}</b><small>{[s.email, s.phone].filter(Boolean).join(" · ") || t("adm.sel.noContact")}</small></div>
         <span className="sel-code" title={t("adm.sel.codeTitle")}>{s.code}</span>
       </div>
-      <div className="sel-stats">
+      {/* Las cifras abren el panel del vendedor (su resumen de inicio) delante de la lista. */}
+      <div className={`sel-stats ${onOpen ? "sp-rowlink" : ""}`} onClick={onOpen ? () => onOpen(s) : undefined} role={onOpen ? "button" : undefined} tabIndex={onOpen ? 0 : undefined} title={onOpen ? t("adm.sp.open") : undefined}
+        onKeyDown={onOpen ? (e) => { if (e.key === "Enter") onOpen(s); } : undefined}>
         <div className="sel-stat"><small>{t("adm.kpi.orders")}</small><b>{stat?.orders ?? 0}</b></div>
         <div className="sel-stat"><small>{t("adm.sel.sales")}</small><b>{fmtMoney(stat?.revenue ?? 0, "usd", lang)}</b></div>
         <div className="sel-stat"><small>{t("adm.sel.commissionShort", { pct: s.commission_pct })}</small><b>{fmtMoney(stat?.commission ?? 0, "usd", lang)}</b></div>
       </div>
-      {!s.active && <span className="adm-chip bad"><Icon name="alert" size={12} />{t("adm.sel.inactive")}</span>}
+      {stat?.by_source?.some((x) => x.orders > 0) && <SellerChannels by_source={stat.by_source} compact />}
+      <small className="muted"><Icon name="store" size={12} /> {store ? `${store.code} · ${store.name}` : t("adm.sel.storeNone")}{terminal ? ` — ${termLabel(terminal)}` : s.establishment_id ? ` — ${t("adm.sel.terminalNone")}` : ""}</small>
+      {s.user_id && <span className="adm-chip neutral" title={t("adm.sel.counterUserHint")}><Icon name="user" size={12} />{t("adm.sel.counterUser")}</span>}
+      {!s.active && <span className="adm-chip bad"><Icon name="alert" size={12} />{t(s.user_id ? "adm.sel.inactiveCounter" : "adm.sel.inactive")}</span>}
       <div className="sel-link" title={s.referral_url}><Icon name="link" size={14} /><code>{s.referral_url}</code><button type="button" className="btn-xs" onClick={() => copy(s.referral_url, t("adm.sel.copied"))}><Icon name="copy" size={13} />{t("adm.sel.copy")}</button></div>
       <SocialLinks seller={s} text={text} stat={stat} onCopy={copy} />
       <div className="sel-link" title={s.dashboard_url}><Icon name="dashboard" size={14} /><code>{t("adm.sel.dashboardLink")}</code>
@@ -85,35 +151,102 @@ function SellerCard({ s, stat, lang, onEdit, onToggle, onDelete, onRotate }) {
   );
 }
 
-export default function Sellers({ onChanged, go }) {
+/** Props: `onChanged`, `go` (navegación) y `me` (GET /admin/team/me) para el filtro de tienda global. */
+// `params.seller`: el buscador global (y cualquier salto) abre directamente la
+// ficha de ese vendedor en vez de dejar la lista sin filtrar.
+export default function Sellers({ onChanged, go, me, params = null }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const demo = isDemoLogin();
+  // La tienda del filtro global acota la lista y el ranking por `establishment_id` (la online no tiene vendedores de mostrador).
+  const { storeId, isAll, isWeb } = useStoreFilter(me);
+  const storeOnly = isAll || isWeb ? "" : storeId;
   const [sellers, setSellers] = useState([]);
+  const [stores, setStores] = useState([]);
+  const [terminals, setTerminals] = useState([]);
   const [stats, setStats] = useState(null);
   const [state, setState] = useState("loading");
-  const [range, setRange] = useState("30d");
+  // Período global del panel: ventas y comisión del ranking entre `from` y `to`.
+  const { from, to, label: periodLabel } = usePeriodFilter();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [addressConflict, setAddressConflict] = useState(null);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState("");
+  // El panel del vendedor: su resumen de inicio delante de la lista, con el mismo rango.
+  const sp = useSellerPanel({ go, me });
+  const openPanel = (x) => sp.open(x.code, { from, to, store: storeOnly });
+  const rootRef = useRef(null);
 
+  // Solo la última petición pinta: al cambiar de período deprisa (o releer tras
+  // guardar), la respuesta lenta de la anterior se descarta.
+  const loadSeq = useRef(0);
   const load = () => {
+    const seq = ++loadSeq.current;
     if (demo) { setState("demo"); return; }
     setState("loading");
-    Promise.all([fetchSellers(), fetchSellerStats({ from: rangeFrom(range) })])
-      .then(([a, b]) => { setSellers(a.sellers || []); setStats(b); setState("ok"); })
-      .catch(() => setState("error"));
+    Promise.all([fetchSellers(), fetchSellerStats({ from, to })])
+      .then(([a, b]) => { if (seq !== loadSeq.current) return; setSellers((a.sellers || []).map(onThisOrigin)); setStats(b); setState("ok"); })
+      .catch(() => { if (seq === loadSeq.current) setState("error"); });
   };
-  useEffect(load, [range, demo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [from, to, demo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (demo) return;
+    fetchStores().then((r) => setStores(r.establishments || [])).catch(() => setStores([]));
+    listTerminals().then((r) => setTerminals(r.terminals || [])).catch(() => setTerminals([]));
+  }, [demo]);
+  const storeBy = useMemo(() => Object.fromEntries(stores.map((x) => [x.id, x])), [stores]);
+  const termBy = useMemo(() => Object.fromEntries(terminals.map((x) => [x.id, x])), [terminals]);
+  const openEditor = (x) => { setAddressConflict(null); setEditing(x); setCreating(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  // Activar sin tienda o sin punto de venta no se puede: se abre la ficha para elegirlos.
+  const onToggle = (x) => {
+    if (!x.active && placementMissing({ ...x, active: true })) {
+      toast({ tone: "info", title: t("adm.sel.activateNeedsPlacement") });
+      openEditor({ ...x, active: true });
+      return;
+    }
+    run(() => updateSeller(x.id, { active: !x.active }), x.active ? "adm.sel.deactivated" : "adm.sel.activated");
+  };
   const statBy = useMemo(() => Object.fromEntries((stats?.sellers || []).map((s) => [s.id, s])), [stats]);
-  const list = sellers.filter((s) => !q || `${s.name} ${s.code} ${s.email || ""}`.toLowerCase().includes(q.toLowerCase()));
-  const totals = (stats?.sellers || []).reduce((a, s) => ({ orders: a.orders + s.orders, revenue: a.revenue + s.revenue, commission: a.commission + s.commission }), { orders: 0, revenue: 0, commission: 0 });
+  const list = sellers.filter((s) => (!storeOnly || s.establishment_id === storeOnly) && (!q || `${s.name} ${s.code} ${s.email || ""}`.toLowerCase().includes(q.toLowerCase())));
+  // `params.seller`: el buscador global salta aquí con un código de vendedor y
+  // se le abre su ficha directamente. Va DESPUÉS de `list` a propósito: leerla
+  // más arriba sería usarla antes de declararla y la pantalla reventaría.
+  // Una sola vez por código (jumpedRef), porque abrir el panel re-renderiza.
+  const jumpSeller = params?.seller ?? null;
+  const jumpedRef = useRef(null);
+  useEffect(() => {
+    if (!jumpSeller || jumpedRef.current === jumpSeller) return;
+    const hit = list.find((x) => x.code === jumpSeller || x.id === jumpSeller);
+    if (!hit) return;
+    jumpedRef.current = jumpSeller;
+    openPanel(hit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpSeller, list]);
+  // El ranking y los totales siguen a la tienda elegida a través de la ficha de cada vendedor.
+  const inStore = useMemo(() => (storeOnly ? new Set(sellers.filter((s) => s.establishment_id === storeOnly).map((s) => s.id)) : null), [sellers, storeOnly]);
+  const statRows = useMemo(() => (stats?.sellers || []).filter((s) => !inStore || inStore.has(s.id)), [stats, inStore]);
+  const totals = statRows.reduce((a, s) => ({ orders: a.orders + s.orders, revenue: a.revenue + s.revenue, commission: a.commission + s.commission }), { orders: 0, revenue: 0, commission: 0 });
+  // Exportar desde la barra global: el ranking (CSV / Excel) y la pantalla entera (PDF).
+  const rankCols = [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "orders"], [t("adm.sel.sales"), "revenue"], ["%", "commission_pct"], [t("adm.sel.commissions"), "commission"]];
+  const rankRows = statRows.filter((s) => s.orders > 0).sort((a, b) => b.revenue - a.revenue);
+  useRegisterExport(stats ? menuHandlers({
+    targetRef: rootRef, title: t("adm.sel.ranking"), name: "ranking-vendedores", meta: `${periodLabel(t)} · ${from} → ${to}`,
+    csv: { cols: rankCols, rows: rankRows },
+    xlsx: () => ({ filename: `ranking-vendedores-${from}-${to}.xlsx`, sheets: [{ name: t("adm.sel.ranking"), cols: [{ header: t("adm.sel.name"), key: "name", width: 24 }, { header: t("adm.sel.code"), key: "code", width: 10 }, { header: t("adm.kpi.orders"), key: "orders", type: "int" }, { header: t("adm.sel.sales"), key: "revenue", type: "money" }, { header: "%", key: "commission_pct", type: "pct" }, { header: t("adm.sel.commissions"), key: "commission", type: "money" }], rows: rankRows, totals: { orders: totals.orders, revenue: totals.revenue, commission: totals.commission }, totalsLabel: t("adm.sel.sales") }] }),
+  }) : null);
 
   const run = async (fn, okKey) => {
     setBusy(true);
-    try { await fn(); toast({ tone: "success", title: t(okKey) }); setCreating(false); setEditing(null); load(); onChanged?.(); }
-    catch (e) { toast({ tone: "error", title: stageErrorText(t, e, "adm.err.sel.saveFailed") }); }
+    try { await fn(); toast({ tone: "success", title: t(okKey) }); setAddressConflict(null); setCreating(false); setEditing(null); load(); onChanged?.(); }
+    catch (e) {
+      // No es un error: dos direcciones distintas las decide quien edita, en el propio formulario.
+      if (e?.reason === "address_conflict") {
+        setAddressConflict({ other: e.payload?.other ?? null });
+        return;
+      }
+      toast({ tone: "error", title: stageErrorText(t, e, "adm.err.sel.saveFailed") });
+    }
     finally { setBusy(false); }
   };
   const onDelete = async (s) => {
@@ -126,11 +259,11 @@ export default function Sellers({ onChanged, go }) {
   };
 
   return (
-    <div className="adm-section">
+    <div className="adm-section" ref={rootRef}>
       <div className="adm-head-row">
         <h2>{t("adm.tab.sellers")}</h2>
+        {/* Tienda y período: barra de filtros global del panel (AdminShell). */}
         <div className="adm-orders-tools">
-          <div className="adm-range">{RANGES.map((k) => <button key={k} className={range === k ? "on" : ""} onClick={() => setRange(k)}>{t(`adm.range.${k}`)}</button>)}</div>
           <label className="adm-find compact"><Icon name="search" size={15} /><input placeholder={t("adm.sel.searchPh")} value={q} onChange={(e) => setQ(e.target.value)} /></label>
           <button className="btn-sm primary" disabled={demo} onClick={() => { setCreating(true); setEditing(null); }}><Icon name="plus" size={14} />{t("adm.sel.new")}</button>
         </div>
@@ -141,15 +274,15 @@ export default function Sellers({ onChanged, go }) {
 
       {stats && (
         <div className="cost-kpi-row">
-          <button type="button" className="cost-kpi" onClick={() => setCreating(true)}><small><Icon name="sellers" size={13} />{t("adm.sel.active")}</small><b>{sellers.filter((s) => s.active).length}</b></button>
+          <button type="button" className="cost-kpi" onClick={() => setCreating(true)}><small><Icon name="sellers" size={13} />{t("adm.sel.active")}</small><b>{sellers.filter((s) => s.active && (!storeOnly || s.establishment_id === storeOnly)).length}</b>{storeOnly && <em>{t("adm.scr.sellersIn", { n: list.length })}</em>}</button>
           <button type="button" className="cost-kpi" onClick={() => go?.("orders", { preset: "all" })}><small><Icon name="orders" size={13} />{t("adm.sel.attributed")}</small><b>{totals.orders}</b><em>{t("adm.sel.unattributed", { n: stats.unattributed?.orders ?? 0 })}</em></button>
           <button type="button" className="cost-kpi" onClick={() => go?.("exec", { sub: "sales" })}><small><Icon name="dollar" size={13} />{t("adm.sel.sales")}</small><b>{fmtMoney(totals.revenue, "usd", lang)}</b></button>
           <button type="button" className="cost-kpi bad" onClick={() => go?.("exec", { sub: "costs" })}><small><Icon name="percent" size={13} />{t("adm.sel.commissions")}</small><b>{fmtMoney(totals.commission, "usd", lang)}</b></button>
         </div>
       )}
 
-      {creating && <div style={{ marginBottom: 16 }}><SellerForm busy={busy} onCancel={() => setCreating(false)} onSubmit={(body) => run(() => createSeller(body), "adm.sel.created")} /></div>}
-      {editing && <div style={{ marginBottom: 16 }}><SellerForm initial={editing} busy={busy} onCancel={() => setEditing(null)} onSubmit={(body) => run(() => updateSeller(editing.id, body), "adm.sel.updated")} /></div>}
+      {creating && <div style={{ marginBottom: 16 }}><SellerForm stores={stores} terminals={terminals} busy={busy} onCancel={() => setCreating(false)} onSubmit={(body) => run(() => createSeller(body), "adm.sel.created")} /></div>}
+      {editing && <div style={{ marginBottom: 16 }}><SellerForm key={`${editing.id}-${editing.active}`} initial={editing} stores={stores} terminals={terminals} busy={busy} addressConflict={addressConflict} onCancel={() => { setAddressConflict(null); setEditing(null); }} onSubmit={(body) => run(() => updateSeller(editing.id, body), "adm.sel.updated")} /></div>}
 
       {state === "loading" && !sellers.length ? <div className="adm-skel-rows"><div className="adm-skel" style={{ height: 160 }} /></div>
         : !demo && list.length === 0 ? (
@@ -157,32 +290,34 @@ export default function Sellers({ onChanged, go }) {
         ) : (
           <div className="sel-grid">
             {list.map((s) => (
-              <SellerCard key={s.id} s={s} stat={statBy[s.id]} lang={lang}
-                onEdit={(x) => { setEditing(x); setCreating(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                onToggle={(x) => run(() => updateSeller(x.id, { active: !x.active }), x.active ? "adm.sel.deactivated" : "adm.sel.activated")}
+              <SellerCard key={s.id} s={s} stat={statBy[s.id]} lang={lang} store={storeBy[s.establishment_id]} terminal={termBy[s.terminal_id]}
+                onEdit={openEditor} onToggle={onToggle} onOpen={demo ? undefined : openPanel}
                 onDelete={onDelete} onRotate={onRotate} />
             ))}
           </div>
         )}
 
-      {stats && (stats.sellers || []).length > 0 && (
-        <Card icon="sales" title={t("adm.sel.ranking")} hint={t("adm.sel.rankingHint")} name="ranking-vendedores" style={{ marginTop: 16 }} csv={{ cols: [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "orders"], [t("adm.sel.sales"), "revenue"], ["%", "commission_pct"], [t("adm.sel.commissions"), "commission"]], rows: stats.sellers }}>
+      {stats && statRows.length > 0 && (
+        <Card icon="sales" title={`${t("adm.sel.ranking")} · ${periodLabel(t)}`} hint={t("adm.sel.rankingHint")} name="ranking-vendedores" style={{ marginTop: 16 }} csv={{ cols: rankCols, rows: statRows }}>
           <div className="adm-table-wrap">
             <table className="adm-table responsive">
-              <thead><tr><th>#</th><th>{t("adm.sel.name")}</th><th>{t("adm.sel.code")}</th><th className="r">{t("adm.kpi.orders")}</th><th className="r">{t("adm.sel.sales")}</th><th className="r">%</th><th className="r">{t("adm.sel.commissions")}</th><th>{t("adm.sel.lastOrderCol")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{t("adm.sel.name")}</th><th>{t("adm.sel.code")}</th><th className="r">{t("adm.kpi.orders")}</th><th className="r">{t("adm.sel.sales")}</th><th className="r">%</th><th className="r">{t("adm.sel.commissions")}</th><th className="r">{t("adm.ex.sellers.share")}</th><th>{t("adm.sel.lastOrderCol")}</th></tr></thead>
               <tbody>
-                {stats.sellers.slice().sort((a, b) => b.revenue - a.revenue).map((s, i) => (
-                  <tr key={s.id}>
+                {rankRows.map((s, i) => (
+                  <tr key={s.id} className={demo ? "" : "sp-rowlink"} onClick={demo ? undefined : () => openPanel(s)} title={demo ? undefined : t("adm.sp.open")}>
                     <td data-label="#">{i + 1}</td><td data-label={t("adm.sel.name")}><b>{s.name}</b></td><td data-label={t("adm.sel.code")}><span className="sel-code">{s.code}</span></td>
-                    <td data-label={t("adm.kpi.orders")} className="r num">{s.orders}</td><td data-label={t("adm.sel.sales")} className="r num">{fmtMoney(s.revenue, "usd", lang)}</td>
+                    <td data-label={t("adm.kpi.orders")} className="r num">{s.orders}</td>
+                    <td data-label={t("adm.sel.sales")} className="r num"><b>{fmtMoney(s.revenue, "usd", lang)}</b><SellerChannels by_source={s.by_source} compact className="sp-cell-channels" /></td>
                     <td data-label="%" className="r">{s.commission_pct}%</td><td data-label={t("adm.sel.commissions")} className="r num">{fmtMoney(s.commission, "usd", lang)}</td>
+                    <td data-label={t("adm.ex.sellers.share")} className="r num muted">{s.share_pct != null ? `${s.share_pct}%` : "—"}</td>
                     <td data-label={t("adm.sel.lastOrderCol")}>{s.last_order_at ? shortDate(s.last_order_at, lang) : "—"}</td>
                   </tr>
                 ))}
-                <tr><td data-label="">—</td><td data-label={t("adm.sel.name")} className="muted">{t("adm.ord.noSeller")}</td><td /><td data-label={t("adm.kpi.orders")} className="r num">{stats.unattributed?.orders ?? 0}</td><td data-label={t("adm.sel.sales")} className="r num">{fmtMoney(stats.unattributed?.revenue ?? 0, "usd", lang)}</td><td /><td /><td /></tr>
+                {!storeOnly && <tr><td data-label="">—</td><td data-label={t("adm.sel.name")} className="muted">{t("adm.ord.noSeller")}</td><td /><td data-label={t("adm.kpi.orders")} className="r num">{stats.unattributed?.orders ?? 0}</td><td data-label={t("adm.sel.sales")} className="r num">{fmtMoney(stats.unattributed?.revenue ?? 0, "usd", lang)}</td><td /><td /><td /><td /></tr>}
               </tbody>
             </table>
           </div>
+          {statRows.some((s) => !(s.orders > 0)) && <p className="sp-zero">{t("adm.sp.zero", { n: statRows.filter((s) => !(s.orders > 0)).length })}</p>}
           {(stats.sources || []).length > 0 && (
             <div className="exec-sources" style={{ marginTop: 10 }}>
               {stats.sources.map((x) => <span className="adm-chip neutral" key={x.source}><Icon name={SOURCE_ICON[x.source] || "link"} size={12} />{t(`adm.src.${x.source}`) === `adm.src.${x.source}` ? x.source : t(`adm.src.${x.source}`)} · {x.orders} · {fmtMoney(x.revenue, "usd", lang)}</span>)}
@@ -191,6 +326,7 @@ export default function Sellers({ onChanged, go }) {
         </Card>
       )}
 
+      {sp.panel}
       <div className="adm-card" style={{ marginTop: 16 }}>
         <h3><Icon name="info" size={16} />{t("adm.sel.howTitle")}</h3>
         <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>{t("adm.sel.howBody")}</p>

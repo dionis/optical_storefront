@@ -107,9 +107,11 @@ export function deriveOrderProgress(order: OrderLike): OrderProgress {
       // lab_stage refine it, but never let it claim shipping that Medusa has
       // no record of.
       const manual = order.metadata?.["lab_stage"];
+      // A till sale sold before its prescription (lib/rx-pending.ts) is not in the lab yet: it waits.
+      const waitingRx = order.metadata?.["rx_pending"] === true;
       stage = isStage(manual) && manual !== "delivered" && manual !== "in_transit"
         ? manual
-        : paid
+        : paid && !waitingRx
           ? "in_lab"
           : "confirmed";
       break;

@@ -2,8 +2,12 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { resolveRole, roleChangeDenied, type StaffRole } from "../../../lib/staff-roles";
-import { profilesByUser } from "../../../lib/staff-profile-data";
-import { assignmentsByUser, getStaffScope, writeStaffAssignment } from "../../../lib/staff-scope";
+import { accessStatusByUser, profilesByUser, saveProfile } from "../../../lib/staff-profile-data";
+import { cleanProfilePatch } from "../../../lib/staff-profile";
+import { assignmentsByUser, getStaffScope, ownerUserId, writeStaffAssignment } from "../../../lib/staff-scope";
+import { listSellers } from "../../../lib/sellers";
+import { applySellerLink, prepareSellerLink, SellerLinkError, type PreparedSellerLink } from "../../../lib/seller-link";
+import { ensureStaffCode } from "../../../lib/staff-code";
 
 /**
  * EQUIPO del panel: administradores de la tienda.
@@ -13,8 +17,10 @@ import { assignmentsByUser, getStaffScope, writeStaffAssignment } from "../../..
  *                           queda marcado must_change_password y el panel le
  *                           exige cambiarla en su primera entrada.
  *
- * DUEÑO = el usuario más antiguo (creado con `npx medusa user` al montar la
- * tienda; la API lo sigue llamando `is_super`). No se puede borrar ni cambiar
+ * DUEÑO = siempre uno solo: el último nombrado con POST /admin/team/:id/owner
+ * (traspaso entre superadmins, lib/owner-transfer.ts); antes de ningún
+ * traspaso, el de STORE_OWNER_EMAIL o el usuario más antiguo (lo decide
+ * ownerUserId; la API lo sigue llamando `is_super`). No se puede borrar ni cambiar
  * de rol — ver [id]/route.ts y [id]/role/route.ts — así la tienda nunca se
  * queda sin su administrador raíz por un clic de más. Los roles y quién puede
  * darlos viven en lib/staff-roles.ts.
@@ -40,31 +46,69 @@ export interface TeamMember {
   /** Código de recibos y fichas (perfil); null si aún no tiene. */
   seller_code: string | null;
   display_name: string | null;
+  /** Profile photo (data URL or https), for the avatar in lists; null = initials. */
+  photo_url: string | null;
+  /** Seller record of a user with the `seller` role: store and till they sell from. */
+  seller: { id: string; code: string; name: string; active: boolean; establishment_id: string | null; terminal_id: string | null } | null;
+  /**
+   * Deactivated (HU-04, POST /admin/team/:id/status): keeps user, role rows and
+   * history, but gets no access until reactivated. `role` stays what it will be
+   * again on reactivation; `is_disabled` is what the panel shows.
+   */
+  disabled_at: string | null;
+  is_disabled: boolean;
+}
+
+/** Display name of a new user, for the seller record created with them. */
+export const personName = (first: unknown, last: unknown, email: string): string =>
+  [first, last].map((v) => String(v ?? "").trim()).filter(Boolean).join(" ") || email.split("@")[0];
+
+/** `SellerLinkError` → the same `{ reason }` shape as every Equipo refusal. */
+export function sellerLinkRefusal(res: MedusaResponse, error: unknown): boolean {
+  if (!(error instanceof SellerLinkError)) return false;
+  res.status(error.status).json({ type: "invalid_data", reason: error.reason, message: error.message });
+  return true;
 }
 
 export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMember[]> {
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   const all = await users.listUsers({}, { take: 200, order: { created_at: "ASC" } });
-  const [byUser, profiles] = await Promise.all([
+  // The owner: last transfer, else STORE_OWNER_EMAIL's user, else the oldest (lib/staff-scope.ts ownerUserId).
+  const ownerId = await ownerUserId(req.scope);
+  // Owner first, then oldest first, as the screen lists them.
+  all.sort((a, b) => Number(b.id === ownerId) - Number(a.id === ownerId));
+  const [byUser, profiles, access, sellers] = await Promise.all([
     assignmentsByUser(req.scope, all.map((u) => u.id)),
     profilesByUser(req.scope, all.map((u) => u.id)),
+    accessStatusByUser(req.scope, all.map((u) => u.id)),
+    listSellers(req.scope),
   ]);
-  return all.map((u, i) => {
-    // El más antiguo es el dueño (super admin) del sistema.
-    const resolved = resolveRole({ isOwner: i === 0, assignments: byUser.get(u.id) ?? [] });
+  const sellerByUser = new Map(sellers.filter((s) => s.user_id).map((s) => [s.user_id as string, s]));
+  return all.map((u) => {
+    const isOwner = u.id === ownerId;
+    const resolved = resolveRole({ isOwner, assignments: byUser.get(u.id) ?? [] });
+    // The owner is never deactivated (lib/staff-scope.ts ignores the flag for them too).
+    const disabledAt = isOwner ? null : (access.get(u.id)?.disabled_at ?? null);
     return {
       id: u.id,
       email: u.email,
       first_name: u.first_name ?? null,
       last_name: u.last_name ?? null,
       created_at: String(u.created_at),
-      is_super: i === 0,
+      is_super: isOwner,
       must_change_password: Boolean((u.metadata as Record<string, unknown> | null)?.["must_change_password"]),
       role: resolved.role,
       role_legacy: resolved.legacy,
       establishment_ids: resolved.establishment_ids,
       seller_code: profiles.get(u.id)?.seller_code ?? null,
       display_name: profiles.get(u.id)?.display_name ?? null,
+      photo_url: profiles.get(u.id)?.photo_url ?? null,
+      seller: (() => {
+        const s = sellerByUser.get(u.id);
+        return s ? { id: s.id, code: s.code, name: s.name, active: s.active, establishment_id: s.establishment_id, terminal_id: s.terminal_id } : null;
+      })(),
+      disabled_at: disabledAt,
+      is_disabled: disabledAt != null,
     };
   });
 }
@@ -80,6 +124,13 @@ interface CreateBody {
   last_name?: string;
   /** Rol inicial. Por omisión superadmin: el acceso que daba esta pantalla antes de los roles. */
   role?: string;
+  /**
+   * Obligatorio con rol `seller`: { seller_id } (ficha existente, activa y
+   * libre) o { create: { establishment_id, terminal_id, commission_pct?, code? } }.
+   */
+  seller?: unknown;
+  /** Optional profile photo (same rules as the profile: data:image/… or https, ≤ 200 KB). */
+  photo_url?: string | null;
 }
 
 export async function POST(
@@ -115,6 +166,30 @@ export async function POST(
     return;
   }
 
+  // Foto opcional del alta: mismas reglas que el perfil, comprobadas ANTES de
+  // crear el usuario para que una foto rechazada no deje un alta a medias.
+  let photo: string | null = null;
+  if (body.photo_url) {
+    const cleaned = cleanProfilePatch({ photo_url: body.photo_url }, "admin");
+    if ("reason" in cleaned) {
+      res.status(422).json({ type: "invalid_data", reason: cleaned.reason, field: "photo_url", message: `Invalid photo: ${cleaned.reason}` });
+      return;
+    }
+    photo = cleaned.patch.photo_url ?? null;
+  }
+
+  // Un vendedor nace con su ficha (tienda + punto de venta): se valida ANTES de
+  // crear el usuario, para no dejar un vendedor sin ficha si se rechaza.
+  let link: PreparedSellerLink | null = null;
+  if (role === "seller") {
+    try {
+      link = await prepareSellerLink(req.scope, null, body.seller, { name: personName(body.first_name, body.last_name, email), email });
+    } catch (error) {
+      if (sellerLinkRefusal(res, error)) return;
+      throw error;
+    }
+  }
+
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   const existing = await users.listUsers({ email }, { take: 1 });
   if (existing.length) {
@@ -142,13 +217,24 @@ export async function POST(
     { id: registered.authIdentity.id, app_metadata: { user_id: user.id } },
   ]);
 
-  // Starts in every store; stores are set afterwards from the Team tab.
+  // Starts in every store; stores are set afterwards from the Team tab. A
+  // seller works only in the store of their seller record.
+  const seller = link ? await applySellerLink(req.scope, user.id, link) : null;
   await writeStaffAssignment(req.scope, {
     userId: user.id,
     role: role as StaffRole,
-    establishmentIds: null,
+    establishmentIds: seller?.establishment_id ? [seller.establishment_id] : null,
     actorId: actorId || null,
   });
+  // Receipt code, generated (a seller takes their record's).
+  await ensureStaffCode(req.scope, user.id);
+  // The photo is cosmetic: if it cannot be stored, the person is still created
+  // and the photo can be added later from their profile.
+  if (photo) {
+    await saveProfile(req.scope, user.id, { photo_url: photo }, actorId || null).catch((e: Error) =>
+      logger.warn(`[team] photo of ${user.email} not saved: ${e.message}`)
+    );
+  }
 
   logger.info(`[team] ${role} ${user.email} created by ${actorId || "?"} (must change password on first login)`);
   res.status(200).json({ team: await listTeam(req) });

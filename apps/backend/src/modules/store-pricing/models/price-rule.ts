@@ -26,6 +26,11 @@ export const StorePriceRule = model.define("store_price_rule", {
   target: model.text().nullable(),
   mode: model.enum(["percent", "delta", "override", "min"]),
   value: model.float(),
+  // `addend` (migration UpgradeStoreRuleAddend11, dollars added after a
+  // «N × costo» multiple) is deliberately NOT declared here: the ORM selects
+  // every declared column, so a boot whose `db:migrate` failed would break
+  // every price read. lib/cost-multiple.ts reads and writes it by SQL and
+  // treats a missing column as 0.
   valid_from: model.dateTime(),
   valid_to: model.dateTime().nullable(),
   source: model.text().nullable(),

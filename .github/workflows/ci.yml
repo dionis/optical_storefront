@@ -3,10 +3,13 @@ name: CI
 on:
   push:
     # develop serves the live store (Vercel) and develop_optical_storepos is staging:
-    # both must be checked before they deploy, not only main.
-    branches: [main, develop, develop_optical_storepos]
+    # both must be checked before they deploy, not only main. tenant-deploy is
+    # the line every new optician deploys from (docs/TENANT-DEPLOY-BRANCH.md).
+    branches: [main, develop, develop_optical_storepos, tenant-deploy]
   pull_request:
-    branches: [main, develop]
+    # Also PRs into staging: a branch opened against develop_optical_storepos
+    # must show its checks before it is merged, not after.
+    branches: [main, develop, develop_optical_storepos, tenant-deploy]
 
 jobs:
   check-config:
@@ -47,6 +50,9 @@ jobs:
       NODE_ENV: development
       JWT_SECRET: ci-only-not-a-secret
       COOKIE_SECRET: ci-only-not-a-secret
+      # Stripe is always registered (production must not boot without card
+      # payments), and its loader only checks that a key exists. Not a real key.
+      STRIPE_SECRET_KEY: sk_test_ci_placeholder_not_a_real_key
     steps:
       - uses: actions/checkout@v4
 
@@ -63,20 +69,30 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @eyewear/shared build
 
+      # The production image runs `medusa build` (apps/backend/Dockerfile); a
+      # backend that only boots under `medusa develop` can still fail to build.
+      - name: Production build compiles
+        working-directory: apps/backend
+        run: npx medusa build
+
       - name: Run every module migration
         working-directory: apps/backend
         run: npx medusa db:migrate
 
       - name: Boot the backend and wait for /health
         working-directory: apps/backend
+        # The log goes to $RUNNER_TEMP, outside apps/backend: `medusa develop` restarts
+        # on every file change in its folder, and a log written there restarted it
+        # on each line it printed, so it never finished booting.
         run: |
-          npx medusa develop -p 9000 > boot.log 2>&1 &
+          LOG="$RUNNER_TEMP/boot.log"
+          npx medusa develop -p 9000 > "$LOG" 2>&1 &
           for i in $(seq 1 90); do
             if curl -sf http://localhost:9000/health > /dev/null; then echo "backend is up"; exit 0; fi
-            if grep -qE "Error starting server|Could not resolve module" boot.log; then break; fi
+            if grep -qE "Error starting server|Could not resolve module" "$LOG"; then break; fi
             sleep 2
           done
-          echo "backend did not boot:"; tail -60 boot.log; exit 1
+          echo "backend did not boot:"; tail -60 "$LOG"; exit 1
 
   lint-typecheck:
     name: Lint & Typecheck
@@ -146,7 +162,9 @@ jobs:
   deploy:
     name: Deploy to Coolify
     runs-on: ubuntu-latest
-    needs: [lint-typecheck, test-backend, test-scraper]
+    # A backend that does not migrate and boot on a clean database, or a
+    # storefront wired to the wrong backend, must not reach production.
+    needs: [check-config, backend-boot, lint-typecheck, test-backend, test-scraper]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Trigger Coolify deployment

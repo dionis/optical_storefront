@@ -36,6 +36,8 @@ export const SaleFact = model.define("sale_fact", {
   lens_material: model.text().nullable(),
   lens_photo: model.text().nullable(),
   lens_ar: model.text().nullable(),
+  /** "stock" | "digital" (lib/lens-finish.ts); null = bare frame or projected before finishes existed. */
+  lens_finish: model.text().nullable(),
   has_prescription: model.boolean().default(false),
   qty: model.number().default(1),
   list_cents: model.number(),
@@ -43,6 +45,8 @@ export const SaleFact = model.define("sale_fact", {
   tax_cents: model.number().default(0),
   frame_cents: model.number().default(0),
   lenses_cents: model.number().default(0),
+  /** Lab surcharge for a high power (lib/lab-surcharge.ts), cents; part of the lenses' cost. */
+  lab_surcharge_cents: model.number().default(0),
   total_cents: model.number(),
   payment_methods: model.json().nullable(),
   status: model.enum(["active", "voided"]).default("active"),

@@ -1,27 +1,34 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { createTerminal } from "../../../lib/pos-data";
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { cleanText, createEstablishment, listEstablishments } from "../../../lib/establishments";
+import { isValidPhone } from "../../../lib/field-rules";
+import { normalizeColor } from "../../../lib/store-color";
+import { tenant } from "../../../lib/tenant";
 
 /**
  * TIENDAS (establecimientos).
  *
  *   GET  /admin/establishments — todas, activas e inactivas, por orden de alta.
- *   POST /admin/establishments — alta { name, address?, phone? }; el código
- *        (Op1, Op2…) lo asigna el servidor y nunca se reutiliza.
+ *   POST /admin/establishments — alta { name, address?, phone?, color? }; el código
+ *        (Op1, Op2…) lo asigna el servidor y nunca se reutiliza. Sin color, el
+ *        servidor le da uno que ninguna otra tienda tenga.
  *
  * Solo dueño y superadmin llegan aquí: la guardia de /admin (lib/staff-guard.ts)
  * deja fuera al resto de roles. Errores con `reason`; el panel traduce con
  * adm.err.stores.<reason>.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
-  res.json({ establishments: await listEstablishments(req.scope) });
+  // `timezone`: the stores' wall clock, for «open now» (lib/store-hours.ts).
+  res.json({ establishments: await listEstablishments(req.scope), timezone: tenant().timezone });
 }
 
 interface CreateBody {
   name?: string;
   address?: string;
   phone?: string;
+  color?: string;
 }
 
 export async function POST(req: AuthenticatedMedusaRequest<CreateBody>, res: MedusaResponse): Promise<void> {
@@ -31,15 +38,27 @@ export async function POST(req: AuthenticatedMedusaRequest<CreateBody>, res: Med
     res.status(422).json({ type: "invalid_data", reason: "name_required", message: "A store name is required." });
     return;
   }
+  const phone = cleanText(body.phone, 40);
+  if (phone && !isValidPhone(phone)) {
+    res.status(422).json({ type: "invalid_data", reason: "bad_phone", message: "The store's phone is not valid." });
+    return;
+  }
+  if (body.color !== undefined && !normalizeColor(body.color)) {
+    res.status(422).json({ type: "invalid_data", reason: "bad_color", message: "A color must be #RRGGBB." });
+    return;
+  }
   const actorId = req.auth_context?.actor_id ?? null;
   const created = await createEstablishment(req.scope, {
     name,
     address: cleanText(body.address, 160),
-    phone: cleanText(body.phone, 40),
+    phone,
+    color: body.color,
     actorId,
   });
+  // Every store sells from at least one till: Op#-POS1 is made with the store.
+  const terminal = await createTerminal(req.scope, created, { name: null }, actorId);
   req.scope
     .resolve<Logger>(ContainerRegistrationKeys.LOGGER)
-    .info(`[stores] ${created.code} "${created.name}" created by ${actorId ?? "?"} (sales channel ${created.sales_channel_id})`);
+    .info(`[stores] ${created.code} "${created.name}" created by ${actorId ?? "?"} (sales channel ${created.sales_channel_id}, till ${terminal.code})`);
   res.json({ establishment: created, establishments: await listEstablishments(req.scope) });
 }

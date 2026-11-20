@@ -9,6 +9,7 @@ import {
 import { ORDER_STAGES, type OrderStage } from "./order-status";
 import { fetchBoardOrder, isOrderStage, liveFulfillments } from "./order-board";
 import { resolveEmailLocale } from "./email/copy";
+import { orderStorefrontOrigin, withStorefrontOrigin } from "./storefront-origin";
 import { renderOrderStageUpdate } from "./email/order-stage-update";
 import { sheetStageEvent, syncOrderToSheet } from "./gsheet-sync";
 import { tenant } from "./tenant";
@@ -30,7 +31,9 @@ export type StageErrorReason =
   | "no_location"
   | "nothing_to_fulfill"
   | "nothing_to_ship"
-  | "nothing_to_deliver";
+  | "nothing_to_deliver"
+  // A till sale whose prescription is still pending (lib/rx-pending.ts).
+  | "rx_pending";
 
 export interface StageTransitionInput {
   stage: string | undefined;
@@ -61,6 +64,18 @@ export function sanitizeTrackingUrl(value: unknown): string {
 }
 
 /** Thrown by the transition helpers; carries the code the panel translates. */
+/**
+ * Whether the customer asked for email about this order. The checkout and the
+ * till both write `metadata.notify_email`; only an explicit opt-out (false or
+ * "false") silences the stage emails — absent means yes, as the order-placed
+ * subscriber already reads it. Administrators get their copies regardless:
+ * this is the customer's preference, not the store's. Pure.
+ */
+export function wantsStageEmail(metadata: Record<string, unknown> | null | undefined): boolean {
+  const v = metadata?.["notify_email"];
+  return !(v === false || v === "false");
+}
+
 export class StageError extends Error {
   /** Código HTTP sugerido para la ruta. */
   status = 409;
@@ -114,6 +129,8 @@ async function sendStageEmail(
     frameOnly: boolean;
     trackingNumber: string | null;
     trackingUrl: string | null;
+    /** false = the customer opted out of email (metadata.notify_email); default true. */
+    notifyEmail?: boolean;
     notifySms?: boolean;
     phone?: string | null;
   }
@@ -122,7 +139,9 @@ async function sendStageEmail(
   const locale = resolveEmailLocale(input.locale);
   let sent = false;
 
-  if (input.email) {
+  if (input.email && input.notifyEmail === false) {
+    logger.info(`[order-board] order ${input.orderId} opted out of email — stage email skipped.`);
+  } else if (input.email) {
     try {
       const content = renderOrderStageUpdate(locale, {
         displayId: input.displayId,
@@ -240,6 +259,26 @@ async function setLabStage(
   });
 }
 
+/**
+ * Where a till order is fulfilled. It has no shipping method (nothing is shipped
+ * from the till), and that is where Medusa would look for the shipping option
+ * and the location: name them, the store's main ones. A web order passes nothing.
+ */
+async function tillFulfillmentRoute(container: MedusaContainer): Promise<{ shipping_option_id: string; location_id: string }> {
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const oldest = { take: 1, order: { created_at: "ASC" } };
+  const [{ data: options }, { data: locations }] = await Promise.all([
+    query.graph({ entity: "shipping_option", fields: ["id"], pagination: oldest as never }),
+    query.graph({ entity: "stock_location", fields: ["id"], pagination: oldest as never }),
+  ]);
+  const shipping_option_id = (options[0] as { id?: string } | undefined)?.id;
+  const location_id = (locations[0] as { id?: string } | undefined)?.id;
+  if (!shipping_option_id || !location_id) {
+    throw new StageError("no_location", "A till order needs a shipping option and a stock location to be fulfilled.");
+  }
+  return { shipping_option_id, location_id };
+}
+
 /** Everything not yet fulfilled goes into one box. */
 async function createFulfillment(
   container: MedusaContainer,
@@ -258,12 +297,15 @@ async function createFulfillment(
     throw new StageError("nothing_to_fulfill", "No order line has quantity left to fulfill.");
   }
 
+  const route = order.shipping_method ? {} : await tillFulfillmentRoute(container);
+
   await createOrderFulfillmentWorkflow(container).run({
     input: {
       order_id: order.id,
       created_by: actorId,
       items,
       no_notification: noNotification,
+      ...route,
     },
   });
 }
@@ -375,6 +417,16 @@ async function markDelivered(
  * Mueve el pedido a `input.stage`. Lanza `StageError` (con `status` y `reason`)
  * cuando el cambio no procede; cualquier otro error es un fallo real.
  */
+/** The order was sold with its prescription pending (lib/rx-pending.ts). Never throws: unknown = not pending. */
+async function rxPendingOf(container: MedusaContainer, orderId: string): Promise<boolean> {
+  try {
+    const { data } = await container.resolve(ContainerRegistrationKeys.QUERY).graph({ entity: "order", fields: ["id", "metadata"], filters: { id: orderId } });
+    return (data[0] as { metadata?: Record<string, unknown> | null } | undefined)?.metadata?.rx_pending === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function transitionOrderStage(
   container: MedusaContainer,
   orderId: string,
@@ -396,6 +448,11 @@ export async function transitionOrderStage(
 
   if (before.terminal === "canceled" || before.terminal === "refunded") {
     throw new StageError("terminal", "Order is canceled or refunded; its timeline has ended.");
+  }
+
+  // A till sale sold before its prescription (lib/rx-pending.ts) does not go to the lab until it is in.
+  if (target !== "confirmed" && (await rxPendingOf(container, orderId))) {
+    throw new StageError("rx_pending", "The prescription of this order is still pending; add it from the sale first.", { stage: before.stage });
   }
 
   const allowed = before.next_stages;
@@ -458,9 +515,12 @@ export async function transitionOrderStage(
 
   let notified = false;
   if (!noNotification && after && before.stage !== after.stage) {
+    let notifyEmail = true;
     let notifySms = false;
     let phone: string | null = null;
     let locale: string | null = null;
+    // The storefront the order was bought on: its tracking link points there (lib/storefront-origin.ts).
+    let origin: string | null = null;
     try {
       const query = container.resolve(ContainerRegistrationKeys.QUERY);
       const { data } = await query.graph({
@@ -470,15 +530,17 @@ export async function transitionOrderStage(
       });
       const raw = data?.[0] as { metadata?: Record<string, unknown> | null; locale?: string | null; shipping_address?: { phone?: string | null } | null } | undefined;
       const md = (raw?.metadata ?? {}) as Record<string, unknown>;
+      notifyEmail = wantsStageEmail(md);
       notifySms = md["notify_sms"] === true || md["notify_sms"] === "true";
       phone =
         (typeof md["phone"] === "string" && md["phone"].trim()) ||
         (raw?.shipping_address?.phone ? String(raw.shipping_address.phone).trim() : "") ||
         null;
       locale = raw?.locale ?? null;
-    } catch { /* sin metadata no hay SMS; el email sale igual */ }
+      origin = orderStorefrontOrigin(md);
+    } catch { /* sin metadata no hay SMS ni opt-out conocido; el email sale igual */ }
 
-    notified = await sendStageEmail(container, logger, {
+    notified = await withStorefrontOrigin(origin, () => sendStageEmail(container, logger, {
       email: after.email ? String(after.email) : null,
       displayId: after.display_id != null ? String(after.display_id) : orderId,
       orderId,
@@ -487,9 +549,10 @@ export async function transitionOrderStage(
       frameOnly: !after.items?.some((i) => i.lens && i.lens.design_code),
       trackingNumber: tracking || after.tracking_number || null,
       trackingUrl: trackingUrl || null,
+      notifyEmail,
       notifySms,
       phone,
-    });
+    }));
   }
 
   if (after && before.stage !== after.stage) {

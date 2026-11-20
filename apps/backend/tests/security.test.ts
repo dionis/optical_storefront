@@ -183,4 +183,20 @@ describe("securityAudit", () => {
     expect(JSON.stringify(audit)).not.toContain("sk_test_123");
     expect(JSON.stringify(audit)).not.toContain(strong);
   });
+
+  it("on a staging backend (DEPLOY_ENV=staging) Stripe in test mode is correct and live keys are the problem", () => {
+    const test = securityAudit({ ...good, DEPLOY_ENV: "staging", STRIPE_SECRET_KEY: "sk_test_1" });
+    expect(test.checks.find((c) => c.key === "payments.stripe_mode")).toBeUndefined();
+    expect(test.checks.find((c) => c.key === "payments.stripe_test_staging")).toEqual({ key: "payments.stripe_test_staging", ok: true, detail: "test" });
+    expect(test.failing).toBe(0);
+    const live = securityAudit({ ...good, DEPLOY_ENV: "Staging" });
+    expect(live.checks.find((c) => c.key === "payments.stripe_test_staging")?.ok).toBe(false);
+  });
+
+  it("reports a boot whose migrations failed (docker-entrypoint.sh leaves the mark)", () => {
+    expect(securityAudit(good).checks.find((c) => c.key === "db.migrations_applied")?.ok).toBe(true);
+    const bad = securityAudit({ ...good, MEDUSA_MIGRATE_STATUS: "failed" });
+    expect(bad.checks.find((c) => c.key === "db.migrations_applied")?.ok).toBe(false);
+    expect(JSON.stringify(bad)).not.toMatch(/postgres:\/\//);
+  });
 });

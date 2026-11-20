@@ -20,6 +20,10 @@ export async function GET(_req: MedusaRequest, res: MedusaResponse): Promise<voi
     commit: process.env.SOURCE_COMMIT || null,
     started_at: STARTED_AT,
     gsheet: Boolean(process.env.GSHEET_FILE_URL || process.env.GSHEET_SPREADSHEET_ID),
+    // docker-entrypoint.sh boots even when `db:migrate` failed (a schema hiccup
+    // must not take the store down); it leaves MEDUSA_MIGRATE_STATUS so the
+    // failure is visible here instead of surfacing as random 500s later.
+    migrations: process.env.MEDUSA_MIGRATE_STATUS === "failed" ? "failed" : "ok",
     features: FEATURES,
   });
 }

@@ -4,7 +4,7 @@ import { listEstablishments } from "../../../lib/establishments";
 import { PosError } from "../../../lib/pos-data";
 import { posHandler } from "../../../lib/pos-route";
 import { presignPrescriptionUrl } from "../../../lib/s3";
-import { cleanCostItem } from "../../../lib/store-costs";
+import { cleanCostItem, normalizedMonthly, taxCategoryOf } from "../../../lib/store-costs";
 import { costScope } from "../../../lib/store-costs-route";
 import { uploadCostReceipt } from "../../../lib/tryon-image";
 import { STORE_COST_MODULE } from "../../../modules/store-cost";
@@ -16,7 +16,9 @@ import type StoreCostModuleService from "../../../modules/store-cost/service";
  *   GET  /admin/store-costs?store= — costos fijos y variables (y los compartidos, para admins).
  *   POST /admin/store-costs — alta { establishment_id | null, kind, category,
  *        description?, amount, frequency, amortize_months?, starts_on, ends_on?,
- *        vendor?, allocation? (compartidos), notes?, attachment? (data URL) }.
+ *        vendor?, allocation? (compartidos), notes?, attachment? (data URL),
+ *        tax_category?, active?, per_sale? }. Frecuencias: daily, weekly,
+ *        biweekly, monthly, quarterly, annual, one_time (lib/store-costs.ts).
  *
  * Con el privilegio «Gestionar costos» (o «Ver costos» para leer). Cada cambio
  * queda en la auditoría con el antes y el después (HU-97).
@@ -31,6 +33,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       visible.map(async (r) => ({
         ...r,
         amount: Number(r.amount_cents) / 100,
+        // The IRS bucket (its own, or the one its category maps to) and what it is worth in an average month.
+        tax_category: taxCategoryOf(r as { tax_category?: string | null; category?: string | null }),
+        monthly: normalizedMonthly({ amount_cents: Number(r.amount_cents), frequency: r.frequency as never, amortize_months: r.amortize_months as number | null, per_sale: (r as { per_sale?: boolean }).per_sale }) / 100,
         attachment_url: r.attachment_key ? await presignPrescriptionUrl(r.attachment_key) : null,
       }))
     );

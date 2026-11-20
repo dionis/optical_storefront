@@ -6,9 +6,20 @@ import { ocrSettingsMiddlewares } from "./admin/ocr-settings/middlewares";
 import { frameMediaMiddlewares } from "./admin/frame-media/middlewares";
 import { orderAccessRateLimit } from "./store/order-access/rate-limit";
 import { visionNotifyRateLimit } from "./vision-measure/notify/rate-limit";
-import { adminLoginRateLimit, blockAdminSelfRegister, securityHeaders } from "../lib/security";
+import {
+  adminLoginRateLimit,
+  blockAdminSelfRegister,
+  passwordResetRequestRateLimit,
+  passwordResetUpdateRateLimit,
+  securityHeaders,
+} from "../lib/security";
 import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
+import { revokeSessionsAfterPasswordRecovery } from "../lib/session-control";
 import { staffGuard } from "../lib/staff-guard";
+import { opContextMiddleware } from "../lib/operation-log-context";
+import { warmTenantProfile } from "../lib/tenant-profile";
+import { captureCartOrigin, storefrontOriginScope } from "../lib/storefront-origin-http";
+import { webStorePrices } from "../lib/web-pricing-http";
 
 /**
  * Medusa ships `GET /store/orders/:id` with NO authentication — its own source
@@ -83,6 +94,7 @@ function respondToUploadError(
 ): boolean {
   if (err instanceof UnsupportedUploadError) {
     res.status(415).json({
+      reason: "unsupported_media_type",
       error_code: "unsupported_media_type",
       error: opts.unsupportedMessage,
     });
@@ -92,6 +104,7 @@ function respondToUploadError(
   // reachable here, and it is the common one on a modern phone camera.
   if (err && typeof err === "object" && (err as { code?: string }).code === "LIMIT_FILE_SIZE") {
     res.status(413).json({
+      reason: "file_too_large",
       error_code: "file_too_large",
       error: opts.tooLargeMessage,
     });
@@ -170,6 +183,38 @@ function reviewPhotosUpload(
 }
 
 /**
+ * «Productos y precios» uploads (v2, docs/PRICE-MATRIX.md «Archivos»): a
+ * brand logo or a model photo. One public image, JPEG / PNG / WEBP, ≤ 8 MB —
+ * the limits live in src/api/admin/catalog/uploads/route.ts too.
+ */
+const CATALOG_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+const CATALOG_UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const catalogImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: CATALOG_UPLOAD_MAX_BYTES, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (CATALOG_UPLOAD_TYPES.includes(file.mimetype)) cb(null, true);
+    else cb(new UnsupportedUploadError(file.mimetype));
+  },
+});
+
+/** Same three-argument shape as `ocrUpload`, and for the same reason. */
+function catalogUpload(req: MedusaRequest, res: MedusaResponse, next: MedusaNextFunction): void {
+  catalogImageUpload.single("file")(req as never, res as never, (err: unknown) => {
+    if (!err) return next();
+    if (
+      respondToUploadError(err, res, {
+        unsupportedMessage: "Catalogue images must be JPEG, PNG or WEBP.",
+        tooLargeMessage: `The image must be under ${Math.round(CATALOG_UPLOAD_MAX_BYTES / (1024 * 1024))} MB.`,
+      })
+    ) {
+      return;
+    }
+    next(err);
+  });
+}
+
+/**
  * CORS for the /vision-measure proxy routes. They live OUTSIDE /store and
  * /admin on purpose (no publishable key, no session), which also means Medusa's
  * built-in CORS middleware never covers them: a storefront configured in
@@ -204,13 +249,44 @@ function visionMeasureCors(
   next();
 }
 
+/**
+ * Keeps the owner-edited tenant profile (name, legal name…) loaded so the
+ * synchronous `tenant()` used by emails, SMS and the sheet reflects it. Fire and
+ * forget: the request never waits for the database here.
+ */
+function tenantProfileWarm(req: MedusaRequest, _res: MedusaResponse, next: MedusaNextFunction): void {
+  warmTenantProfile(req.scope);
+  next();
+}
+
 export default defineMiddlewares({
   routes: [
     {
       // Security headers on every response (HSTS, nosniff, no framing…). See
       // lib/security.ts; the storefront gets its own set from vercel.json.
       matcher: "/*",
-      middlewares: [securityHeaders],
+      // Security headers first (tests/security.test.ts); then the operation log's context, so every write of the
+      // request carries who and from where (lib/operation-log-context.ts).
+      middlewares: [securityHeaders, opContextMiddleware, tenantProfileWarm],
+    },
+    {
+      // Several storefronts on one backend (lib/storefront-origin.ts): links built
+      // while answering a shopper point at the storefront they came from, and the
+      // cart records it so the order's emails do too.
+      matcher: "/store*",
+      middlewares: [storefrontOriginScope],
+    },
+    {
+      matcher: "/store/carts*",
+      method: ["POST"],
+      middlewares: [captureCartOrigin],
+    },
+    {
+      // The web shop sells at the online store's prices (lib/web-pricing.ts):
+      // the catalogue's `calculated_price` leaves with that store's figure.
+      matcher: "/store/products*",
+      method: ["GET"],
+      middlewares: [webStorePrices],
     },
     {
       // Role gate for every admin route, Medusa's own included: owner and
@@ -231,6 +307,20 @@ export default defineMiddlewares({
       matcher: "/auth/user/emailpass/register",
       method: ["POST"],
       middlewares: [blockAdminSelfRegister],
+    },
+    {
+      // "Forgot my password" (HU-03): each call mails a link, so per IP and per
+      // identifier. The subscriber in subscribers/auth-password-reset.ts sends.
+      matcher: "/auth/user/emailpass/reset-password",
+      method: ["POST"],
+      middlewares: [passwordResetRequestRateLimit],
+    },
+    {
+      // Consumes the single-use reset token. Per IP. On success the person's
+      // previous sessions are signed out (lib/session-control.ts).
+      matcher: "/auth/user/emailpass/update",
+      method: ["POST"],
+      middlewares: [passwordResetUpdateRateLimit, revokeSessionsAfterPasswordRecovery],
     },
     {
       // CORS for every vision-measure route (see visionMeasureCors above) —
@@ -276,11 +366,38 @@ export default defineMiddlewares({
       bodyParser: { sizeLimit: "2mb" },
     },
     {
+      // A brand logo (≤ 300 KB) travels as a base64 `data:` URL; the route
+      // checks the decoded size, this only lets the encoded body in.
+      matcher: "/admin/tenant/brand/logo",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "1mb" },
+    },
+    {
+      // «Productos y precios» → Importar: the whole Excel book (every model,
+      // lens cell and treatment, price and discount per store) as JSON rows.
+      matcher: "/admin/pricing/matrix/import",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "5mb" },
+    },
+    {
       // A point-of-sale sale carries the photo of each frame the customer
       // brought as a base64 `data:` URL.
       matcher: "/admin/pos/sales",
       method: ["POST"],
       bodyParser: { sizeLimit: "10mb" },
+    },
+    {
+      // The photo of a store frame off the catalog added after the sale (lib/store-frame-photo.ts).
+      matcher: "/admin/pos/sales/:id/store-frame-photo",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "9mb" },
+    },
+    {
+      // The photo of the patient wearing the frame (lib/pos-wearing-photo.ts),
+      // a base64 `data:` URL of at most 6 MB decoded.
+      matcher: "/admin/pos/sales/:id/wearing-photo",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "9mb" },
     },
     {
       // The prescription write can carry the AI try-on render as a base64 `data:`
@@ -318,6 +435,14 @@ export default defineMiddlewares({
       matcher: "/store/product-review-photos",
       method: ["POST"],
       middlewares: [reviewPhotosUpload],
+    },
+    {
+      // Brand logos and model photos from «Productos y precios» (multipart, one
+      // image). The staff guard on /admin* runs first: restricted roles never
+      // reach multer.
+      matcher: "/admin/catalog/uploads",
+      method: ["POST"],
+      middlewares: [catalogUpload],
     },
     {
       matcher: "/store/orders/:id",

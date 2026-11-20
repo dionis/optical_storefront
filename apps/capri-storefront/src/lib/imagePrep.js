@@ -81,13 +81,42 @@ function canvasToBlob(canvas, type, quality) {
 }
 
 /**
+ * A camera shot can arrive with NO mime type (some Android browsers hand the
+ * capture as a bare blob, sometimes without an extension either). Decoders and
+ * the backend both go by the type, so a typeless photo used to be refused as
+ * "not an image". The first bytes say what it is; the file is re-wrapped with
+ * that type. Anything already typed, or not recognised, is returned as it came.
+ */
+export async function withSniffedType(file) {
+  // No type, or the "I don't know" type some browsers give a capture.
+  if (!file || (file.type && file.type !== "application/octet-stream")) return file;
+  try {
+    const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+    const ascii = (from, to) => String.fromCharCode(...head.slice(from, to));
+    let type = "";
+    if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) type = "image/jpeg";
+    else if (head[0] === 0x89 && ascii(1, 4) === "PNG") type = "image/png";
+    else if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") type = "image/webp";
+    else if (ascii(0, 4) === "GIF8") type = "image/gif";
+    else if (ascii(4, 8) === "ftyp" && /^(heic|heix|hevc|mif1|msf1|heim|heis)$/.test(ascii(8, 12))) type = "image/heic";
+    else if (ascii(0, 4) === "%PDF") type = "application/pdf";
+    if (!type) return file;
+    return new File([file], file.name || "foto", { type, lastModified: file.lastModified || Date.now() });
+  } catch {
+    return file;
+  }
+}
+
+/**
  * Returns a File ready to upload: a JPEG within the size/format the backend
  * accepts, or the original when re-encoding is unnecessary or impossible.
  *
  * Never throws — a failure here must not cost the customer their read.
  */
-export async function preparePrescriptionFile(file) {
-  if (!file) return file;
+export async function preparePrescriptionFile(input) {
+  if (!input) return input;
+  // A typeless camera shot gets its real type first (see `withSniffedType`).
+  const file = await withSniffedType(input);
 
   // PDFs are text, not pixels: rasterising one would destroy the very detail
   // the model reads. The backend forwards them to the API as a document block.

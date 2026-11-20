@@ -1,19 +1,10 @@
 // Dónde se usa: interior de /admin. Secciones Ejecutivo/Pedidos/Costos/Vendedores/Resumen/Ventas/Productos/Precios/Equipo/Seguridad dentro del armazón AdminShell (barra lateral de iconos).
-import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
-import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
-import { ensureSeed, summarize, summarizeOrders, rangeFor, subscribe as onAnalytics, clearDemo, productSales, productSalesFrom } from "./analytics.js";
-// REAL analytics: the panel's Resumen/Ventas/Precios feed on the store's actual
-// orders (Medusa order board) when the login is real; the demo seed only backs
-// the demo login and the error fallback. See realAnalytics.js.
-import { fetchBoardWindow, fetchRealAnalyticsOrders, buildCatalogIndex, toAnalyticsOrder } from "./realAnalytics.js";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { ensureSeed } from "./analytics.js";
 import { isDemoLogin } from "./adminAuth.js";
-import ExecutiveHub, { EXEC_TABS } from "./ExecutiveHub.jsx";
-import { Card } from "./ui.jsx";
+import { getSession } from "./adminApi.js";
 import { printElement } from "./exportUtils.js";
-import CatalogManager from "./CatalogManager.jsx";
-import Team from "./Team.jsx";
-import Stores from "./Stores.jsx";
-import Security from "./Security.jsx";
+import { fetchSetup } from "./adminTenant.js";
 // The Orders tab is the one part of this panel backed by the real store: it
 // reads and mutates Medusa orders instead of the seeded localStorage the other
 // tabs still use. `money` is aliased because this file already has its own,
@@ -26,647 +17,108 @@ import {
 import { fetchOrderCost, marginTone } from "./adminCosting.js";
 import { fetchSellers } from "./adminSellers.js";
 import AdminShell, { navGroupsFor, tabsOf } from "./AdminShell.jsx";
-import StaffProfile from "./StaffProfile.jsx";
-import AuditLog from "./AuditLog.jsx";
-import PosSale from "./PosSale.jsx";
-import PosSales from "./PosSales.jsx";
-import PosApprovals from "./PosApprovals.jsx";
-import PosConfig from "./PosConfig.jsx";
-import AlertRules from "./AlertRules.jsx";
-import SalesBoard from "./SalesBoard.jsx";
-import MySales from "./MySales.jsx";
-import PosCash from "./PosCash.jsx";
-import StoreCosts from "./StoreCosts.jsx";
+import { fetchAiStatus } from "./aiUsage.js";
+import { useSalePanel } from "./SaleDetailPanel.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
+import { webStoreLabel } from "./useStoreTheme.js";
+import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
-import Costs from "./Costs.jsx";
-import Sellers from "./Sellers.jsx";
 import { TENANT } from "../config/tenant.js";
-import { useCatalog } from "../data/catalogStore.js";
-import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
-import * as PS from "./priceStore.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
-import { DESIGNS, MATERIALS as LENS_MATERIALS, BASE, PHOTO, AR, L } from "../data/lensPricing.js";
 
-const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
-
-const money = (n) => "$" + (Number(n) || 0).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const int = (n) => (Number(n) || 0).toLocaleString("es");
-const normKey = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "");
-
-// Visual bar list with a small product photo per row (icons with product thumbnails).
-function ThumbBars({ data, imgByName, valuePrefix = "", emptyMsg }) {
-  const { t } = useLang();
-  if (!data || !data.length) return <div className="adm-nodata">{emptyMsg ?? t("adm.chart.noData")}</div>;
-  const max = Math.max(...data.map((d) => d.value), 1);
-  return (
-    <div className="adm-thumbbars">
-      {data.map((d, i) => {
-        const img = imgByName && imgByName[d.label];
-        return (
-          <div className="adm-tb-row" key={i}>
-            <div className="adm-tb-thumb">{img ? <img src={img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
-            <div className="adm-tb-main">
-              <div className="adm-tb-top"><span className="adm-tb-name" title={d.label}>{d.label}</span><b>{valuePrefix}{int(d.value)}</b></div>
-              <div className="adm-tb-track"><div className="adm-tb-fill" style={{ width: (d.value / max * 100).toFixed(1) + "%" }} /></div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+// RENDIMIENTO (tabletas de gama baja, 9-nov-2026): cada pestaña es su propio
+// trozo de código y se baja la primera vez que se abre; el armazón, la ficha de
+// venta y el saludo diario van en el trozo principal. Las pestañas de trabajo
+// del rol se precargan en segundo plano tras el primer pintado (prefetchTabs).
+const TAB_IMPORTS = {
+  exec: () => import("./ExecutiveHub.jsx"),
+  catalogsync: () => import("./CatalogSync.jsx"),
+  team: () => import("./Team.jsx"),
+  stores: () => import("./Stores.jsx"),
+  security: () => import("./Security.jsx"),
+  setup: () => import("./Setup.jsx"),
+  profile: () => import("./StaffProfile.jsx"),
+  audit: () => import("./AuditLog.jsx"),
+  pos: () => import("./PosSale.jsx"),
+  possales: () => import("./PosSales.jsx"),
+  approvals: () => import("./PosApprovals.jsx"),
+  posconfig: () => import("./PosConfig.jsx"),
+  alerts: () => import("./AlertRules.jsx"),
+  aiusage: () => import("./AiUsage.jsx"),
+  oplog: () => import("./OperationLog.jsx"),
+  promotions: () => import("./Promotions.jsx"),
+  salesboard: () => import("./SalesBoard.jsx"),
+  storestatus: () => import("./StoreStatus.jsx"),
+  mysales: () => import("./MySales.jsx"),
+  cash: () => import("./PosCash.jsx"),
+  storecosts: () => import("./StoreCosts.jsx"),
+  finreport: () => import("./FinanceReport.jsx"),
+  statement: () => import("./StoreStatement.jsx"),
+  storeorders: () => import("./StoreOrders.jsx"),
+  pendingbalances: () => import("./PendingBalances.jsx"),
+  patients: () => import("./Patients.jsx"),
+  costs: () => import("./Costs.jsx"),
+  sellers: () => import("./Sellers.jsx"),
+  products: () => import("./PricingPanel.jsx"),
+};
+// La pestaña de la URL empieza a bajar ya, mientras se pinta el armazón (sin esperar a que React la pida).
+try {
+  const first = new URLSearchParams(window.location.search).get("tab");
+  if (first && TAB_IMPORTS[first]) TAB_IMPORTS[first]().catch(() => {});
+  // Nueva venta: el contexto del punto de venta (tiendas, cajas, formas de pago) también, con la sesión ya guardada.
+  if (first === "pos" && getSession()) import("./posApi.js").then((m) => m.posContext()).catch(() => {});
+} catch { /* sin window (pruebas) */ }
+const ExecutiveHub = lazy(TAB_IMPORTS.exec);
+const CatalogSync = lazy(TAB_IMPORTS.catalogsync);
+const Team = lazy(TAB_IMPORTS.team);
+const Stores = lazy(TAB_IMPORTS.stores);
+const Security = lazy(TAB_IMPORTS.security);
+const Setup = lazy(TAB_IMPORTS.setup);
+const StaffProfile = lazy(TAB_IMPORTS.profile);
+const AuditLog = lazy(TAB_IMPORTS.audit);
+const PosSale = lazy(TAB_IMPORTS.pos);
+const PosSales = lazy(TAB_IMPORTS.possales);
+const PosApprovals = lazy(TAB_IMPORTS.approvals);
+const PosConfig = lazy(TAB_IMPORTS.posconfig);
+const AlertRules = lazy(TAB_IMPORTS.alerts);
+const AiUsage = lazy(TAB_IMPORTS.aiusage);
+const OperationLog = lazy(TAB_IMPORTS.oplog);
+const Promotions = lazy(TAB_IMPORTS.promotions);
+const SalesBoard = lazy(TAB_IMPORTS.salesboard);
+const StoreStatus = lazy(TAB_IMPORTS.storestatus);
+const MySales = lazy(TAB_IMPORTS.mysales);
+const PosCash = lazy(TAB_IMPORTS.cash);
+const StoreCosts = lazy(TAB_IMPORTS.storecosts);
+const FinanceReport = lazy(TAB_IMPORTS.finreport);
+const StoreStatement = lazy(TAB_IMPORTS.statement);
+const StoreOrders = lazy(TAB_IMPORTS.storeorders);
+const PendingBalances = lazy(TAB_IMPORTS.pendingbalances);
+const Patients = lazy(TAB_IMPORTS.patients);
+const Costs = lazy(TAB_IMPORTS.costs);
+const Sellers = lazy(TAB_IMPORTS.sellers);
+const PricingPanel = lazy(TAB_IMPORTS.products);
+/** Lo que cada rol abre a diario: se baja en segundo plano para que el cambio de pestaña sea instantáneo. */
+const PREFETCH = {
+  seller: [TAB_IMPORTS.pos, TAB_IMPORTS.mysales, TAB_IMPORTS.pendingbalances, TAB_IMPORTS.cash],
+  staff: [TAB_IMPORTS.pos, TAB_IMPORTS.possales, TAB_IMPORTS.cash, TAB_IMPORTS.pendingbalances, TAB_IMPORTS.storestatus],
+  admin: [TAB_IMPORTS.exec, TAB_IMPORTS.pos, TAB_IMPORTS.possales, TAB_IMPORTS.cash],
+};
+function prefetchTabs(me) {
+  const list = !me || me.is_admin !== false ? PREFETCH.admin : me.role === "seller" ? PREFETCH.seller : PREFETCH.staff;
+  const idle = typeof window !== "undefined" && window.requestIdleCallback ? (fn) => window.requestIdleCallback(fn, { timeout: 4000 }) : (fn) => setTimeout(fn, 1500);
+  // De una en una: en una tableta lenta, bajar y compilar todo a la vez competiría con lo que se está pintando.
+  const next = (i) => { if (i < list.length) idle(() => list[i]().catch(() => {}).finally(() => next(i + 1))); };
+  next(0);
 }
+/** Mientras baja el trozo de una pestaña: reserva alto (sin saltos) y dice que está cargando. */
+const TabFallback = () => <div className="adm-section adm-tab-loading" aria-busy="true"><div className="adm-src-note loading" /></div>;
 
-// Range keys only — the words come from the dictionary at render time, so the
-// picker follows the language switch instead of freezing at first paint.
-const RANGES = ["today", "7d", "30d", "90d", "ytd", "all"];
 
-function RangePicker({ value, onChange }) {
-  const { t } = useLang();
-  return (
-    <div className="adm-range">
-      {RANGES.map((k) => (
-        <button key={k} className={value === k ? "on" : ""} onClick={() => onChange(k)}>{t(`adm.range.${k}`)}</button>
-      ))}
-    </div>
-  );
-}
 
-// re-render when analytics change (watch both daily buckets and orders)
-const analyticsSnap = () => (localStorage.getItem("oer_daily") || "").length + ":" + (localStorage.getItem("oer_orders") || "").length;
-function useAnalyticsTick() {
-  return useSyncExternalStore(onAnalytics, analyticsSnap, () => "0:0");
-}
-
-function useSummary(preset) {
-  const snap = useAnalyticsTick();
-  return useMemo(() => summarize(rangeFor(preset)), [preset, snap]);
-}
-
-// REAL summary: same aggregation, fed by the store's actual orders. With the
-// demo login (or while real orders fail to load) it falls back to the demo
-// summarize so the charts never go blank. Returns the summary plus the source
-// so the tabs can label what the numbers are ("real", "demo", "loading").
-function useRealSummary(preset) {
-  const snap = useAnalyticsTick();            // keeps the demo fallback live
-  const demoMode = isDemoLogin();
-  const { products, cases } = useCatalog();
-  const [win, setWin] = useState(null);       // { orders, truncated, scanLimit }
-  const [state, setState] = useState(demoMode ? "demo" : "loading");
-  useEffect(() => {
-    if (demoMode) { setState("demo"); return undefined; }
-    let on = true;
-    setState("loading");
-    fetchBoardWindow(rangeFor(preset))
-      .then((w) => { if (on) { setWin(w); setState("real"); } })
-      .catch(() => { if (on) setState("error"); });
-    return () => { on = false; };
-  }, [preset, demoMode]);
-  const catalogIndex = useMemo(() => buildCatalogIndex(products, cases), [products, cases]);
-  const s = useMemo(() => {
-    if (state === "real" && win) {
-      // Revenue truth: canceled/refunded/payment-pending orders don't count.
-      const revenue = (win.orders || []).filter((o) => !o.terminal).map((o) => toAnalyticsOrder(o, catalogIndex));
-      return summarizeOrders(revenue, rangeFor(preset));
-    }
-    return summarize(rangeFor(preset));       // demo login / load error
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, win, catalogIndex, preset, snap]);
-  return { s, source: state, truncated: state === "real" && win ? win.truncated : false, scanLimit: win?.scanLimit || 300 };
-}
-
-// Small banner naming the data source of the analytics tabs (real store data,
-// scan-window note, or the demo/error fallback). Keys live in adm.real.*.
-function SourceNote({ source, truncated, scanLimit }) {
-  const { t } = useLang();
-  if (source === "loading") return <div className="adm-src-note loading">{t("adm.real.loading")}</div>;
-  if (source === "error") return <div className="adm-demo-banner">{t("adm.real.loadFailed")}</div>;
-  if (source === "real") {
-    return (
-      <div className="adm-src-note real">
-        <b>{t("adm.real.source")}</b>
-        {truncated ? <span> · {t("adm.real.truncated", { n: int(scanLimit) })}</span> : null}
-      </div>
-    );
-  }
-  return null;
-}
-
-/* ---------------- Overview ---------------- */
-function Overview({ preset, setPreset, go }) {
-  const { t } = useLang();
-  const { s, source, truncated, scanLimit } = useRealSummary(preset);
-  const k = s.kpis;
-  const { products } = useCatalog();
-  const imgByName = useMemo(() => Object.fromEntries(products.map((p) => [p.name, p.colors?.[0]?.image])), [products]);
-  // summarize() hands back dictionary keys for the labels it invents (weekdays,
-  // funnel steps). Resolve them here, at the boundary, so the chart components
-  // stay generic and just render whatever label they are given.
-  const funnel = useMemo(() => s.funnel.map((f) => ({ ...f, label: t(f.label) })), [s.funnel, t]);
-  const weekday = useMemo(() => s.weekday.map((w) => ({ ...w, label: t(w.label) })), [s.weekday, t]);
-  return (
-    <div className="adm-exec">
-      <div className="adm-head-row compact"><span className="muted">{t("adm.exec.overviewSub")}</span><RangePicker value={preset} onChange={setPreset} /></div>
-      <SourceNote source={source} truncated={truncated} scanLimit={scanLimit} />
-      {s.hasDemo && (
-        <div className="adm-demo-banner">
-          <span dangerouslySetInnerHTML={{ __html: t("adm.demoBanner") }} />{" "}
-          <button onClick={clearDemo}>{t("adm.clearDemo")}</button>
-        </div>
-      )}
-      <div className="adm-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={money(k.revenue)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(k.units) })} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "detail" })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(k.ordersCount)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders", { preset })} />
-        <KpiCard label={t("adm.kpi.aov")} value={money(k.aov)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "detail" })} />
-        <KpiCard label={t("adm.kpi.access")} value={int(k.access)} icon={<Icon name="eye" />} sub={source === "real" ? t("adm.real.funnelLocal") : undefined} hint={t("adm.kpi.h.access")} />
-        <KpiCard label={t("adm.kpi.conversion")} value={(k.conv || 0).toFixed(1) + "%"} icon={<Icon name="gauge" />} sub={t("adm.kpi.convSub")} hint={t("adm.kpi.h.conversion")} />
-      </div>
-      <div className="adm-grid-2">
-        <Card title={t("adm.chart.salesByDay")} name="salesByDay" hint={t("adm.chart.salesByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" color="#0E5AD0" /></Card>
-        <Card title={t("adm.chart.funnel")} name="funnel" hint={t("adm.chart.funnel.h")}><Funnel steps={funnel} /></Card>
-      </div>
-      <div className="adm-grid-2">
-        <Card title={t("adm.chart.salesByBrand")} name="salesByBrand" hint={t("adm.chart.salesByBrand.h")}><DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} /></Card>
-        <Card title={t("adm.chart.topProducts")} name="topProducts" hint={t("adm.chart.topProducts.h")}><ThumbBars data={s.topProducts} imgByName={imgByName} valuePrefix="$" emptyMsg={t("adm.chart.noSales")} /></Card>
-      </div>
-      <Card title={t("adm.chart.accessVsBuy")} name="accessVsBuy" hint={t("adm.chart.accessVsBuy.h")}><p className="adm-sub">{t("adm.chart.accessVsBuySub")}</p><AccessVsBuyChart data={s.accessVsBuy} /></Card>
-      <Card title={t("adm.chart.weekday")} name="weekday" hint={t("adm.chart.weekday.h")}><p className="adm-sub">{t("adm.chart.weekdaySub")}</p><WeekdayChart data={weekday} /></Card>
-    </div>
-  );
-}
-
-/* ---------------- Sales ---------------- */
-function Sales({ preset, setPreset, go }) {
-  const { t, lang } = useLang();
-  const { s, source, truncated, scanLimit } = useRealSummary(preset);
-  const recent = s.orders.slice(0, 40);
-  return (
-    <div className="adm-exec">
-      <div className="adm-head-row compact"><span className="muted">{t("adm.exec.detailSub")}</span><RangePicker value={preset} onChange={setPreset} /></div>
-      <SourceNote source={source} truncated={truncated} scanLimit={scanLimit} />
-      <div className="adm-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={money(s.kpis.revenue)} icon={<Icon name="dollar" />} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "costs" })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders", { preset })} />
-        <KpiCard label={t("adm.kpi.aov")} value={money(s.kpis.aov)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "overview" })} />
-        <KpiCard label={t("adm.kpi.units")} value={int(s.kpis.units)} icon={<Icon name="box" />} hint={t("adm.kpi.h.units")} onClick={() => go("products")} />
-      </div>
-      <div className="adm-grid-2">
-        <Card title={t("adm.sales.revByDay")} name="revByDay" hint={t("adm.sales.revByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" /></Card>
-        <Card title={t("adm.sales.ordersByDay")} name="ordersByDay" hint={t("adm.sales.ordersByDay.h")}><BarChart data={s.ordersSeries} color="#FD0E3F" /></Card>
-      </div>
-      <Card icon="clock" title={t("adm.sales.recent", { n: int(s.orders.length) })} name="pedidos-recientes" hint={t("adm.sales.recent.h")}>
-        <div className="adm-table-wrap">
-          <table className="adm-table responsive">
-            <thead><tr><th>{t("adm.col.order")}</th><th>{t("adm.col.date")}</th><th>{t("adm.col.items")}</th><th className="r">{t("adm.col.total")}</th></tr></thead>
-            <tbody>
-              {recent.length === 0 ? <tr><td colSpan="4" className="muted">{t("adm.sales.noneInRange")}</td></tr> :
-                recent.map((o) => (
-                  <tr key={o.id} className="ord-row" onClick={() => go("orders", { order: o.id })} title={t("adm.exec.openOrder")}>
-                    <td data-label={t("adm.col.order")}>{o.demo ? o.id : `#${o.display_id ?? o.id}`}{o.demo && <span className="tag-demo">{t("adm.demoTag")}</span>}</td>
-                    <td data-label={t("adm.col.date")}>{shortDate(o.t, lang)}</td>
-                    <td data-label={t("adm.col.items")}>{o.items.map((i) => i.name).slice(0, 3).join(", ")}{o.items.length > 3 ? "…" : ""}</td>
-                    {/* Real orders carry their currency; demo ones fall back to USD. */}
-                    <td data-label={t("adm.col.total")} className="r">{fmtMoney(o.total, o.currency || "usd", lang)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-/* ---------------- Products (new / discontinued over time) ---------------- */
-function Products({ preset, setPreset }) {
-  const { t, lang } = useLang();
-  const { products, cases, meta } = useCatalog();
-  const [history, setHistory] = useState(null);
-  useEffect(() => {
-    fetch("/catalog-history.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then(setHistory).catch(() => setHistory(null));
-  }, []);
-
-  const { from, to } = rangeFor(preset);
-  const inRange = (d) => { const t = new Date(d).getTime(); return t >= from.getTime() && t <= to.getTime(); };
-
-  const added = [], removed = [];
-  if (Array.isArray(history)) {
-    for (const h of history) if (inRange(h.date)) {
-      for (const s of (h.added || [])) added.push({ sku: s, date: h.date });
-      for (const s of (h.removed || [])) removed.push({ sku: s, date: h.date });
-    }
-  } else if (meta) {
-    for (const s of (meta.added || [])) added.push({ sku: s, date: meta.lastSync });
-    for (const s of (meta.removed || [])) removed.push({ sku: s, date: meta.lastSync });
-  }
-
-  const perBrand = meta?.perBrand || products.reduce((m, p) => (m[p.brand_slug] = (m[p.brand_slug] || 0) + 1, m), {});
-  const brandRows = Object.entries(perBrand).sort((a, b) => b[1] - a[1]);
-  const prodByKey = useMemo(() => { const m = {}; for (const p of products) m[normKey(p.sku)] = p; return m; }, [products]);
-  const findP = (sku) => prodByKey[normKey(sku)];
-  const ProdList = ({ list, empty }) => (
-    <div className="adm-prodlist">
-      {list.length === 0 ? <div className="adm-nodata">{empty}</div> : list.slice(0, 100).map((x, i) => {
-        const p = findP(x.sku);
-        return (
-          <div className="adm-prodlist-row" key={i}>
-            <div className="adm-tb-thumb sm">{p?.colors?.[0]?.image ? <img src={p.colors[0].image} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
-            <div className="adm-pl-main"><b>{p?.name || x.sku}</b>{p && <small className="muted">{p.brand}</small>}</div>
-            <small className="muted">{shortDate(x.date, lang)}</small>
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  return (
-    <div className="adm-section">
-      <div className="adm-head-row"><h2>{t("adm.tab.products")}</h2><RangePicker value={preset} onChange={setPreset} /></div>
-      {!history && <div className="adm-demo-banner" dangerouslySetInnerHTML={{ __html: t("adm.prod.noHistory") }} />}
-      <div className="adm-kpis">
-        <KpiCard label={t("adm.prod.frames")} value={int(products.length)} icon={<Icon name="glasses" />} />
-        <KpiCard label={t("adm.prod.cases")} value={int(cases.length)} icon={<Icon name="box" />} />
-        <KpiCard label={t("adm.prod.added")} value={int(added.length)} icon={<Icon name="sparkles" />} deltaGood />
-        <KpiCard label={t("adm.prod.removed")} value={int(removed.length)} icon={<Icon name="alert" />} />
-      </div>
-      <div className="adm-grid-2">
-        <div className="adm-card">
-          <h3>{t("adm.prod.newTitle")}</h3>
-          <ProdList list={added} empty={t("adm.prod.noAdded")} />
-        </div>
-        <div className="adm-card">
-          <h3>{t("adm.prod.goneTitle")}</h3>
-          <ProdList list={removed} empty={t("adm.prod.noRemoved")} />
-        </div>
-      </div>
-      <div className="adm-card">
-        <h3>{t("adm.prod.byBrand")}</h3>
-        <ThumbBars
-          data={brandRows.map(([slug, value]) => ({ label: (BRAND_BY_SLUG[slug]?.name) || slug, value }))}
-          imgByName={Object.fromEntries(brandRows.map(([slug]) => { const b = BRAND_BY_SLUG[slug]; return [b?.name || slug, b?.logo]; }))}
-        />
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Prices ---------------- */
-// [storageKey, dictionaryKey, basePrice]. The middle entry is a key, not a
-// name: these rows are read by the shop owner, who may be working in English.
-const MATERIALS = [
-  ["1.50", "adm.mat.150", 0], ["1.59", "adm.mat.159", 20], ["1.61", "adm.mat.161", 35],
-  ["1.67", "adm.mat.167", 60], ["1.74", "adm.mat.174", 95],
-];
-const TREATMENTS = [
-  ["ar", "adm.trt.ar", 8], ["blue", "adm.trt.blue", 20], ["photo", "adm.trt.photo", 45], ["tint", "adm.trt.tint", 15],
-];
-const USAGE = [
-  ["sv-dist", "adm.use.svDist", 6.95], ["sv-read", "adm.use.svRead", 6.95],
-  ["progressive", "adm.use.progressive", 49], ["frame-only", "adm.use.frameOnly", 0],
-];
-
-function PriceInput({ value, placeholder, onCommit }) {
-  const [v, setV] = useState(value ?? "");
-  useEffect(() => { setV(value ?? ""); }, [value]);
-  return (
-    <input className="adm-price-input" type="number" step="0.01" min="0" value={v} placeholder={placeholder}
-      onChange={(e) => setV(e.target.value)} onBlur={() => onCommit(v)}
-      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
-  );
-}
-
-function TxtInput({ value, placeholder, onCommit, wide }) {
-  const [v, setV] = useState(value ?? "");
-  useEffect(() => { setV(value ?? ""); }, [value]);
-  return (
-    <input className={`adm-txt ${wide ? "wide" : ""}`} value={v} placeholder={placeholder}
-      onChange={(e) => setV(e.target.value)} onBlur={() => onCommit(v)}
-      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
-  );
-}
-
-function ShippingConfig({ ov }) {
-  const { t } = useLang();
-  const sh = ov.shipping; const pk = sh.pickup || {}; const og = sh.origin || {};
-  const zones = sh.zones || []; const carriers = sh.carriers || ["FedEx", "UPS", "USPS", "DHL", "Consignataria"];
-  return (
-    <div className="adm-card">
-      <h3>{t("adm.ship.title")}</h3>
-      <div className="adm-grid-2">
-        <div className="ship-block">
-          <div className="ship-h"><Icon name="store" size={16} /> {t("adm.ship.pickup")}
-            <label className="ship-toggle"><input type="checkbox" checked={!!pk.enabled} onChange={(e) => PS.setPickup({ enabled: e.target.checked })} /> {t("adm.ship.active")}</label>
-          </div>
-          <div className="ship-fields">
-            <label>{t("adm.ship.name")}<TxtInput value={pk.name} onCommit={(v) => PS.setPickup({ name: v })} wide /></label>
-            <label>{t("adm.ship.address")}<TxtInput value={pk.address} onCommit={(v) => PS.setPickup({ address: v })} wide /></label>
-            <label>{t("adm.ship.city")}<TxtInput value={pk.city} onCommit={(v) => PS.setPickup({ city: v })} wide /></label>
-            <label>{t("adm.ship.hours")}<TxtInput value={pk.hours} onCommit={(v) => PS.setPickup({ hours: v })} wide /></label>
-            <label>{t("adm.ship.mapUrl")}<TxtInput value={pk.mapsUrl} onCommit={(v) => PS.setPickup({ mapsUrl: v })} wide /></label>
-            {/* Vive en shipping (no en pickup): el mismo plazo aplica a lo que se
-                envía, porque el laboratorio tarda igual. */}
-            <label>{t("adm.ship.labDays")}<PriceInput value={sh.labDays} placeholder="10" onCommit={(v) => PS.setShipping({ labDays: Math.max(0, Math.round(Number(v) || 0)) })} /></label>
-          </div>
-          <p className="muted">{t("adm.ship.labDaysHint")}</p>
-        </div>
-        <div className="ship-block">
-          <div className="ship-h"><Icon name="box" size={16} /> {t("adm.ship.origin")}</div>
-          <div className="ship-fields">
-            <label>{t("adm.ship.name")}<TxtInput value={og.name} onCommit={(v) => PS.setOrigin({ name: v })} wide /></label>
-            <label>{t("adm.ship.address")}<TxtInput value={og.address} onCommit={(v) => PS.setOrigin({ address: v })} wide /></label>
-            <label>{t("adm.ship.city")}<TxtInput value={og.city} onCommit={(v) => PS.setOrigin({ city: v })} wide /></label>
-          </div>
-          <div className="ship-h" style={{ marginTop: 12 }}><Icon name="dollar" size={16} /> {t("adm.ship.baseCost")}</div>
-          <div className="ship-fields r3">
-            <label>{t("adm.ship.standard")}<PriceInput value={sh.standard} placeholder="4.95" onCommit={(v) => PS.setShipping({ standard: Number(v) || 0 })} /></label>
-            <label>{t("adm.ship.express")}<PriceInput value={sh.express} placeholder="12.95" onCommit={(v) => PS.setShipping({ express: Number(v) || 0 })} /></label>
-            <label>{t("adm.ship.freeFrom")}<PriceInput value={sh.freeThreshold} placeholder="59" onCommit={(v) => PS.setShipping({ freeThreshold: Number(v) || 0 })} /></label>
-          </div>
-        </div>
-      </div>
-      <div className="ship-h" style={{ marginTop: 14 }}><Icon name="globe" size={16} /> {t("adm.ship.zones")}
-        <button className="btn-sm" onClick={PS.addZone}><Icon name="plus" size={14} />{t("adm.ship.addZone")}</button></div>
-      <div className="adm-table-wrap">
-        <table className="adm-table zones">
-          <thead><tr><th>{t("adm.ship.destination")}</th><th>{t("adm.ship.carrier")}</th><th>{t("adm.ship.cost")}</th><th>{t("adm.ship.days")}</th><th></th></tr></thead>
-          <tbody>
-            {zones.map((z) => (
-              <tr key={z.id}>
-                <td><TxtInput value={z.name} onCommit={(v) => PS.updateZone(z.id, { name: v })} wide /></td>
-                <td><select className="adm-sel" value={z.carrier} onChange={(e) => PS.updateZone(z.id, { carrier: e.target.value })}>
-                  {[...new Set([z.carrier, ...carriers])].filter(Boolean).map((c) => <option key={c} value={c}>{c}</option>)}</select></td>
-                <td><PriceInput value={z.cost} onCommit={(v) => PS.updateZone(z.id, { cost: Number(v) || 0 })} /></td>
-                <td className="eta"><PriceInput value={z.etaMin} onCommit={(v) => PS.updateZone(z.id, { etaMin: Number(v) || 0 })} /><span>–</span><PriceInput value={z.etaMax} onCommit={(v) => PS.updateZone(z.id, { etaMax: Number(v) || 0 })} /></td>
-                <td><button className="btn-sm danger" title={t("adm.ship.removeZone")} onClick={() => PS.removeZone(z.id)}><Icon name="trash" size={13} /></button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="muted">{t("adm.ship.note")}</p>
-    </div>
-  );
-}
-
-// Categories (columns) for the fotocromáticos / transitions table.
-const LENS_PHOTO_CATS = ["sv", "bifocal", "prog"];
-
-// "Lista de precios 2026 · Lentes": base matrix + fotocromáticos + antirreflejos.
-function LensPriceList() {
-  const { t, lang } = useLang();
-  const [, force] = useState(0);
-  useEffect(() => PS.subscribe(() => force((n) => n + 1)), []);
-  return (
-    <div className="adm-card lens-pl">
-      <h3>{t("adm.lens.title")}</h3>
-
-      <div className="lens-sub">
-        <h4>{t("adm.lens.base")}</h4>
-        <div className="adm-table-wrap">
-          <table className="adm-table lens-tbl">
-            <thead>
-              <tr>
-                <th>{t("adm.lens.design")}</th>
-                {LENS_MATERIALS.map((m) => <th key={m.id} className="r">{L(m.label, lang)}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {DESIGNS.map((d) => (
-                <tr key={d.id}>
-                  <td><b>{L(d.label, lang)}</b></td>
-                  {LENS_MATERIALS.map((m) => {
-                    const base = BASE[d.id][m.id];
-                    return (
-                      <td key={m.id} className="r">
-                        <PriceInput value={PS.lensBasePrice(d.id, m.id, base)} placeholder={String(base)} onCommit={(v) => PS.setLensBase(d.id, m.id, v)} />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="lens-sub">
-        <h4>{t("adm.lens.photo")}</h4>
-        <div className="adm-table-wrap">
-          <table className="adm-table lens-tbl">
-            <thead>
-              <tr>
-                <th>{t("adm.lens.type")}</th>
-                {LENS_PHOTO_CATS.map((k) => <th key={k} className="r">{t(`adm.lens.cat.${k}`)}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {PHOTO.map((p) => (
-                <tr key={p.id}>
-                  <td><b>{L(p.label, lang)}</b></td>
-                  {LENS_PHOTO_CATS.map((cat) => {
-                    const base = p.price[cat];
-                    return (
-                      <td key={cat} className="r">
-                        {base === null
-                          ? <span className="muted">—</span>
-                          : <PriceInput value={PS.lensPhotoPrice(p.id, cat, base)} placeholder={String(base)} onCommit={(v) => PS.setLensPhoto(p.id, cat, v)} />}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="lens-sub">
-        <h4>{t("adm.lens.ar")}</h4>
-        <div className="adm-grid-2">
-          <div className="lens-ar-group">
-            <div className="lens-ar-h">{t("adm.lens.arSv")}</div>
-            {AR.sv.map((a) => (
-              <div className="adm-price-row" key={a.id}>
-                <span>{L(a.label, lang)}</span>
-                <PriceInput value={PS.lensARPrice(a.id, a.price)} placeholder={String(a.price)} onCommit={(v) => PS.setLensAR(a.id, v)} />
-              </div>
-            ))}
-          </div>
-          <div className="lens-ar-group">
-            <div className="lens-ar-h">{t("adm.lens.arBifProg")}</div>
-            {AR.bifprog.map((a) => (
-              <div className="adm-price-row" key={a.id}>
-                <span>{L(a.label, lang)}</span>
-                <PriceInput value={PS.lensARPrice(a.id, a.price)} placeholder={String(a.price)} onCommit={(v) => PS.setLensAR(a.id, v)} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Prices({ preQ }) {
-  const { t } = useLang();
-  const { toast, confirm } = useFeedback();
-  const { products, cases } = useCatalog();
-  const [ov, setOv] = useState(PS.getOverrides());
-  useEffect(() => PS.subscribe(() => setOv(PS.getOverrides())), []);
-  const [q, setQ] = useState("");
-  useEffect(() => { if (preQ != null) setQ(preQ); }, [preQ]);
-  const fileRef = useRef(null);
-
-  const frames = useMemo(() => products.filter((p) => `${p.name} ${p.brand}`.toLowerCase().includes(q.toLowerCase())).slice(0, 200), [products, q]);
-  // Units sold per product: REAL orders when the login is real (newest scan
-  // window of the whole history); demo localStorage otherwise or on error.
-  const [sales, setSales] = useState(() => productSales());
-  useEffect(() => {
-    if (isDemoLogin()) return undefined;
-    let on = true;
-    fetchBoardWindow(rangeFor("all"))
-      .then((w) => {
-        if (!on) return;
-        const real = (w.orders || []).filter((o) => !o.terminal).map((o) => toAnalyticsOrder(o, null));
-        setSales(productSalesFrom(real));
-      })
-      .catch(() => { /* keep demo fallback */ });
-    return () => { on = false; };
-  }, []);
-
-  // shared product price row: photo + name + (hover) units bought this month + never-sold tag
-  const ProdRow = ({ p, value, onCommit }) => {
-    const key = normKey(p.sku);
-    const m = sales.month[key] || 0, ev = sales.ever[key] || 0;
-    const img = p.colors?.[0]?.image;
-    return (
-      <div className={`adm-price-row prod ${ev === 0 ? "never" : ""}`}>
-        <div className="adm-pp-left">
-          <div className="adm-tb-thumb sm">{img ? <img src={img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
-          <span className="adm-pp-name">{p.name} <small className="muted">{p.brand ? p.brand + " · " : ""}{p.supplierPrice ? `${t("adm.prices.supplier")} ${money(p.supplierPrice)} × ${p.markup || 3} = ` : ""}{t("adm.prices.base")} {money(p.basePrice ?? p.price)}</small></span>
-        </div>
-        <div className="adm-pp-right">
-          {ev === 0
-            ? <span className="pp-tag never" title={t("adm.prices.neverSoldTitle")}>{t("adm.prices.neverSold")}</span>
-            : <span className="pp-tag sold"><Icon name="orders" size={12} /> {m} <em>{t("adm.prices.thisMonth")}</em></span>}
-          <PriceInput value={value} placeholder={String(p.basePrice ?? p.price)} onCommit={onCommit} />
-        </div>
-      </div>
-    );
-  };
-
-  const doImport = (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      try {
-        PS.importJSON(rd.result);
-        toast({ tone: "success", title: t("adm.importOk"), message: t("adm.importOkBody") });
-      } catch {
-        toast({ tone: "error", title: t("adm.importInvalid"), message: t("adm.importInvalidBody") });
-      }
-    };
-    rd.onerror = () => toast({ tone: "error", title: t("adm.importInvalid"), message: t("adm.importInvalidBody") });
-    rd.readAsText(f);
-    e.target.value = ""; // allow re-picking the same file after a failed import
-  };
-
-  const doReset = async () => {
-    const ok = await confirm({
-      tone: "danger",
-      title: t("adm.resetTitle"),
-      message: t("adm.resetBody"),
-      confirmLabel: t("adm.resetConfirm"),
-    });
-    if (!ok) return;
-    PS.resetAll();
-    toast({ tone: "success", title: t("adm.resetDone"), message: t("adm.resetDoneBody") });
-  };
-
-  return (
-    <div className="adm-section">
-      <div className="adm-head-row">
-        <h2>{t("adm.prices.title")}</h2>
-        <div className="adm-actions">
-          <button className="btn-sm" onClick={PS.exportJSON}><Icon name="download" size={14} />{t("adm.prices.export")}</button>
-          <button className="btn-sm" onClick={() => fileRef.current?.click()}><Icon name="upload" size={14} />{t("adm.prices.import")}</button>
-          <input ref={fileRef} type="file" accept="application/json" hidden onChange={doImport} />
-          <button className="btn-sm danger" onClick={doReset}><Icon name="rotate" size={14} />{t("adm.prices.reset")}</button>
-        </div>
-      </div>
-      <p className="muted">{t("adm.prices.hint")}</p>
-      <div className="adm-demo-banner" style={{ background: "#e8f4fd", color: "#0b2f66", border: "1px solid #b3d4f0" }}>
-        <Icon name="info" size={14} /> {t("adm.prices.markupRule")}
-      </div>
-
-      <div className="adm-grid-2">
-        <div className="adm-card">
-          <h3>{t("adm.prices.materials")}</h3>
-          {MATERIALS.map(([k, label, base]) => (
-            <div className="adm-price-row" key={k}><span>{t(label)} <small className="muted">{t("adm.prices.base")} ${base}</small></span>
-              <PriceInput value={ov.materials[k]} placeholder={String(base)} onCommit={(v) => PS.setMaterialPrice(k, v)} /></div>
-          ))}
-          <h3 style={{ marginTop: 14 }}>{t("adm.prices.treatments")}</h3>
-          {TREATMENTS.map(([k, label, base]) => (
-            <div className="adm-price-row" key={k}><span>{t(label)} <small className="muted">{t("adm.prices.base")} ${base}</small></span>
-              <PriceInput value={ov.treatments[k]} placeholder={String(base)} onCommit={(v) => PS.setTreatmentPrice(k, v)} /></div>
-          ))}
-        </div>
-        <div className="adm-card">
-          <h3>{t("adm.prices.usage")}</h3>
-          {USAGE.map(([k, label, base]) => (
-            <div className="adm-price-row" key={k}><span>{t(label)} <small className="muted">{t("adm.prices.base")} ${base}</small></span>
-              <PriceInput value={ov.usage[k]} placeholder={String(base)} onCommit={(v) => PS.setUsagePrice(k, v)} /></div>
-          ))}
-        </div>
-      </div>
-
-      <ShippingConfig ov={ov} />
-
-      <div className="adm-card">
-        <h3>{t("adm.prices.cases")}</h3>
-        <div className="adm-price-grid">
-          {cases.map((c) => (
-            <ProdRow key={c.slug} p={c} value={ov.cases[c.sku]} onCommit={(v) => PS.setCasePrice(c.sku, v)} />
-          ))}
-        </div>
-      </div>
-
-      <div className="adm-card">
-        <div className="adm-head-row"><h3>{t("adm.prices.frames", { n: int(products.length) })}</h3>
-          <input className="adm-search" placeholder={t("adm.prices.searchModel")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        {Object.entries(frames.reduce((m, p) => { (m[p.brand] = m[p.brand] || []).push(p); return m; }, {}))
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([brand, list]) => (
-            <div className="adm-brand-group" key={brand}>
-              <div className="adm-brand-h">
-                {BRAND_LOGO_BY_NAME[brand] && <img src={BRAND_LOGO_BY_NAME[brand]} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
-                <span>{brand}</span><small className="muted">({list.length})</small>
-              </div>
-              <div className="adm-price-grid">
-                {list.map((p) => <ProdRow key={p.slug} p={p} value={ov.frames[p.sku]} onCommit={(v) => PS.setFramePrice(p.sku, v)} />)}
-              </div>
-            </div>
-          ))}
-        {products.length > 200 && <p className="muted">{t("adm.prices.capped")}</p>}
-      </div>
-
-      <LensPriceList />
-    </div>
-  );
-}
-
-/* ───────────────────────────  Pedidos (Medusa)  ───────────────────────────
- * Real orders from the Admin API. Every filter, stage and transition shown here
- * comes from the server: `stage` is what the customer's tracking page shows, and
- * `next_stages` is what the API will actually accept — the panel never decides
- * for itself which move is legal, so a button that exists always works.
- *
- * Paridad con la hoja de Google: lo que el dueño puede tocar allí (Estado y
- * Guía) se puede tocar aquí, y además la nota interna y la ficha de costo; cada
- * cambio se replica a la hoja en el acto, y lo que se edite en la hoja llega
- * aquí en ≤1 min (job gsheet-watch).
- */
+// US business: "$1,234.50" in both languages (never "$1.234,50").
+const money = (n) => "$" + (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const int = (n) => (Number(n) || 0).toLocaleString("en-US");
 
 const PAGE_SIZE = 20;
 
@@ -952,9 +404,13 @@ function deepLinkedOrder() {
   return (new URLSearchParams(window.location.search).get("order") || "").trim();
 }
 
-export function Orders({ onGoCosts, sellers = [], params = {} }) {
+export function Orders({ onGoCosts, sellers = [], params = {}, me = null }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
+  // La tienda elegida en la barra (una tienda, la tienda online o todas) filtra la lista en el servidor.
+  const sf = useStoreFilter(me);
+  const store = sf.isAll ? "" : sf.storeId;
+  const storeById = new Map(sf.stores.map((x) => [x.id, x]));
   // Llega desde la hoja (`?order=`) o desde otra pantalla del panel (`go("orders", {...})`).
   const [linked] = useState(() => params.order || deepLinkedOrder());
   const initialPreset = params.preset || (linked ? "all" : "30d");
@@ -977,12 +433,12 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => { const id = setTimeout(() => setDebounced(query.trim()), 300); return () => clearTimeout(id); }, [query]);
-  useEffect(() => { setPage(0); }, [debounced, from, to, stage, terminal, rx, seller]);
+  useEffect(() => { setPage(0); }, [debounced, from, to, stage, terminal, rx, seller, store]);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchOrders({ q: debounced, from, to, stage, terminal, hasPrescription: rx, seller, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
+    fetchOrders({ q: debounced, from, to, stage, terminal, hasPrescription: rx, seller, store, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
       .then((result) => {
         if (!alive) return;
         setData(result); setError("");
@@ -998,7 +454,7 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
       })
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [debounced, from, to, stage, terminal, rx, seller, page, reloadKey]);
+  }, [debounced, from, to, stage, terminal, rx, seller, store, page, reloadKey]);
 
   function applyPreset(key) { setPreset(key); setFrom(presetFrom(key)); setTo(""); }
 
@@ -1006,6 +462,13 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
   const count = data?.count ?? 0;
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const hasFilters = stage || terminal || rx || seller || debounced || preset === "custom";
+  // De dónde viene cada pedido: la tienda online (con el nombre de su web si lo tiene) o la tienda que lo vendió.
+  const originText = (o) => {
+    // Con la web llevada como una tienda del panel, su código delante (Op4 · la web de donde vino).
+    if (o.channel !== "pos") return [webStoreLabel(sf.stores, t, { short: true }), o.storefront?.name || o.storefront?.host].filter(Boolean).join(" · ");
+    const st = storeById.get(o.establishment_id);
+    return st ? [st.code, st.name].filter(Boolean).join(" · ") : "—";
+  };
 
   async function move(order, target, opts) {
     setBusyId(order.id);
@@ -1025,7 +488,7 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
   const exportCsv = () => {
     const stageText = (o) => o.terminal && o.terminal !== "payment_pending" ? t(TERMINAL_BY_KEY[o.terminal].label) : t(STAGE_BY_KEY[o.stage]?.label || o.stage);
     const csv = ordersToCsv(orders, [
-      [t("adm.col.order"), (o) => orderLabel(o)], [t("adm.col.date"), (o) => shortDate(o.created_at, lang)],
+      [t("adm.col.order"), (o) => orderLabel(o)], [t("adm.ord.colOrigin"), originText], [t("adm.col.date"), (o) => shortDate(o.created_at, lang)],
       [t("adm.ord.colCustomer"), (o) => o.customer.name || ""], [t("adm.login.email"), (o) => o.customer.email || ""], [t("adm.sel.phone"), (o) => o.customer.phone || ""],
       [t("adm.ord.colDelivery"), (o) => o.shipping_address?.city || t("adm.ord.pickup")], [t("adm.col.total"), (o) => Number(o.total || 0).toFixed(2)],
       [t("adm.ord.colStage"), stageText], [t("adm.ord.tracking"), (o) => o.tracking_number || ""], [t("adm.ord.seller"), (o) => o.seller_code || ""],
@@ -1095,17 +558,17 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
           <table className="adm-table orders responsive">
             <thead>
               <tr>
-                <th>{t("adm.col.order")}</th><th>{t("adm.col.date")}</th><th>{t("adm.ord.colCustomer")}</th><th>{t("adm.ord.colDelivery")}</th>
+                <th>{t("adm.col.order")}</th><th>{t("adm.ord.colOrigin")}</th><th>{t("adm.col.date")}</th><th>{t("adm.ord.colCustomer")}</th><th>{t("adm.ord.colDelivery")}</th>
                 <th className="r">{t("adm.col.total")}</th><th>{t("adm.ord.colStage")}</th><th>{t("adm.ord.colAdvance")}</th>
               </tr>
             </thead>
             <tbody>
               {loading && !orders.length ? (
-                <tr><td colSpan="7" className="full"><div className="adm-skel-rows"><div className="adm-skel" /><div className="adm-skel" /><div className="adm-skel" /></div></td></tr>
+                <tr><td colSpan="8" className="full"><div className="adm-skel-rows"><div className="adm-skel" /><div className="adm-skel" /><div className="adm-skel" /></div></td></tr>
               ) : error && !orders.length ? (
-                <tr><td colSpan="7" className="muted full">{t("adm.ord.loadFailed")}</td></tr>
+                <tr><td colSpan="8" className="muted full">{t("adm.ord.loadFailed")}</td></tr>
               ) : !orders.length ? (
-                <tr><td colSpan="7" className="full"><div className="adm-empty"><Icon name="orders" size={36} /><b>{hasFilters ? t("adm.ord.noResults") : t("adm.ord.noneInRange")}</b><p>{t("adm.ord.emptyHint")}</p></div></td></tr>
+                <tr><td colSpan="8" className="full"><div className="adm-empty"><Icon name="orders" size={36} /><b>{hasFilters ? t("adm.ord.noResults") : t("adm.ord.noneInRange")}</b><p>{t("adm.ord.emptyHint")}</p></div></td></tr>
               ) : orders.map((o) => {
                 const open = openId === o.id;
                 return [
@@ -1116,6 +579,13 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
                       {o.has_tryon && <span className="ord-tryon" title={t("adm.ord.tryonTitle")}><Icon name="camera" size={13} /></span>}
                       {o.owner_note && <span className="ord-tryon" title={o.owner_note}><Icon name="clipboard" size={13} /></span>}
                     </td>
+                    <td data-label={t("adm.ord.colOrigin")}>
+                      {o.channel !== "pos" ? (
+                        <span className="ord-origin web" title={originText(o)}><Icon name="globe" size={13} /><b>{t("adm.ord.originWeb")}</b>{(o.storefront?.name || o.storefront?.host) && <small>{o.storefront.name || o.storefront.host}</small>}</span>
+                      ) : (
+                        <span className="ord-origin" title={originText(o)}><i className="dot" style={{ background: storeById.get(o.establishment_id)?.color || "var(--adm-line)" }} /><b>{storeById.get(o.establishment_id)?.code || "—"}</b>{storeById.get(o.establishment_id)?.name && <small>{storeById.get(o.establishment_id).name}</small>}</span>
+                      )}
+                    </td>
                     <td data-label={t("adm.col.date")}>{shortDate(o.created_at, lang)}</td>
                     <td data-label={t("adm.ord.colCustomer")}><span title={o.customer.email || ""}>{o.customer.name || o.customer.email || "—"}</span>{o.seller_code && <span className="adm-chip gold" style={{ marginLeft: 6, fontSize: 10.5 }}>{o.seller_code}</span>}</td>
                     <td data-label={t("adm.ord.colDelivery")}>{o.shipping_address?.city ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="truck" size={13} />{o.shipping_address.city}</span> : <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="store" size={13} />{t("adm.ord.pickup")}</span>}</td>
@@ -1125,7 +595,7 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
                   </tr>,
                   open && (
                     <tr key={o.id + "-d"} className="ord-detail">
-                      <td colSpan="7" className="full"><OrderDetail order={o} onPatched={patch} onGoCosts={onGoCosts} onMove={(target, opts) => move(o, target, opts)} /></td>
+                      <td colSpan="8" className="full"><OrderDetail order={o} onPatched={patch} onGoCosts={onGoCosts} onMove={(target, opts) => move(o, target, opts)} /></td>
                     </tr>
                   ),
                 ];
@@ -1155,20 +625,25 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
  * Las pestañas antiguas (overview/sales/prices) siguen funcionando: ahora viven
  * dentro de Ejecutivo y de Costos y precios.
  */
-const LEGACY_TABS = { overview: ["exec", { sub: "overview" }], sales: ["exec", { sub: "detail" }], prices: ["costs", { sub: "prices" }] };
+// `pricing` («Precios y costos») vive desde el 6-nov-2026 dentro de «Productos y
+// precios» (`products`): sus `sub` antiguos los traduce PricingPanel.
+const LEGACY_TABS = { overview: ["exec", { sub: "overview" }], sales: ["exec", { sub: "detail" }], prices: ["costs", { sub: "prices" }], pricing: ["products", {}] };
 function navFromUrl(tabs) {
   const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const want = q.get("tab") || "";
-  if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1] }, n: 0 };
   const params = {};
-  for (const k of ["sub", "order", "stage", "seller", "q", "approval"]) if (q.get(k)) params[k] = q.get(k);
+  for (const k of ["sub", "order", "stage", "seller", "q", "approval", "number", "patient"]) if (q.get(k)) params[k] = q.get(k);
+  // A legacy tab keeps the deep link's own `sub`/`q` (?tab=pricing&sub=lenses) over its default.
+  if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1], ...params }, n: 0 };
   // El panel abre en el Ejecutivo para quien lo tiene; el resto, en su caja.
   return { tab: tabs.includes(want) ? want : tabs.includes("exec") ? "exec" : tabs[0], params, n: 0 };
 }
 
-export default function AdminDashboard({ user, onLogout, me = null, features = null }) {
+export default function AdminDashboard({ user, onLogout, me = null }) {
+  // Tras el primer pintado, las pestañas de trabajo del rol bajan en segundo plano.
+  useEffect(() => { prefetchTabs(me); }, [me?.role, me?.is_admin]); // eslint-disable-line react-hooks/exhaustive-deps
   const { t } = useLang();
-  const groups = navGroupsFor(me, features);
+  const groups = navGroupsFor(me);
   const tabs = tabsOf(groups);
   const restricted = me?.is_admin === false;
   // `nav.n` cambia en cada salto para que la pantalla destino se monte con los
@@ -1178,11 +653,50 @@ export default function AdminDashboard({ user, onLogout, me = null, features = n
   const [find, setFind] = useState("");
   const [sellers, setSellers] = useState([]);
   const demo = isDemoLogin();
+  const [showBriefing, setShowBriefing] = useState(() => !demo && me && !briefingShown());
   useEffect(() => { if (demo) ensureSeed(); }, [demo]);
   const loadSellers = () => { if (demo || restricted) return; fetchSellers().then((r) => setSellers(r?.sellers ?? [])).catch(() => {}); };
   useEffect(loadSellers, [demo]);
+  // Insignia de «Consumo IA»: proveedores con saldo bajo, agotado o rechazando
+  // llamadas. Se relee cada 10 min y al entrar o salir de la pestaña.
+  const [aiAttention, setAiAttention] = useState(0);
+  const canSeeAi = !demo && tabs.includes("aiusage");
+  useEffect(() => {
+    if (!canSeeAi) return undefined;
+    let alive = true;
+    // A 404 means the backend does not have the AI-usage module yet (older
+    // deploy): stop asking instead of logging a failed request every 10 min.
+    const id = setInterval(() => read(), 600000);
+    const read = () => fetchAiStatus()
+      .then((r) => { if (alive) setAiAttention(Number(r?.attention) || 0); })
+      .catch((e) => { if (e?.status === 404) clearInterval(id); });
+    read();
+    return () => { alive = false; clearInterval(id); };
+  }, [canSeeAi, nav.tab]);
+  // «Configuración de la óptica»: insignia con los pasos pendientes mientras el
+  // dueño no dé la puesta en marcha por terminada. Un dueño recién activado sin
+  // ?tab= en la URL entra directamente ahí.
+  const [setupPending, setSetupPending] = useState(0);
+  const canSeeSetup = !demo && tabs.includes("setup");
+  const onSetup = (s) => setSetupPending(s && !s.completed_at ? Number(s.pending) || 0 : 0);
+  useEffect(() => {
+    if (!canSeeSetup) return undefined;
+    let alive = true;
+    fetchSetup()
+      .then((s) => {
+        if (!alive) return;
+        onSetup(s);
+        const asked = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("tab");
+        if (s && !s.completed_at && !asked && me?.is_super) setNav((n) => ({ tab: "setup", params: {}, n: n.n + 1 }));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [canSeeSetup]); // eslint-disable-line react-hooks/exhaustive-deps
+  const badges = { ...(aiAttention ? { aiusage: aiAttention } : {}), ...(setupPending ? { setup: setupPending } : {}) };
 
   /** Salto a cualquier pantalla con parámetros: la base de "todo es clicable". */
+  // Ficha de una venta delante de cualquier pantalla (Mi panel, Cobros pendientes…).
+  const salePanel = useSalePanel({ me });
   const go = (tab, params = {}) => {
     const wanted = LEGACY_TABS[tab] ? LEGACY_TABS[tab][0] : tab;
     const target = tabs.includes(wanted) ? wanted : tabs[0];
@@ -1203,39 +717,51 @@ export default function AdminDashboard({ user, onLogout, me = null, features = n
   const onSub = (sub) => setNav((n) => ({ ...n, params: { ...n.params, sub } }));
 
   return (
-    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups}>
+    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} goTo={go} find={restricted ? null : find} onFind={onFind} groups={groups} me={me} badges={Object.keys(badges).length ? badges : undefined}>
+      {showBriefing && <WelcomeBriefing me={me} go={go} onDone={() => setShowBriefing(false)} />}
+      <Suspense fallback={<TabFallback />}>
       {tab === "exec" && (
-        <ExecutiveHub preset={preset} setPreset={setPreset} go={go} sub={nav.params.sub} onSub={onSub}
-          views={{ overview: <Overview preset={preset} setPreset={setPreset} go={go} />, sales: <Sales preset={preset} setPreset={setPreset} go={go} /> }} />
+        <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
       )}
-      {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} />}
-      {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} pricesView={<Prices preQ={find || nav.params.q || ""} />} />}
-      {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} />}
-      {tab === "products" && (
-        <>
-          <div className="adm-section adm-section-top"><CatalogManager /></div>
-          <Products preset={preset} setPreset={setPreset} />
-        </>
-      )}
-      {tab === "stores" && <Stores />}
+      {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} me={me} />}
+      {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} />}
+      {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} me={me} params={nav.params} />}
+      {/* «Productos y precios»: Productos + Precios y costos en una pantalla
+          (matriz por marca con costo y, por tienda, precio y descuento). `me`
+          hace falta: sin él useStoreFilter no ve las tiendas. */}
+      {tab === "products" && <PricingPanel key={`products-${nav.n}`} me={me} sellers={sellers} go={go} params={nav.params} onSub={onSub} />}
+      {tab === "catalogsync" && <CatalogSync />}
+      {tab === "stores" && <Stores go={go} />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
-      {tab === "audit" && <AuditLog />}
+      {tab === "setup" && <Setup go={go} onChanged={onSetup} />}
+      {tab === "audit" && <AuditLog me={me} />}
       {tab === "pos" && <PosSale me={me} />}
-      {tab === "possales" && <PosSales />}
-      {tab === "approvals" && <PosApprovals params={nav.params} />}
+      {tab === "possales" && <PosSales me={me} params={nav.params} />}
+      {tab === "approvals" && <PosApprovals params={nav.params} me={me} />}
       {tab === "posconfig" && <PosConfig />}
-      {tab === "alerts" && <AlertRules />}
-      {tab === "salesboard" && <SalesBoard />}
-      {tab === "mysales" && <MySales go={go} />}
-      {tab === "cash" && <PosCash />}
-      {tab === "storecosts" && <StoreCosts me={me} />}
+      {tab === "alerts" && <AlertRules me={me} />}
+      {tab === "aiusage" && <AiUsage />}
+      {tab === "oplog" && <OperationLog me={me} />}
+      {tab === "promotions" && <Promotions />}
+      {tab === "salesboard" && <SalesBoard go={go} tabs={tabs} me={me} />}
+      {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} me={me} />}
+      {tab === "mysales" && <MySales go={go} me={me} openSale={salePanel.open} />}
+      {tab === "pendingbalances" && <PendingBalances me={me} go={go} openSale={salePanel.open} />}
+      {salePanel.panel}
+      {tab === "cash" && <PosCash me={me} />}
+      {tab === "storecosts" && <StoreCosts me={me} go={go} />}
+      {tab === "finreport" && <FinanceReport me={me} />}
+      {tab === "statement" && <StoreStatement me={me} go={go} />}
+      {tab === "storeorders" && <StoreOrders me={me} go={go} params={nav.params} />}
+      {tab === "patients" && <Patients me={me} openSale={salePanel.open} params={nav.params} />}
       {tab === "profile" && (
         <div className="adm-section">
           <div className="adm-head-row"><h2>{t("adm.tab.profile")}</h2></div>
           <div className="adm-card"><StaffProfile mode="self" /></div>
         </div>
       )}
+      </Suspense>
       <p className="muted adm-foot">{t("adm.footer", { name: TENANT.name })}</p>
     </AdminShell>
   );

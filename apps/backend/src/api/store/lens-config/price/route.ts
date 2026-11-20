@@ -7,6 +7,7 @@ import {
   type ResolvedSelection,
 } from "../../../../lib/lens-compat";
 import { computeLensBreakdown, type LensSelection } from "../../../../lib/lens-quote";
+import { quoteWebLens, webPriceContext } from "../../../../lib/web-pricing";
 
 /**
  * POST /store/lens-config/price
@@ -120,7 +121,9 @@ export async function POST(
 
   let breakdown;
   try {
-    breakdown = await computeLensBreakdown(pgOf(req), selection);
+    // The online store's lenses when the owner has one (lib/web-pricing.ts); else the master's.
+    const web = await webPriceContext(req.scope);
+    breakdown = web ? await quoteWebLens(req.scope, web, selection) : await computeLensBreakdown(pgOf(req), selection);
   } catch (e) {
     // The only thrown case is an unknown/inactive design code from the matrix body.
     res.status(400).json({ error: (e as Error).message });

@@ -22,6 +22,9 @@ from services.vision_measure.config import (
     ProviderSpec,
     get_provider,
     resolve_api_key,
+    resolve_image_engine,
+    resolve_model,
+    resolve_provider_id,
 )
 from services.vision_measure.pricing import estimate_cost
 from services.vision_measure.prompts import build_prompt
@@ -335,8 +338,8 @@ def run_measurement(
     {"ok": False, "error": ...} so an A/B comparison where one side fails still shows
     the side that worked.
     """
-    spec: ProviderSpec = get_provider(provider_id)
-    chosen_model = (model or "").strip() or spec.default_model
+    spec: ProviderSpec = get_provider(resolve_provider_id(provider_id))
+    chosen_model = resolve_model(spec, model)
     strategy = (strategy or "A").strip().upper()
 
     request_id = request_id or new_request_id()
@@ -492,7 +495,7 @@ def run_comparison(
     prepared = None
     frame_sources = [g for g in (glasses_images or []) if (g or "").strip()] or [glasses_image]
     try:
-        spec = get_provider(provider_id)
+        spec = get_provider(resolve_provider_id(provider_id))
         edge, byte_cap = limits_for(spec.adapter)
         prepared = (
             prepare_image(face_image, "rostro", edge, byte_cap),
@@ -593,7 +596,7 @@ def run_try_on(
     model. Like `run_measurement`, a failure comes back inside the envelope: the numbers
     are the deliverable, and losing the picture must not lose them too.
     """
-    engine = (engine or "local").strip().lower()
+    engine = resolve_image_engine(engine)
 
     frame_sources = [g for g in (glasses_images or []) if (g or "").strip()] or [glasses_image]
     try:

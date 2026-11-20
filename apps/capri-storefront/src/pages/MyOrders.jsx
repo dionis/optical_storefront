@@ -585,7 +585,10 @@ export default function MyOrders() {
         setParams({}, { replace: true });
         await load();
       } catch (e) {
-        setErr(e.message || L("linkExpired"));
+        // El backend responde el 401 siempre en español; en la interfaz en
+        // inglés salía ese texto. La copia traducida (`orders.linkExpired`)
+        // dice lo mismo, así que manda sobre el mensaje del servidor.
+        setErr(e && e.status === 401 ? L("linkExpired") : (e && e.message) || L("linkExpired"));
         setParams({}, { replace: true });
         setLoading(false);
       }

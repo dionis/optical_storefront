@@ -7,11 +7,18 @@
  * database and no HTTP, same rule as the other suites.
  */
 import {
+  applyPosDelivery,
   availableTransitions,
+  boardAccessFor,
   filterBoardRows,
   liveFulfillments,
   isOrderStage,
   projectBoardOrder,
+  projectPayments,
+  promisedOnOf,
+  redactBoardMoney,
+  restrictBoardRows,
+  slimBoardOrder,
 } from "../src/lib/order-board";
 import { deriveOrderProgress } from "../src/lib/order-status";
 
@@ -248,5 +255,109 @@ describe("isOrderStage", () => {
     expect(isOrderStage("processing")).toBe(false);
     expect(isOrderStage("")).toBe(false);
     expect(isOrderStage(null)).toBe(false);
+  });
+});
+
+describe("projectBoardOrder — till sale, payments, slim view", () => {
+  it("carries the till sale behind a POS order and starts undelivered", () => {
+    const row = projectBoardOrder(order({ metadata: { source: "pos", establishment_id: "est_1", pos_sale_id: "sale_7", pos_sale_number: "R39-000127" } }) as never);
+    expect(row.channel).toBe("pos");
+    expect(row.pos_sale_id).toBe("sale_7");
+    expect(row.pos_sale_number).toBe("R39-000127");
+    expect(row.pos_delivered_at).toBeNull();
+    expect(row.payments).toEqual([]);
+  });
+
+  it("applyPosDelivery: a sale handed over at the till is delivered with no moves left", () => {
+    const a = projectBoardOrder(order({ id: "o_a", metadata: { source: "pos", pos_sale_id: "sale_a" } }) as never);
+    const b = projectBoardOrder(order({ id: "o_b", metadata: { source: "pos", pos_sale_id: "sale_b" } }) as never);
+    // A canceled sale keeps its terminal state even if the till says delivered.
+    const c = projectBoardOrder(order({ id: "o_c", payment_status: "canceled", metadata: { source: "pos", pos_sale_id: "sale_c" } }) as never);
+    applyPosDelivery([a, b, c], new Map([["sale_a", "2026-10-30T15:00:00.000Z"], ["sale_c", "2026-10-30T15:00:00.000Z"]]));
+    expect(a.stage).toBe("delivered");
+    expect(a.next_stages).toEqual([]);
+    expect(a.pos_delivered_at).toBe("2026-10-30T15:00:00.000Z");
+    expect(b.stage).toBe("in_lab");
+    expect(b.pos_delivered_at).toBeNull();
+    expect(c.terminal).toBe("canceled");
+    expect(c.stage).not.toBe("delivered");
+  });
+
+  it("projectPayments: one row per Medusa payment with captured and refunded sums", () => {
+    const rows = projectPayments({
+      payment_collections: [{ payments: [
+        { id: "pay_1", provider_id: "pp_stripe_stripe", amount: 270, currency_code: "usd", created_at: "2026-10-01T10:00:00Z", captured_at: "2026-10-01T10:01:00Z", captures: [{ amount: 200 }, { amount: 70 }], refunds: [{ amount: 20 }] },
+      ] }],
+    });
+    expect(rows).toEqual([expect.objectContaining({ id: "pay_1", amount: 270, captured: 270, refunded: 20, provider_id: "pp_stripe_stripe" })]);
+    expect(projectPayments({})).toEqual([]);
+  });
+
+  it("slimBoardOrder keeps the stage, the moves and the money and drops items, addresses and customer", () => {
+    const full = projectBoardOrder(order({
+      display_id: 42, total: 270, email: "ana@example.com",
+      shipping_address: { first_name: "Ana", city: "Miami", phone: "305" },
+      metadata: { seller_code: "dan", stage_history: [{ stage: "in_lab", at: "2026-10-02T10:00:00Z" }] },
+    }) as never);
+    const slim = slimBoardOrder(full) as Record<string, unknown>;
+    expect(slim).toEqual(expect.objectContaining({ id: "order_1", display_id: 42, total: 270, stage: "in_lab", next_stages: ["confirmed", "shipped"], seller_code: "DAN", channel: "web" }));
+    expect(slim.stage_history).toEqual([{ stage: "in_lab", at: "2026-10-02T10:00:00Z" }]);
+    expect(slim).not.toHaveProperty("items");
+    expect(slim).not.toHaveProperty("customer");
+    expect(slim).not.toHaveProperty("shipping_address");
+    expect(JSON.stringify(slim)).not.toContain("ana@example.com");
+  });
+});
+
+describe("order board by role — slim rows, own stores, no money", () => {
+  const pos = (id: string, est: string, total: number) =>
+    projectBoardOrder(order({ id, total, metadata: { source: "pos", establishment_id: est, promised_on: "2026-10-20" } }) as never);
+
+  it("boardAccessFor: admins read everything, supervisors and managers slim rows of their stores without money, sellers nothing", () => {
+    expect(boardAccessFor({ is_admin: true, role: "owner" }, null)).toEqual({ allowed: true, slim_only: false, money: true, stores: null });
+    expect(boardAccessFor({ is_admin: false, role: "manager" }, ["est_1"])).toEqual({ allowed: true, slim_only: true, money: false, stores: ["est_1"] });
+    expect(boardAccessFor({ is_admin: false, role: "supervisor" }, ["est_1", "est_2"])).toEqual({ allowed: true, slim_only: true, money: false, stores: ["est_1", "est_2"] });
+    // No store assigned keeps nothing, never everything.
+    expect(boardAccessFor({ is_admin: false, role: "manager" }, null)).toEqual({ allowed: true, slim_only: true, money: false, stores: [] });
+    expect(boardAccessFor({ is_admin: false, role: "seller" }, ["est_1"])).toEqual({ allowed: false, reason: "forbidden_role" });
+    expect(boardAccessFor({ is_admin: false, role: null }, ["est_1"])).toEqual({ allowed: false, reason: "forbidden_role" });
+  });
+
+  it("redactBoardMoney nulls the total (never 0) and leaves stage, moves and ids alone", () => {
+    const slim = slimBoardOrder(pos("order_1", "est_1", 270));
+    const [red] = redactBoardMoney([slim]);
+    expect(red.total).toBeNull();
+    expect(red).toEqual(expect.objectContaining({ id: "order_1", stage: slim.stage, next_stages: slim.next_stages, establishment_id: "est_1", promised_on: "2026-10-20" }));
+    expect(JSON.stringify(red)).not.toContain("270");
+  });
+
+  it("restrictBoardRows (a supervisor's or manager's row) nulls the total and lists no moves: the panel offers only what the server lists", () => {
+    const slim = slimBoardOrder(pos("order_1", "est_1", 270));
+    expect(slim.next_stages.length).toBeGreaterThan(0);
+    const [row] = restrictBoardRows([slim]);
+    expect(row.total).toBeNull();
+    expect(row.next_stages).toEqual([]);
+    expect(row).toEqual(expect.objectContaining({ id: "order_1", stage: slim.stage, stage_history: slim.stage_history, establishment_id: "est_1" }));
+    expect(JSON.stringify(row)).not.toContain("270");
+  });
+
+  it("filterBoardRows with `stores` keeps only till sales of those stores (a web order is not theirs)", () => {
+    const rows = [pos("order_1", "est_1", 1), pos("order_2", "est_2", 1), projectBoardOrder(order({ id: "order_3", total: 1 }) as never)];
+    expect(filterBoardRows(rows, { stores: ["est_1"] }).map((r) => r.id)).toEqual(["order_1"]);
+    expect(filterBoardRows(rows, { stores: [] })).toEqual([]);
+    // The query's `store` still narrows inside the scope, never widens it.
+    expect(filterBoardRows(rows, { stores: ["est_1"], store: "est_2" })).toEqual([]);
+    expect(filterBoardRows(rows, { stores: ["est_1"], store: "web" })).toEqual([]);
+    expect(filterBoardRows(rows, {}).map((r) => r.id)).toEqual(["order_1", "order_2", "order_3"]);
+  });
+
+  it("carries the promised date of a till sale on the full and the slim row, only when it is a real day", () => {
+    expect(pos("order_1", "est_1", 1).promised_on).toBe("2026-10-20");
+    expect(slimBoardOrder(pos("order_1", "est_1", 1)).promised_on).toBe("2026-10-20");
+    expect(projectBoardOrder(order() as never).promised_on).toBeNull();
+    expect(promisedOnOf("2026-10-20")).toBe("2026-10-20");
+    expect(promisedOnOf("2026-10-20T00:00:00Z")).toBeNull();
+    expect(promisedOnOf(20261020)).toBeNull();
+    expect(promisedOnOf(null)).toBeNull();
   });
 });

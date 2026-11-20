@@ -82,6 +82,7 @@ export async function fetchOrders({
   terminal = "",
   hasPrescription = "",
   seller = "",
+  store = "",
   limit = 20,
   offset = 0,
 } = {}) {
@@ -94,6 +95,8 @@ export async function fetchOrders({
       terminal,
       has_prescription: hasPrescription,
       seller,
+      // "" = todas; "web" = la tienda online; un id = las ventas de esa tienda.
+      store,
       limit,
       offset,
     },
@@ -189,7 +192,9 @@ export async function fetchPrescription(id) {
 export function money(amount, currency = "usd", lang = "es") {
   const value = Number(amount || 0);
   try {
-    return new Intl.NumberFormat(lang === "en" ? "en-US" : "es", {
+    // The business is in the US: in Spanish too the amount reads "$1,234.50", as on
+    // the paper forms and the receipts, never "1234,50 US$".
+    return new Intl.NumberFormat(lang === "en" ? "en-US" : "es-US", {
       style: "currency",
       currency: String(currency || "usd").toUpperCase(),
     }).format(value);

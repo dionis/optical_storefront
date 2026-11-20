@@ -1,7 +1,9 @@
+import type { StoreHours } from "./store-hours";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { createSalesChannelsWorkflow } from "@medusajs/medusa/core-flows";
 import { ESTABLISHMENT_MODULE } from "../modules/establishment";
 import type EstablishmentModuleService from "../modules/establishment/service";
+import { nextStoreColor, normalizeColor, STORE_COLORS } from "./store-color";
 
 /**
  * Stores (establecimientos): code assignment and creation.
@@ -36,28 +38,35 @@ export interface EstablishmentRow {
   address: string | null;
   phone: string | null;
   sales_channel_id: string | null;
+  color: string;
   kind: string;
   receipt_note: string | null;
+  /** Opening hours (lib/store-hours.ts); null = not set. */
+  hours: StoreHours | null;
   /** Share of the net sales the store keeps (family, partner, consignment); null = none set. */
   settlement_pct: number | null;
   is_active: boolean;
   created_at: string;
 }
 
-export const STORE_KINDS = ["own", "family", "partner", "consignment"] as const;
+export const STORE_KINDS = ["own", "family", "partner", "consignment", "online"] as const;
+/** The kind of THE online store (lib/online-store.ts). */
+export const ONLINE_KIND = "online";
 
 export async function listEstablishments(container: MedusaContainer): Promise<EstablishmentRow[]> {
   const svc = container.resolve<EstablishmentModuleService>(ESTABLISHMENT_MODULE);
   const rows = await svc.listEstablishments({}, { take: 500, order: { created_at: "ASC" } });
-  return rows.map((r) => ({
+  return rows.map((r, i) => ({
     id: r.id,
     code: r.code,
     name: r.name,
     address: r.address ?? null,
     phone: r.phone ?? null,
     sales_channel_id: r.sales_channel_id ?? null,
+    color: (r as { color?: string | null }).color ?? STORE_COLORS[i % STORE_COLORS.length],
     kind: String((r as { kind?: string }).kind ?? "own"),
     receipt_note: (r as { receipt_note?: string | null }).receipt_note ?? null,
+    hours: ((r as { hours?: StoreHours | null }).hours as StoreHours | null) ?? null,
     settlement_pct: (r as { settlement_pct?: number | null }).settlement_pct == null ? null : Number((r as { settlement_pct?: number }).settlement_pct),
     is_active: Boolean(r.is_active),
     created_at: String(r.created_at),
@@ -71,7 +80,7 @@ export async function listEstablishments(container: MedusaContainer): Promise<Es
  */
 export async function createEstablishment(
   container: MedusaContainer,
-  input: { name: string; address: string | null; phone: string | null; actorId: string | null }
+  input: { name: string; address: string | null; phone: string | null; color?: string | null; actorId: string | null }
 ): Promise<EstablishmentRow> {
   const svc = container.resolve<EstablishmentModuleService>(ESTABLISHMENT_MODULE);
   const all = await svc.listEstablishments({}, { take: 1000, withDeleted: true });
@@ -89,6 +98,7 @@ export async function createEstablishment(
     address: input.address,
     phone: input.phone,
     sales_channel_id: result[0]?.id ?? null,
+    color: normalizeColor(input.color) ?? nextStoreColor(all.map((r) => (r as { color?: string | null }).color)),
     created_by: input.actorId,
   });
   const [row] = (await listEstablishments(container)).filter((r) => r.id === created.id);

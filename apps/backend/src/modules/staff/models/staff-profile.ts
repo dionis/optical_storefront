@@ -32,8 +32,24 @@ export const StaffProfile = model.define("staff_profile", {
   hire_date: model.text().nullable(),
   commission_pct: model.float().nullable(),
   monthly_goal: model.float().nullable(),
+  /** Base64 data URL or external URL for the person's profile photo. */
+  photo_url: model.text().nullable(),
   /** Extra privileges granted person by person (src/lib/staff-profile.ts PRIVILEGES). */
   privileges: model.json().nullable(),
   internal_notes: model.text().nullable(),
   updated_by: model.text().nullable(),
+  /**
+   * Set when the person was deactivated (HU-04): they keep their user, history
+   * and profile but lib/staff-scope.ts resolves them to "no access" on every
+   * request, which is what closes their open sessions. null = active.
+   */
+  disabled_at: model.dateTime().nullable(),
+  /** Who deactivated them (user id); cleared on reactivation. */
+  disabled_by: model.text().nullable(),
+  /**
+   * Tokens issued before this instant are refused (lib/session-control.ts):
+   * "log out everywhere", a remote sign-out, or any password change. null =
+   * never revoked.
+   */
+  sessions_revoked_at: model.dateTime().nullable(),
 });

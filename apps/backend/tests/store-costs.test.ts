@@ -74,7 +74,14 @@ describe("cleanCostItem", () => {
 });
 
 describe("expectedCash (HU-32)", () => {
-  it("opening + cash payments (refunds negative) + in − out", () => {
-    expect(expectedCash(10000, [5000, -2000], [{ kind: "in", amount: 1000 }, { kind: "out", amount: 3000 }])).toBe(11000);
+  it("opening + ledger in − out; cash payments and refunds are ledger lines; the opening float line is not summed", () => {
+    const ledger = [
+      { kind: "in", category: "opening_float", amount: 10000 },
+      { kind: "in", category: "sale_payment", amount: 5000 },
+      { kind: "out", category: "sale_refund", amount: 2000 },
+      { kind: "in", category: "other", amount: 1000 },
+      { kind: "out", category: "expense", amount: 3000 },
+    ] as Parameters<typeof expectedCash>[1];
+    expect(expectedCash(10000, ledger)).toBe(11000);
   });
 });

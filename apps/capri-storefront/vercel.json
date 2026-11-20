@@ -11,7 +11,11 @@
     },
     {
       "source": "/medusa-staging/:path*",
-      "destination": "https://api-staging.161-153-9-98.sslip.io/:path*"
+      "destination": "https://api.opticaelrancho.com/:path*"
+    },
+    {
+      "source": "/medusa-t-optica-vista/:path*",
+      "destination": "https://api.d3e.llc/:path*"
     },
     {
       "source": "/(.*)",
@@ -63,6 +67,19 @@
     },
     {
       "source": "/medusa-staging/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/medusa-t-optica-vista/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

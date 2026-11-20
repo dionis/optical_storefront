@@ -2,8 +2,11 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { ORDER_STAGES } from "../../../lib/order-status";
-import { MAX_BOARD_SCAN, fetchBoardOrders, isOrderStage } from "../../../lib/order-board";
+import { MAX_BOARD_SCAN, boardAccessFor, fetchBoardOrders, isOrderStage, restrictBoardRows } from "../../../lib/order-board";
 import { parseBoardDate } from "../../../lib/board-dates";
+import { listEstablishments } from "../../../lib/establishments";
+import { sellableStores } from "../../../lib/pos";
+import { getStaffScope } from "../../../lib/staff-scope";
 
 /**
  * GET /admin/order-board — every order, filtered the way a shop owner thinks.
@@ -19,6 +22,13 @@ import { parseBoardDate } from "../../../lib/board-dates";
  * user, so the corporate panel signs in through `/auth/user/emailpass` and sends
  * the resulting JWT. No parallel credential of our own.
  *
+ * Who reads what (boardAccessFor, lib/order-board.ts): owner and superadmin,
+ * everything. A supervisor or manager — the roles whose «Pedidos» tab joins
+ * this board to their sales list — only the slim `stages` view, only the
+ * stores they are assigned to, and with `total` redacted to null: the stage
+ * strip shows them how many sales sit in each stage, never what they add up
+ * to (owner's rule). A seller is refused with `forbidden_role`.
+ *
  * Query params:
  *   q                 free text (id, customer, city, email, phone, items)
  *   from / to         ISO dates, inclusive — pushed down to the database
@@ -26,7 +36,12 @@ import { parseBoardDate } from "../../../lib/board-dates";
  *   terminal          canceled | refunded | payment_pending
  *   has_prescription  "true" | "false"
  *   seller            referral code (exact) | "none" (unattributed)
+ *   store             establishment id (till sales of that store) | "web" (online store)
  *   limit / offset    page window (default 20, max 100)
+ *   view              "stages" = slim rows (id, stage, next_stages, history,
+ *                     totals — no items/addresses), max 300 per page, so the
+ *                     executive list gets the stage of every sale of a period
+ *                     in one request and merges it by `order_id`.
  */
 export async function GET(
   req: AuthenticatedMedusaRequest,
@@ -71,6 +86,28 @@ export async function GET(
     return;
   }
 
+  // Resolved here and not in the guard: the guard only knows the path, and
+  // what changes by role is the SHAPE of the answer, not whether there is one.
+  const actorId = req.auth_context?.actor_id;
+  if (!actorId) {
+    res.status(403).json({ type: "not_allowed", reason: "forbidden_role", message: "No user behind this request." });
+    return;
+  }
+  let access: ReturnType<typeof boardAccessFor>;
+  try {
+    const scope = await getStaffScope(req.scope, actorId);
+    const storeIds = scope.is_admin ? null : sellableStores(scope, await listEstablishments(req.scope)).map((s) => s.id);
+    access = boardAccessFor(scope, storeIds);
+  } catch (error) {
+    logger.error(`[order-board] could not resolve the caller's scope: ${(error as Error).message}`);
+    res.status(503).json({ type: "unexpected_state", reason: "scope_unavailable", message: "Could not resolve the user's role." });
+    return;
+  }
+  if (!access.allowed) {
+    res.status(403).json({ type: "not_allowed", reason: access.reason, message: "This role cannot read the order board." });
+    return;
+  }
+
   try {
     const result = await fetchBoardOrders(req.scope, {
       q: query.q,
@@ -85,12 +122,16 @@ export async function GET(
             ? false
             : undefined,
       seller: query.seller || undefined,
+      store: query.store || undefined,
+      stores: access.stores ?? undefined,
       limit: query.limit ? Number(query.limit) : undefined,
       offset: query.offset ? Number(query.offset) : undefined,
+      view: query.view === "stages" || access.slim_only ? "stages" : "full",
     });
 
     res.status(200).json({
       ...result,
+      orders: access.money ? result.orders : restrictBoardRows(result.orders),
       stages: ORDER_STAGES,
       // So the panel can say "showing the most recent 300" instead of implying
       // the filtered count is the whole truth.

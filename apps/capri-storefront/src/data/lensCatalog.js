@@ -12,12 +12,34 @@
 //
 // Displayed prices remain an estimate only — the authoritative total for the cart comes
 // from POST /store/lens-config/quote, never from this data.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { medusa, USE_MEDUSA } from "./medusa.js";
-import { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT } from "./lensPricing.js";
+import { DESIGNS, MATERIALS, BASE, FINISHES, PHOTO, AR, TREAT } from "./lensPricing.js";
+// The panel's authenticated, cached GET (adminApi.js + adminCache.js). Both
+// modules are self-contained (no UI, no catalog), so the public wizard's chunk
+// only grows by the fetch helper; the admin hook below is the only user here.
+import { adminGet, queryKey } from "../admin/adminApi.js";
+import { useCached } from "../admin/adminCache.js";
 
-/** The bundled 2026 list — first paint, offline, and fallback. */
-export const STATIC_CATALOG = { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT };
+/**
+ * The bundled 2026 list — first paint, offline, and fallback.
+ *
+ * `BASE_MATERIALS` mirrors `BASE`: the list of material codes with a price for
+ * each design. In the bundled list every design carries every material, so
+ * this is `Object.keys(BASE[d])`, computed once to avoid a runtime cost per
+ * read. The live payload rebuilds it from the active base cells returned by
+ * /store/lens-config/matrix (which already drops cells the admin switched off,
+ * UpgradeLensCellActive11 + loadLensMatrix).
+ */
+const STATIC_BASE_MATERIALS = Object.fromEntries(
+  Object.entries(BASE).map(([d, cells]) => [d, Object.keys(cells)])
+);
+export const STATIC_CATALOG = {
+  DESIGNS, MATERIALS, BASE, BASE_MATERIALS: STATIC_BASE_MATERIALS, FINISHES, PHOTO, AR, TREAT,
+};
+
+/** The finish a design is sold with unless the seller picks the other one (same rule as the backend's lib/lens-finish.ts). */
+export const defaultFinishFor = (category) => (category === "prog" ? "digital" : "stock");
 
 // The module stores integer USD cents; the storefront works in decimal dollars.
 const dollars = (v) => (v == null ? null : Number(v) / 100);
@@ -38,11 +60,43 @@ export function adaptLensMatrix(payload) {
   // failed load and keep the bundled list instead.
   if (!designs.length || !materials.length || !basePrices.length) return null;
 
+  // BASE keeps the DEFAULT finish of each design (stock; digital for a
+  // progressive), so the web wizard reads exactly what it always did.
+  // FINISHES carries both cells for the POS, null where the owner has not
+  // priced that finish. A row without `finish` (backend before the finish
+  // migration) is the design's only cell.
+  //
+  // activeMaterials collects every material code that appears in at least one
+  // ACTIVE base cell (the backend already drops `is_active=false` cells from
+  // /matrix via loadLensMatrix, UpgradeLensCellActive11). Materials with no
+  // surviving cell — the owner switched off every (design, material) row for
+  // that index — must NOT appear in the wizard, otherwise the storefront would
+  // keep offering "Índice 1.56 — $0" after the panel admin turned it off. The
+  // same source of truth is used for the per-design `BASE_MATERIALS` map, so a
+  // material is shown for a design only when there is a real price for it.
+  const categoryOf = Object.fromEntries(designs.map((d) => [d.code, d.category]));
   const base = {};
+  const finishes = {};
+  const activeMaterials = new Set();
+  const materialsByDesign = {};
   for (const b of basePrices) {
-    if (!base[b.design_code]) base[b.design_code] = {};
-    base[b.design_code][b.material_code] = dollars(b.price_cents) ?? 0;
+    const fallback = defaultFinishFor(categoryOf[b.design_code]);
+    const finish = b.finish === "stock" || b.finish === "digital" ? b.finish : fallback;
+    if (!finishes[b.design_code]) finishes[b.design_code] = {};
+    if (!finishes[b.design_code][b.material_code]) finishes[b.design_code][b.material_code] = { stock: null, digital: null };
+    finishes[b.design_code][b.material_code][finish] = dollars(b.price_cents) ?? 0;
+    if (finish === fallback) {
+      if (!base[b.design_code]) base[b.design_code] = {};
+      base[b.design_code][b.material_code] = dollars(b.price_cents) ?? 0;
+    }
+    activeMaterials.add(b.material_code);
+    if (!materialsByDesign[b.design_code]) materialsByDesign[b.design_code] = new Set();
+    materialsByDesign[b.design_code].add(b.material_code);
   }
+  // Exposed as a plain object of arrays (JSON-friendly) so the wizard can
+  // intersect it with its MATERIALS list without touching Sets.
+  const BASE_MATERIALS = {};
+  for (const [d, set] of Object.entries(materialsByDesign)) BASE_MATERIALS[d] = Array.from(set);
 
   const ar = { sv: [], bifprog: [] };
   for (const a of ars) {
@@ -77,13 +131,24 @@ export function adaptLensMatrix(payload) {
       add: !!d.requires_add,
       label: { es: d.label_es, en: d.label_en },
     })),
-    MATERIALS: materials.map((m) => ({
-      id: m.code,
-      maxAbs: Number(m.max_abs),
-      label: { es: m.label_es, en: m.label_en },
-      desc: { es: m.desc_es || "", en: m.desc_en || "" },
-    })),
+    // Only materials still backed by an active base cell. A material whose every
+    // (design × material) cell was switched off in the admin stops appearing in
+    // the wizard, so the storefront matches the panel admin exactly.
+    MATERIALS: materials
+      .filter((m) => activeMaterials.has(m.code))
+      .map((m) => ({
+        id: m.code,
+        maxAbs: Number(m.max_abs),
+        label: { es: m.label_es, en: m.label_en },
+        desc: { es: m.desc_es || "", en: m.desc_en || "" },
+      })),
     BASE: base,
+    // Per-design list of material codes with at least one active cell. The
+    // wizard uses this to show, for the chosen use, only materials the owner
+    // really sells at that use — a material active elsewhere but disabled for
+    // this design is left out of its choices.
+    BASE_MATERIALS,
+    FINISHES: finishes,
     PHOTO: photos.map((p) => ({
       id: p.code,
       colors: p.colors || [],
@@ -150,6 +215,55 @@ export function useLensCatalog() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
+
+  return { ...catalog, live: catalog !== STATIC_CATALOG };
+}
+
+// ── The panel's copy (point of sale, statements, sales board) ────────────────
+//
+// GET /admin/pos/lens-matrix answers the same payload as the public route, with
+// the chosen store's variations already applied (lib/lens-matrix.ts), through
+// the admin session — no publishable key and no VITE_USE_MEDUSA involved. The
+// deployed storefront builds never set that flag, so the till used to render
+// the bundled list below and the owner's edits in «Precios y costos → Lentes»
+// (digital finish cells included) never reached the picker.
+
+/** The admin route; `store` empty = the master list. Also the cache prefix pricing/api.js invalidates on every lens-price write. */
+export const ADMIN_LENS_MATRIX_PATH = "/admin/pos/lens-matrix";
+const ADMIN_LENS_MATRIX_TTL = 60_000;
+
+const adminMatrixKey = (storeId) => queryKey(ADMIN_LENS_MATRIX_PATH, { store: storeId || "" });
+
+/**
+ * Resolves to the catalog the panel should price from (store prices when
+ * `storeId` is given), or STATIC_CATALOG when the route fails. Cached and
+ * de-duplicated by adminCache.js like every other panel read.
+ */
+export function loadAdminLensCatalog(storeId = "") {
+  return adminGet(ADMIN_LENS_MATRIX_PATH, { query: { store: storeId || "" }, ttl: ADMIN_LENS_MATRIX_TTL })
+    .then((r) => adaptLensMatrix(r) || STATIC_CATALOG)
+    .catch(() => STATIC_CATALOG);
+}
+
+/**
+ * Lens catalog for the panel. Renders the bundled list until the backend's
+ * arrives (and whenever it fails), then the live one; a change in
+ * «Precios y costos» re-reads it through the cache's invalidation, and so does
+ * coming back to the tab. `live` is false while the screen shows the bundled
+ * fallback — the POS says so next to the picker, because then the finish
+ * toggle and the option list may not match what the quote will accept.
+ */
+export function useAdminLensCatalog(storeId = "", { enabled = true } = {}) {
+  // `enabled: false` (p. ej. el POS mientras aún no sabe en qué tienda vende):
+  // no se pide la lista maestra para tirarla un instante después.
+  const { data, refresh } = useCached(adminMatrixKey(storeId), { ttl: ADMIN_LENS_MATRIX_TTL, enabled });
+  const catalog = useMemo(() => (data ? adaptLensMatrix(data) : null) || STATIC_CATALOG, [data]);
+
+  useEffect(() => {
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refresh]);
 
   return { ...catalog, live: catalog !== STATIC_CATALOG };
 }

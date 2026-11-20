@@ -1,6 +1,7 @@
 import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { clientIp } from "./client-ip";
 import { createRateLimit } from "./rate-limit";
+import { resolveOcrProvider } from "./ocr-gemini";
 
 /**
  * Security hardening shared by `src/api/middlewares.ts` and the admin
@@ -31,6 +32,39 @@ export const adminLoginRateLimit = createRateLimit({
     return keys;
   },
   message: "Too many sign-in attempts. Wait a few minutes and try again.",
+});
+
+// ── Password recovery (HU-03) ───────────────────────────────────────────────
+// `/auth/user/emailpass/reset-password` sends a mail per call and always
+// answers 201, so without a ceiling it is a free mail cannon aimed at any
+// address. 5 per 15 minutes per IP and per identifier (the login email).
+// `/auth/user/emailpass/update` consumes the single-use token; 10 per IP is
+// plenty for a person retyping a password and nothing for a token guess.
+export const PASSWORD_RESET_WINDOW_MS = 15 * 60 * 1000;
+export const PASSWORD_RESET_REQUEST_MAX = 5;
+export const PASSWORD_RESET_UPDATE_MAX = 10;
+
+export const passwordResetRequestRateLimit = createRateLimit({
+  name: "password-reset-request",
+  windowMs: PASSWORD_RESET_WINDOW_MS,
+  max: PASSWORD_RESET_REQUEST_MAX,
+  maxEnv: "PASSWORD_RESET_RATE_LIMIT",
+  keys: (req) => {
+    const keys = [`ip:${clientIp(req)}`];
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const identifier = typeof body["identifier"] === "string" ? body["identifier"].trim().toLowerCase() : "";
+    if (identifier) keys.push(`identifier:${identifier}`);
+    return keys;
+  },
+  message: "Too many password reset requests. Wait a few minutes and try again.",
+});
+
+export const passwordResetUpdateRateLimit = createRateLimit({
+  name: "password-reset-update",
+  windowMs: PASSWORD_RESET_WINDOW_MS,
+  max: PASSWORD_RESET_UPDATE_MAX,
+  maxEnv: "PASSWORD_RESET_UPDATE_RATE_LIMIT",
+  message: "Too many attempts. Wait a few minutes and try again.",
 });
 
 // ── Self-registration of admin identities ───────────────────────────────────
@@ -134,6 +168,9 @@ export function securityAudit(env: NodeJS.ProcessEnv = process.env, now: () => D
   checks.push({ key: "node_env.production", ok: production, detail: env.NODE_ENV || "" });
   checks.push({ key: "security.strict_mode", ok: env.SECURITY_STRICT === "1" });
   checks.push({ key: "auth.self_register_blocked", ok: env.ADMIN_SELF_REGISTER !== "1" });
+  // docker-entrypoint.sh sets this when `db:migrate` failed at boot: the server
+  // is up on an old schema and the routes that needed the change will 500.
+  checks.push({ key: "db.migrations_applied", ok: env.MEDUSA_MIGRATE_STATUS !== "failed", detail: env.MEDUSA_MIGRATE_STATUS || "" });
   checks.push({
     key: "auth.login_rate_limit",
     ok: true,
@@ -152,18 +189,30 @@ export function securityAudit(env: NodeJS.ProcessEnv = process.env, now: () => D
   checks.push({ key: "urls.backend_https", ok: isHttps(env.BACKEND_URL), detail: hostOf(env.BACKEND_URL) });
 
   const stripe = (env.STRIPE_SECRET_KEY || "").trim();
-  checks.push({
-    key: "payments.stripe_mode",
-    ok: stripe.startsWith("sk_live_"),
-    detail: stripe.startsWith("sk_live_") ? "live" : stripe.startsWith("sk_test_") ? "test" : "unset",
-  });
+  // DEPLOY_ENV=staging: a staging backend must NOT charge real cards, so there
+  // test mode is the right state (and live keys would be the problem).
+  if ((env.DEPLOY_ENV || "").trim().toLowerCase() === "staging") {
+    checks.push({
+      key: "payments.stripe_test_staging",
+      ok: !stripe.startsWith("sk_live_"),
+      detail: stripe.startsWith("sk_live_") ? "live" : stripe.startsWith("sk_test_") ? "test" : "unset",
+    });
+  } else {
+    checks.push({
+      key: "payments.stripe_mode",
+      ok: stripe.startsWith("sk_live_"),
+      detail: stripe.startsWith("sk_live_") ? "live" : stripe.startsWith("sk_test_") ? "test" : "unset",
+    });
+  }
   checks.push({ key: "payments.stripe_webhook_secret", ok: (env.STRIPE_WEBHOOK_SECRET || "").startsWith("whsec_") });
   checks.push({ key: "payments.stripe_key_is_secret", ok: !stripe || stripe.startsWith("sk_") || stripe.startsWith("rk_") });
 
   checks.push({ key: "notifications.email_provider", ok: Boolean(env.RESEND_API_KEY) });
   checks.push({ key: "notifications.sms_provider", ok: Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER) });
   checks.push({ key: "sheet.configured", ok: Boolean(env.GSHEET_FILE_URL && env.GSHEET_SERVICE_ACCOUNT_EMAIL && env.GSHEET_SERVICE_ACCOUNT_KEY) });
-  checks.push({ key: "ocr.api_key", ok: Boolean(env.ANTHROPIC_API_KEY) });
+  // Anthropic first; Gemini is the fallback reader (lib/ocr-gemini.ts).
+  const ocr = resolveOcrProvider(env);
+  checks.push({ key: "ocr.api_key", ok: ocr !== null, detail: ocr ? ocr.provider : "unset" });
 
   const failing = checks.filter((c) => !c.ok).length;
   return { checked_at: now().toISOString(), node_env: env.NODE_ENV || "", strict_mode: env.SECURITY_STRICT === "1", checks, failing };

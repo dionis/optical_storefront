@@ -6,6 +6,7 @@ import { useFeedback } from "./Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useUser, login, register, logout } from "./userAuth.js";
 import { resolveImage } from "../data/imageUrl.js";
+import PasswordInput from "./PasswordInput.jsx";
 
 const money = (n) => "$" + (Number(n) || 0).toFixed(2);
 
@@ -130,7 +131,7 @@ export function AuthPanel({ open, onClose }) {
             <label>{t("auth.name")}<input value={name} placeholder={t("auth.namePh")} autoComplete="name" onChange={(e) => setName(e.target.value)} /></label>
           )}
           <label>{t("auth.email")}<input type="email" value={email} placeholder={t("auth.emailPh")} autoComplete="email" onChange={(e) => setEmail(e.target.value)} /></label>
-          <label>{t("auth.pass")}<input type="password" value={pass} placeholder={mode === "register" ? t("auth.passPh") : "••••••••"} autoComplete={mode === "login" ? "current-password" : "new-password"} onChange={(e) => setPass(e.target.value)} /></label>
+          <label>{t("auth.pass")}<PasswordInput value={pass} placeholder={mode === "register" ? t("auth.passPh") : "••••••••"} autoComplete={mode === "login" ? "current-password" : "new-password"} onChange={(e) => setPass(e.target.value)} /></label>
           {mode === "register" && (
             <label>{t("auth.phone")}<input type="tel" value={phone} placeholder="+1 281 555 0100" autoComplete="tel" onChange={(e) => setPhone(e.target.value)} /></label>
           )}

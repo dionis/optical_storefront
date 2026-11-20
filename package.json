@@ -9,7 +9,9 @@
     "build": "pnpm --filter './packages/*' build && pnpm --filter './apps/*' build",
     "lint": "pnpm --recursive lint",
     "typecheck": "pnpm --recursive typecheck",
-    "test": "node scripts/check-i18n.mjs && node scripts/check-vercel-config.mjs && pnpm --recursive test",
+    "test": "node scripts/check-i18n.mjs && node scripts/check-vercel-config.mjs && node scripts/check-tenant.mjs && pnpm --recursive test",
+    "check:tenant": "node scripts/check-tenant.mjs",
+    "tenant": "pnpm --filter @eyewear/shared build && node scripts/tenant.mjs",
     "check:vercel": "node scripts/check-vercel-config.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "reindex": "pnpm --filter backend reindex"

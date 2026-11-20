@@ -1,0 +1,60 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ACABADO (10-nov-2026). Capa fina de calidad visual que AdminShell importa
+   después de las hojas de módulo y ANTES de responsive.css (que manda en
+   tableta y celular). Solo arregla lo que se ve mal en cualquier pantalla; no
+   cambia la paleta ni los tokens (--adm-*), que siguen en admin.css.
+   Cada bloque dice qué defecto corrige. Capturas: docs/QA-UNIFICACION-2026-11-10.md.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Cabecera de pantalla (título + herramientas) ───────────────────────
+   El título lleva una línea de acento que debía llenar el hueco hasta las
+   herramientas, pero el h2 medía lo que su texto y la línea quedaba en un
+   guion de 18 px pegado al título («Pedidos -», «Tiendas -»…). Ahora el título
+   ocupa el hueco, la línea lo llena y, si no hay sitio, desaparece (nunca un
+   guion). Las herramientas se quedan a la derecha en UNA fila mientras quepan. */
+.adm-section h2::after { min-width: 0; }
+.adm-head-row { column-gap: 14px; row-gap: 8px; }
+.adm-head-row > h2 { flex: 1 1 auto; min-width: 0; }
+/* En escritorio las herramientas van en UNA fila a la derecha. El buscador de
+   la cabecera medía por dentro menos que su base de 320 px: la caja se
+   calculaba estrecha y partía en dos filas («PDF» y «Nuevo vendedor» caían
+   debajo). Con ancho propio, la fila mide lo que ocupa. En tableta y celular
+   manda responsive.css (las herramientas bajan a su propia fila). */
+@media (min-width: 1024px) {
+  .adm-head-row > .adm-orders-tools { flex: 0 0 auto; max-width: 100%; justify-content: flex-end; }
+  .adm-orders-tools > .adm-find.compact { flex: 0 0 auto; width: clamp(220px, 24vw, 320px); min-width: 0; }
+}
+/* En tableta y celular, una cabecera con buscador y botones deja el título en
+   su propia fila: al lado, el botón quedaba flotando encima del buscador. */
+@media (max-width: 1023px) {
+  .adm-head-row:has(> .adm-orders-tools) > h2 { flex-basis: 100%; }
+}
+/* Panel de ventas: el título comparte fila con su explicación; ahí la línea no cabe y quedaba en un guion. */
+.sb-head h2::after { display: none; }
+/* Un título suelto (sin fila de herramientas) con su línea hasta el borde. */
+.adm-section > h2:first-child { display: flex; }
+
+/* ── 2. Filtros de Pedidos ─────────────────────────────────────────────────
+   Seis filtros en fila con anchos fijos dejaban el último solo en una segunda
+   línea a 1280 px. En rejilla se reparten el ancho y parten de forma pareja. */
+.adm-orders-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); align-items: end; }
+.adm-orders-filters .adm-sel { width: 100%; min-width: 0; }
+.adm-orders-filters > button { justify-self: start; }
+
+/* ── 3. Saludo del día → «Por tienda» ──────────────────────────────────────
+   Cada cifra repetía el rótulo de su columna (HOY, SEMANA…) debajo de la
+   cabecera que ya lo dice. El rótulo de la celda se queda para lectores de
+   pantalla (la cabecera es decorativa) y deja de pintarse. */
+.sm-store .cell small { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ── 4. Productos y precios: el título comparte fila con sus pestañas ─────── */
+.pp-head h2::after { display: none; }
+
+/* ── 5. Equipo → «Dar de alta» ─────────────────────────────────────────────
+   La rejilla del formulario mezclaba `repeat(auto-fit, …)` con una pista
+   `auto`, que CSS no admite: la regla entera se descartaba y los campos
+   quedaban uno debajo de otro a todo el ancho. Ahora van en columnas y el
+   botón en su propia fila, del ancho de su texto. */
+.adm-team-form { grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); }
+.adm-team-form > button { grid-column: 1 / -1; justify-self: start; min-width: 200px; }
+@media (max-width: 640px) { .adm-team-form > button { justify-self: stretch; } }

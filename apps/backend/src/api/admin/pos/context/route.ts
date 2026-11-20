@@ -1,36 +1,57 @@
+import { maxBackdateDays } from "../../../../lib/sale-date";
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { listEstablishments } from "../../../../lib/establishments";
-import { acceptedAt, sellableStores } from "../../../../lib/pos";
+import { acceptedAt, sellableStores, sellerTillProblem } from "../../../../lib/pos";
 import { ensureTerminal, listPaymentMethods, VOID_REASONS } from "../../../../lib/pos-data";
 import { canVoid, posHandler, posScope } from "../../../../lib/pos-route";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
+import { livePromotions } from "../../../../lib/promotions-data";
+import { tenant } from "../../../../lib/tenant";
 
 /**
  * GET /admin/pos/context — what the till needs to open: the stores this user
  * may sell in with their tills (a store without one gets Op#-POS1 on demand),
  * the payment methods accepted in each, the user's discount limit, whether
  * they void or only ask, and the optical-change thresholds. Every role.
+ *
+ * A user with the `seller` role gets only the store and till of their seller
+ * record (`assigned`), or `seller_block` (no record / inactive) and no stores.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   await posHandler(req, res, async () => {
     const scope = await posScope(req);
     const actorId = req.auth_context?.actor_id ?? null;
     const [all, methods, settings] = await Promise.all([listEstablishments(req.scope), listPaymentMethods(req.scope), getPosSettings(req.scope)]);
+    const counter = scope.role === "seller" && !scope.is_admin ? scope.seller ?? null : null;
+    const sellerBlock = sellerTillProblem(scope, counter?.establishment_id ?? null, counter?.terminal_id ?? null);
     const stores = [];
-    for (const s of sellableStores(scope, all)) {
-      const terminals = (await ensureTerminal(req.scope, s, actorId)).filter((t) => t.is_active);
+    for (const s of sellerBlock ? [] : sellableStores(scope, all)) {
+      if (counter && s.id !== counter.establishment_id) continue;
+      const terminals = (await ensureTerminal(req.scope, s, actorId)).filter((t) => t.is_active && (!counter || t.id === counter.terminal_id));
       stores.push({
         id: s.id,
         code: s.code,
         name: s.name,
+        color: s.color,
+        // "online" = THE online store: the only one whose sales need the patient's email.
+        kind: s.kind,
         terminals,
         payment_methods: methods.filter((m) => acceptedAt(m, s.id)).map((m) => m.code),
+        // Opening hours (lib/store-hours.ts): the till warns when a sale is rung up outside them.
+        hours: s.hours,
+        // The promotions running in this store today (lib/promotions.ts): the seller picks one for the sale.
+        promotions: (await livePromotions(req.scope, s.id)).map((p) => ({
+          id: p.id, name: p.name, description: p.description, kind: p.kind, pct: p.pct, buy_qty: p.buy_qty, get_qty: p.get_qty,
+          min_total: p.min_total_cents === null ? null : p.min_total_cents / 100, min_purchases: p.min_purchases, value: p.value_cents === null ? null : p.value_cents / 100, ends_on: p.ends_on,
+        })),
       });
     }
     res.json({
       role: scope.role,
       is_admin: scope.is_admin,
       seller_code: scope.seller_code,
+      seller_block: sellerBlock,
+      assigned: counter && !sellerBlock ? { establishment_id: counter.establishment_id, terminal_id: counter.terminal_id } : null,
       privileges: scope.privileges,
       stores,
       payment_methods: methods.filter((m) => m.is_active),
@@ -38,6 +59,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       can_void: canVoid(scope),
       void_reasons: VOID_REASONS,
       optical_thresholds: settings.optical_thresholds,
+      timezone: tenant().timezone,
+      // How many days back this person may date a sale (lib/sale-date.ts); the server checks it again.
+      backdate_max_days: maxBackdateDays(scope.role, settings.backdate_limits),
     });
   });
 }

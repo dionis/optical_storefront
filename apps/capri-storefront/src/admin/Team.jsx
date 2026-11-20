@@ -2,14 +2,105 @@
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin, setRole, setStores, ASSIGNABLE_ROLES, roleKey } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword, signOutEverywhere, transferOwner } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
-import StaffProfile from "./StaffProfile.jsx";
+import { fetchSellers } from "./adminSellers.js";
+import { listTerminals } from "./posApi.js";
+import StaffProfile, { PhotoUpload } from "./StaffProfile.jsx";
+import StaffAvatar from "./StaffAvatar.jsx";
+import useDefaultCommission from "./finance/useDefaultCommission.js";
+import FieldError from "../components/FieldError.jsx";
+import { emailProblem, LIMITS, nameProblem, typedEmail } from "../data/fieldRules.js";
+import PasswordInput from "../components/PasswordInput.jsx";
 
 const isAdminRole = (role) => role === "owner" || role === "superadmin";
+
+/**
+ * Ficha de vendedor de un usuario con rol VENDEDOR: una existente (activa y
+ * libre) o una nueva con tienda y su único punto de venta. El servidor aplica
+ * la misma regla (lib/seller-link.ts); aquí solo se evita el viaje.
+ */
+// commission_pct "" = la comisión por defecto del dueño: el servidor la aplica (lib/seller-link.ts).
+const EMPTY_LINK = { mode: "existing", seller_id: "", establishment_id: "", terminal_id: "", commission_pct: "" };
+const linkMissing = (l) => (l.mode === "existing" ? !l.seller_id : !l.establishment_id || !l.terminal_id);
+const linkPayload = (l) => (l.mode === "existing"
+  ? { seller_id: l.seller_id }
+  : { create: { establishment_id: l.establishment_id, terminal_id: l.terminal_id, ...(String(l.commission_pct).trim() === "" ? {} : { commission_pct: Number(l.commission_pct) || 0 }) } });
+
+function SellerLinkFields({ value, onChange, userId = null, sellers, stores, terminals, disabled }) {
+  const { t } = useLang();
+  // Vacío = la comisión por defecto («Reglas y comisiones»); se enseña de marcador.
+  const defaultPct = useDefaultCommission();
+  const set = (patch) => onChange({ ...value, ...patch });
+  const free = sellers.filter((s) => s.active && (!s.user_id || s.user_id === userId));
+  const storeOf = (id) => stores.find((x) => x.id === id);
+  const tillOf = (id) => terminals.find((x) => x.id === id);
+  const activeStores = stores.filter((x) => x.is_active);
+  const tills = terminals.filter((p) => p.establishment_id === value.establishment_id && p.is_active);
+  const pickStore = (id) => {
+    const own = terminals.filter((p) => p.establishment_id === id && p.is_active);
+    set({ establishment_id: id, terminal_id: own.length === 1 ? own[0].id : "" });
+  };
+  return (
+    <fieldset className="adm-team-seller" disabled={disabled}>
+      <legend>{t("adm.team.seller.title")}</legend>
+      <p className="adm-sub">{t("adm.team.seller.hint")}</p>
+      <div className="adm-range">
+        <button type="button" className={value.mode === "existing" ? "on" : ""} onClick={() => set({ mode: "existing" })}>{t("adm.team.seller.existing")}</button>
+        <button type="button" className={value.mode === "new" ? "on" : ""} onClick={() => set({ mode: "new" })}>{t("adm.team.seller.new")}</button>
+      </div>
+      {value.mode === "existing" ? (
+        <label className="adm-field">{t("adm.team.seller.pick")}
+          <select className="adm-input" required value={value.seller_id} onChange={(e) => set({ seller_id: e.target.value })}>
+            <option value="">{free.length ? t("adm.team.seller.pickPh") : t("adm.team.seller.noneFree")}</option>
+            {free.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.code} · {s.name} — {storeOf(s.establishment_id)?.code || "?"} / {tillOf(s.terminal_id)?.code || "?"}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <div className="adm-form-grid">
+          <label className="adm-field">{t("adm.sel.store")} *
+            <select className="adm-input" required value={value.establishment_id} onChange={(e) => pickStore(e.target.value)}>
+              <option value="">{t("adm.sel.storeNone")}</option>
+              {activeStores.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
+            </select>
+          </label>
+          <label className="adm-field">{t("adm.pos.terminal")} *
+            <select className="adm-input" required disabled={!value.establishment_id} value={value.terminal_id} onChange={(e) => set({ terminal_id: e.target.value })}>
+              <option value="">{value.establishment_id && !tills.length ? t("adm.sel.terminalNoneInStore") : t("adm.sel.terminalNone")}</option>
+              {tills.map((p) => <option key={p.id} value={p.id}>{p.name ? `${p.code} · ${p.name}` : p.code}</option>)}
+            </select>
+          </label>
+          <label className="adm-field">{t("adm.sel.commission")}
+            <input className="adm-input" type="number" min="0" max="100" step="0.5" value={value.commission_pct} placeholder={defaultPct} onChange={(e) => set({ commission_pct: e.target.value })} />
+          </label>
+          <div className="adm-field">{t("adm.sel.code")}<span className="muted adm-code-ro">{t("adm.sel.codeAuto")}</span></div>
+        </div>
+      )}
+    </fieldset>
+  );
+}
+
+/** Lo que muestra la fila de un vendedor: su ficha (tienda / punto de venta) o el aviso de que no tiene. */
+function SellerRecordTag({ member, stores, terminals }) {
+  const { t } = useLang();
+  const s = member.seller;
+  if (!s) return <span className="adm-team-tag temp" title={t("adm.team.seller.missingHint")}><Icon name="alert" size={12} /> {t("adm.team.seller.missing")}</span>;
+  const store = stores.find((x) => x.id === s.establishment_id);
+  const till = terminals.find((x) => x.id === s.terminal_id);
+  return (
+    <span className={`adm-team-tag ${s.active ? "" : "temp"}`} title={t("adm.team.seller.recordTitle")}>
+      <Icon name="store" size={12} /> {store?.code || "?"} / {till?.code || "?"}{s.active ? "" : ` · ${t("adm.sel.off")}`}
+    </span>
+  );
+}
 
 /**
  * Tiendas de una persona: "Todas" o una lista. Un desplegable con casillas; se
@@ -62,6 +153,9 @@ function StorePicker({ member, stores, disabled, onSave }) {
  *  · Solo el dueño nombra o quita superadmins; nadie cambia su propio rol ni se
  *    borra a sí mismo. El panel solo ofrece lo que el backend aceptaría, pero la
  *    regla vive allí (lib/staff-roles.ts) y es la que manda.
+ *  · DESACTIVAR (HU-04) es "eliminar sin perder el historial": la persona deja
+ *    de entrar al instante (también con sesiones abiertas) y conserva rol y
+ *    perfil hasta que se le reactive. Mismos vetos que Eliminar.
  */
 export default function Team() {
   const { t, lang } = useLang();
@@ -72,10 +166,24 @@ export default function Team() {
   const [state, setState] = useState(demo ? "demo" : "loading");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", role: "" });
+  // Foto opcional del alta (data URL ya recortada a 256×256 por PhotoUpload).
+  const [newPhoto, setNewPhoto] = useState(null);
+  const [newLink, setNewLink] = useState(EMPTY_LINK);
+  // Fila cuya ficha de vendedor se está eligiendo: { id, role, link }.
+  const [linking, setLinking] = useState(null);
+  const [sellers, setSellers] = useState([]);
+  const [terminals, setTerminals] = useState([]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const myRole = team.find((m) => m.id === meId)?.role ?? null;
   const iAmOwner = myRole === "owner";
+  const [pwFor, setPwFor] = useState(null);
+  const [pwValue, setPwValue] = useState("");
+  // Traspaso de la propiedad: fila abierta y la contraseña de quien lo hace.
+  const [ownerFor, setOwnerFor] = useState(null);
+  const [ownerPw, setOwnerPw] = useState("");
+  // El dueño o un superadmin traspasa la propiedad, solo a otro superadmin activo (el servidor lo vuelve a comprobar).
+  const canMakeOwner = (m) => (iAmOwner || myRole === "superadmin") && m.role === "superadmin" && !m.is_super && m.id !== meId && !m.is_disabled;
   // Roles que puedo dar: el superadmin solo puede darlo el dueño.
   const grantable = ASSIGNABLE_ROLES.filter((r) => iAmOwner || r !== "superadmin");
   const newRole = form.role || grantable[0];
@@ -93,18 +201,27 @@ export default function Team() {
       .catch(() => setState("error"));
     // Sin tiendas (o sin backend de tiendas aún) el selector simplemente no aparece.
     fetchStores().then((r) => setStoreList(r.establishments || [])).catch(() => setStoreList([]));
+    fetchSellers().then((r) => setSellers(r.sellers || [])).catch(() => setSellers([]));
+    listTerminals().then((r) => setTerminals(r.terminals || [])).catch(() => setTerminals([]));
   };
   useEffect(load, [demo]);
 
+  const newProblems = { email: emailProblem(form.email, true), firstName: nameProblem(form.firstName), lastName: nameProblem(form.lastName) };
+  const [showNew, setShowNew] = useState(false);
+  const shownNew = (k) => (showNew || form[k] ? newProblems[k] : null);
   const submit = async (e) => {
     e.preventDefault();
     if (busy) return;
+    if (Object.values(newProblems).some(Boolean)) { setShowNew(true); return; }
     setBusy(true);
     try {
-      const r = await createAdmin({ ...form, role: newRole });
+      const r = await createAdmin({ ...form, role: newRole, seller: newRole === "seller" ? linkPayload(newLink) : undefined, photo: newPhoto });
       setTeam(r.team || []);
       setForm({ email: "", password: "", firstName: "", lastName: "", role: "" });
-      toast({ tone: "success", title: t("adm.team.created"), message: t("adm.team.createdSub") });
+      setNewPhoto(null);
+      setNewLink(EMPTY_LINK);
+      fetchSellers().then((x) => setSellers(x.sellers || [])).catch(() => {});
+      toast({ tone: "success", title: t(`adm.team.createdFor.${newRole}`), message: t("adm.team.createdSub") });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -113,7 +230,7 @@ export default function Team() {
   const remove = async (m) => {
     const ok = await confirm({
       tone: "danger",
-      title: t("adm.team.deleteConfirm", { email: m.email }),
+      title: t("adm.team.deleteConfirm", { email: m.email, role: t(roleKey(m.role)) }),
       message: t("adm.team.deleteBody"),
     });
     if (!ok) return;
@@ -122,6 +239,44 @@ export default function Team() {
       const r = await deleteAdmin(m.id);
       setTeam(r.team || []);
       toast({ tone: "success", title: t("adm.team.deleted", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
+  // Quién puede eliminar o desactivar a una fila: nunca al dueño ni a uno mismo; a un superadmin solo el dueño.
+  const canRemove = (m) => !m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin");
+
+  const toggleActive = async (m) => {
+    const active = Boolean(m.is_disabled);
+    if (!active) {
+      const ok = await confirm({
+        tone: "danger",
+        title: t("adm.team.deactivateConfirm", { email: m.email, role: t(roleKey(m.role)) }),
+        message: t("adm.team.deactivateBody"),
+        confirmLabel: t("adm.team.deactivate"),
+      });
+      if (!ok) return;
+    }
+    setBusy(true);
+    try {
+      const r = await setActive(m.id, active);
+      setTeam(r.team || []);
+      toast({ tone: "success", title: t(active ? "adm.team.reactivated" : "adm.team.deactivated", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
+  // Cierre de sesión remoto: sus pestañas abiertas quedan fuera en la siguiente
+  // petición; la cuenta sigue activa y vuelve a entrar con su contraseña.
+  const kickSessions = async (m) => {
+    const ok = await confirm({ title: t("adm.team.sessions.confirm", { email: m.email }), message: t("adm.team.sessions.body"), confirmLabel: t("adm.team.sessions.kick") });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await signOutEverywhere(m.id);
+      toast({ tone: "success", title: t("adm.team.sessions.done", { email: m.email }) });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -138,13 +293,47 @@ export default function Team() {
     } finally { setBusy(false); }
   };
 
-  const changeRole = async (m, role) => {
-    if (role === m.role) return;
+  const submitPassword = async (e, m) => {
+    e.preventDefault();
+    if (busy) return;
     setBusy(true);
     try {
-      const r = await setRole(m.id, role);
+      await resetPassword(m.id, pwValue);
+      setTeam((list) => list.map((x) => (x.id === m.id ? { ...x, must_change_password: true } : x)));
+      setPwFor(null);
+      setPwValue("");
+      toast({ tone: "success", title: t("adm.team.pw.done", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
+  const submitOwner = async (e, m) => {
+    e.preventDefault();
+    if (busy || !ownerPw) return;
+    setBusy(true);
+    try {
+      const r = await transferOwner(m.id, ownerPw);
       setTeam(r.team || []);
-      toast({ tone: "success", title: t("adm.team.roleChanged", { email: m.email, role: t(roleKey(role)) }) });
+      setOwnerFor(null);
+      setOwnerPw("");
+      toast({ tone: "success", title: t("adm.team.owner.done", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
+  const changeRole = async (m, role, seller) => {
+    if (role === m.role && !seller) return;
+    // Pasar a vendedor necesita su ficha: se elige antes de llamar al servidor.
+    if (role === "seller" && !seller) { setLinking({ id: m.id, role, link: EMPTY_LINK }); return; }
+    setBusy(true);
+    try {
+      const r = await setRole(m.id, role, seller);
+      setTeam(r.team || []);
+      setLinking(null);
+      if (seller || m.role === "seller") fetchSellers().then((x) => setSellers(x.sellers || [])).catch(() => {});
+      toast({ tone: "success", title: seller && m.role === "seller" ? t("adm.team.seller.linked", { email: m.email }) : t("adm.team.roleChanged", { email: m.email, role: t(roleKey(role)) }) });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -152,7 +341,7 @@ export default function Team() {
 
   return (
     <div className="adm-section">
-      <div className="adm-head-row"><h2>{t("adm.team.title")}</h2></div>
+      <div className="adm-head-row"><h2>{t("adm.team.title")}<HelpTip topic="team.roles" size={16} /></h2></div>
       {demo && <div className="adm-demo-banner">{t("adm.team.demoNote")}</div>}
       {state === "error" && <div className="adm-demo-banner">{t("adm.err.team.loadFailed")}</div>}
 
@@ -161,15 +350,27 @@ export default function Team() {
         <h3>{t("adm.team.newTitle")}</h3>
         <p className="adm-sub">{t("adm.team.newSub")}</p>
         <form className="adm-team-form" onSubmit={submit}>
-          <input type="email" required placeholder={t("adm.team.email")} value={form.email} onChange={set("email")} autoComplete="off" />
+          <input type="email" required maxLength={LIMITS.email} aria-invalid={shownNew("email") ? true : undefined} placeholder={t(`adm.team.emailFor.${newRole}`)} aria-label={t(`adm.team.emailFor.${newRole}`)} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: typedEmail(e.target.value) }))} autoComplete="off" />
+          <FieldError error={shownNew("email")} />
           <input type="text" required minLength={8} placeholder={t("adm.team.tempPass")} value={form.password} onChange={set("password")} autoComplete="off" />
-          <input placeholder={t("adm.team.firstName")} value={form.firstName} onChange={set("firstName")} />
-          <input placeholder={t("adm.team.lastName")} value={form.lastName} onChange={set("lastName")} />
-          <select aria-label={t("adm.team.role")} title={t("adm.team.role")} value={newRole} onChange={set("role")}>
-            {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
-          </select>
-          <button className="btn-sm primary" disabled={demo || busy}>{busy ? "…" : t("adm.team.create")}</button>
+          <input maxLength={LIMITS.name} aria-invalid={shownNew("firstName") ? true : undefined} placeholder={t("adm.team.firstName")} value={form.firstName} onChange={set("firstName")} />
+          <FieldError error={shownNew("firstName")} />
+          <input maxLength={LIMITS.name} aria-invalid={shownNew("lastName") ? true : undefined} placeholder={t("adm.team.lastName")} value={form.lastName} onChange={set("lastName")} />
+          <FieldError error={shownNew("lastName")} />
+          <span className="adm-help-row">
+            <select aria-label={t("adm.team.role")} title={t("adm.team.role")} value={newRole} onChange={set("role")}>
+              {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
+            </select>
+            <HelpTip topic="team.roles" />
+          </span>
+          <button className="btn-sm primary" disabled={demo || busy || (newRole === "seller" && linkMissing(newLink))}>{busy ? "…" : t(`adm.team.createFor.${newRole}`)}</button>
         </form>
+        {newRole === "seller" && (
+          <SellerLinkFields value={newLink} onChange={setNewLink} sellers={sellers} stores={stores} terminals={terminals} disabled={demo || busy} />
+        )}
+        <div className="adm-team-newphoto">
+          <PhotoUpload value={newPhoto} onChange={setNewPhoto} disabled={demo || busy} t={t} optional />
+        </div>
       </div>
 
       {/* Lista del equipo */}
@@ -179,8 +380,8 @@ export default function Team() {
         <div className="adm-team-rows">
           {team.map((m) => (
             <div key={m.id} className="adm-team-item">
-            <div className={`adm-team-row ${m.is_super ? "super" : ""}`}>
-              <span className="adm-team-avatar">{(m.first_name || m.email)[0].toUpperCase()}</span>
+            <div className={`adm-team-row ${m.is_super ? "super" : ""}`} style={m.is_disabled ? { opacity: 0.72 } : undefined}>
+              <StaffAvatar photo={m.photo_url} name={[m.first_name, m.last_name].filter(Boolean).join(" ") || m.display_name || m.email} />
               <span className="adm-team-main">
                 <b>{[m.first_name, m.last_name].filter(Boolean).join(" ") || m.email}</b>
                 <small className="muted">{m.email} · {shortDate(m.created_at, lang)}</small>
@@ -188,23 +389,57 @@ export default function Team() {
               {m.seller_code && <span className="adm-team-tag code" title={t("adm.profile.f.seller_code")}>{m.seller_code}</span>}
               {m.is_super && <span className="adm-team-tag super"><Icon name="sparkles" size={12} /> {t("adm.team.super")}</span>}
               {m.id === meId && <span className="adm-team-tag me">{t("adm.team.you")}</span>}
+              {m.is_disabled && (
+                <span className="adm-team-tag temp" title={t("adm.team.inactiveSince", { date: shortDate(m.disabled_at, lang) })}>
+                  <Icon name="power" size={12} /> {t("adm.team.inactiveTag")}
+                </span>
+              )}
               {m.must_change_password && <span className="adm-team-tag temp">{t("adm.team.tempTag")}</span>}
               {m.role_legacy && <span className="adm-team-tag legacy" title={t("adm.team.roleLegacy")}>{t("adm.team.roleLegacyTag")}</span>}
               {canEditRole(m) ? (
                 <select className="adm-team-role" aria-label={t("adm.team.role")} title={t("adm.team.role")}
-                  value={m.role ?? ""} disabled={busy || demo} onChange={(e) => changeRole(m, e.target.value)}>
+                  value={linking?.id === m.id ? linking.role : m.role ?? ""} disabled={busy || demo} onChange={(e) => (e.target.value === m.role ? setLinking(null) : changeRole(m, e.target.value))}>
                   {m.role == null && <option value="" disabled>{t(roleKey(null))}</option>}
                   {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
                 </select>
               ) : (
                 !m.is_super && <span className="adm-team-role-label">{t(roleKey(m.role))}</span>
               )}
-              {m.role && !isAdminRole(m.role) && stores.length > 0 && (
+              {m.role === "seller" ? (
+                <>
+                  <SellerRecordTag member={m} stores={stores} terminals={terminals} />
+                  {canEditRole(m) && (
+                    <button className="btn-xs" disabled={busy || demo} onClick={() => setLinking((l) => (l?.id === m.id ? null : { id: m.id, role: "seller", link: EMPTY_LINK }))}>
+                      <Icon name="link" size={12} /> {m.seller ? t("adm.team.seller.change") : t("adm.team.seller.link")}
+                    </button>
+                  )}
+                </>
+              ) : m.role && !isAdminRole(m.role) && stores.length > 0 && (
                 <StorePicker member={m} stores={stores} disabled={busy || demo} onSave={(ids) => changeStores(m, ids)} />
               )}
-              {!m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin") && (
+              {canRemove(m) && (
+                <button className={`btn-xs ${m.is_disabled ? "" : "warn"}`} disabled={busy || demo} onClick={() => toggleActive(m)}>
+                  <Icon name="power" size={12} /> {m.is_disabled ? t("adm.team.reactivate") : t("adm.team.deactivate")}
+                </button>
+              )}
+              {canRemove(m) && (
                 <button className="btn-xs warn" disabled={busy || demo} onClick={() => remove(m)}>
                   {t("adm.team.delete")}
+                </button>
+              )}
+              {!demo && m.id !== meId && (
+                <button className="btn-xs" aria-expanded={pwFor === m.id} onClick={() => { setPwValue(""); setPwFor((o) => (o === m.id ? null : m.id)); }}>
+                  <Icon name="lock" size={12} /> {t("adm.team.pw.open")}
+                </button>
+              )}
+              {!demo && canMakeOwner(m) && (
+                <button className="btn-xs" aria-expanded={ownerFor === m.id} title={t("adm.team.owner.help")} onClick={() => { setOwnerPw(""); setOwnerFor((o) => (o === m.id ? null : m.id)); }}>
+                  <Icon name="sparkles" size={12} /> {t("adm.team.owner.open")}
+                </button>
+              )}
+              {!demo && m.id !== meId && !m.is_disabled && (
+                <button className="btn-xs" disabled={busy} onClick={() => kickSessions(m)} title={t("adm.team.sessions.help")}>
+                  <Icon name="logout" size={12} /> {t("adm.team.sessions.kick")}
                 </button>
               )}
               {!demo && (
@@ -213,6 +448,33 @@ export default function Team() {
                 </button>
               )}
             </div>
+            {linking?.id === m.id && (
+              <div className="adm-team-profile">
+                <SellerLinkFields value={linking.link} onChange={(link) => setLinking((l) => ({ ...l, link }))} userId={m.id} sellers={sellers} stores={stores} terminals={terminals} disabled={busy || demo} />
+                <div className="adm-actions" style={{ marginTop: 10 }}>
+                  <button className="btn-sm primary" disabled={busy || demo || linkMissing(linking.link)} onClick={() => changeRole(m, "seller", linkPayload(linking.link))}>
+                    <Icon name="save" size={14} /> {t("adm.team.seller.save")}
+                  </button>
+                  <button className="btn-sm" onClick={() => setLinking(null)}>{t("adm.ord.cancel")}</button>
+                </div>
+              </div>
+            )}
+            {pwFor === m.id && (
+              <form className="adm-team-profile adm-team-pw" onSubmit={(e) => submitPassword(e, m)}>
+                <input className="adm-input" type="text" required minLength={8} autoComplete="off" aria-label={t("adm.team.pw.new")} placeholder={t("adm.team.pw.new")} value={pwValue} onChange={(e) => setPwValue(e.target.value)} />
+                <button className="btn-sm primary" disabled={busy || pwValue.length < 8}>{t("adm.team.pw.save")}</button>
+                <button type="button" className="btn-sm" onClick={() => setPwFor(null)}>{t("adm.ord.cancel")}</button>
+                <small className="muted">{t("adm.team.pw.hint", { email: m.email })}</small>
+              </form>
+            )}
+            {ownerFor === m.id && canMakeOwner(m) && (
+              <form className="adm-team-profile adm-team-pw" onSubmit={(e) => submitOwner(e, m)}>
+                <PasswordInput className="adm-input" required autoComplete="current-password" aria-label={t("adm.team.owner.password")} placeholder={t("adm.team.owner.password")} value={ownerPw} onChange={(e) => setOwnerPw(e.target.value)} />
+                <button className="btn-sm primary" disabled={busy || !ownerPw}>{t("adm.team.owner.save")}</button>
+                <button type="button" className="btn-sm" onClick={() => setOwnerFor(null)}>{t("adm.ord.cancel")}</button>
+                <small className="muted">{t("adm.team.owner.hint", { email: m.email })}</small>
+              </form>
+            )}
             {openProfile === m.id && (
               <div className="adm-team-profile">
                 <StaffProfile mode="admin" userId={m.id} onSaved={(p) => setTeam((list) => list.map((x) => (x.id === m.id ? { ...x, seller_code: p.seller_code ?? null } : x)))} />

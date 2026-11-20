@@ -1,0 +1,62 @@
+{
+  "slug": "optica-vista",
+  "identity": {
+    "name": "Optica Vista",
+    "compactName": "OPTICAVISTA",
+    "legalName": "Optica Vista LLC",
+    "tagline": {
+      "es": "Espejuelos con receta, hechos para tu vista",
+      "en": "Prescription eyeglasses, made for your eyes"
+    }
+  },
+  "seo": {
+    "title": {
+      "es": "Optica Vista — Espejuelos con receta online",
+      "en": "Optica Vista — Prescription eyeglasses online"
+    },
+    "description": {
+      "es": "Optica Vista: espejuelos con receta en Miami y online, con probador virtual y lectura automática de la receta.",
+      "en": "Optica Vista: prescription eyeglasses in Miami and online, with a virtual try-on and automatic prescription reading."
+    },
+    "socialTitle": {
+      "es": "Optica Vista",
+      "en": "Optica Vista"
+    },
+    "socialDescription": {
+      "es": "Espejuelos con receta online con probador virtual.",
+      "en": "Prescription eyeglasses online with a virtual try-on."
+    }
+  },
+  "domains": {
+    "storefront": "https://optica-vista.vercel.app",
+    "api": "https://api.d3e.llc",
+    "emailFrom": "opticavista@d3e.llc"
+  },
+  "locale": {
+    "default": "es",
+    "languages": [
+      "es",
+      "en"
+    ],
+    "timezone": "America/New_York",
+    "currency": "usd",
+    "country": "us"
+  },
+  "brand": {
+    "primary": "#0f5e66",
+    "primaryDark": "#0a3f45",
+    "accent": "#c2410c",
+    "themeColor": "#0f5e66",
+    "emailPrimary": "#0f5e66",
+    "emailAccent": "#c2410c",
+    "logo": "/logo-oficial.png",
+    "logoMark": "/logo-oficial-mark.png"
+  },
+  "supplier": {
+    "id": "capri",
+    "imageCredit": "caprioptics.com"
+  },
+  "owner": {
+    "email": "dueno@opticavista.com"
+  }
+}

@@ -2,6 +2,12 @@
 // imprimir la ficha de laboratorio y el recibo, y enviar el recibo por email
 // (documento acordado, «Recibo y ficha de laboratorio»). Los datos los da el
 // servidor (GET/POST /admin/pos/sales/:id/documents); aquí solo se maquetan.
+//
+// Tres documentos impresos: la ficha de laboratorio (carta), el recibo de rollo
+// de 80 mm (impresora térmica) y el recibo «doble» (una hoja carta apaisada con
+// copia del cliente y copia de la tienda, para una impresora normal). Los tres
+// llevan la foto de la montura: la del catálogo o la que trajo el cliente.
+import { WEEKDAYS, weekLine } from "./storeHours.js";
 import { useState } from "react";
 import qrcode from "qrcode-generator";
 import { T } from "../i18n/translations.js";
@@ -10,6 +16,11 @@ import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
 import { money } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
+import { resolveImageSized } from "../data/imageUrl.js";
+import { promoOf } from "./pricing/promo.js";
+
+/** Una impresora de rollo (térmica) se reconoce por cómo la describió el dueño en el punto de venta. */
+export const isThermalPrinter = (printer) => /thermal|t[ée]rmic|roll|80\s?mm|58\s?mm/i.test(String(printer ?? ""));
 
 /** Diccionario en un idioma fijo: el del recibo o la ficha de ese punto de venta, no el del panel. */
 const tIn = (lang) => (key, params) => {
@@ -47,13 +58,31 @@ function qrSvg(url) {
   return qr.createSvgTag({ cellSize: 3, margin: 0, scalable: true });
 }
 
+// Lines are printed at LIST price so they add up to the subtotal; the discount
+// and the tax appear once, below (same rule as the e-mailed receipt,
+// backend lib/email/pos-emails.ts). The total does not change.
 const fmtDate = (v, lang) => (v ? new Date(v).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
 const fmtRx = (v, digits = 2, sign = true) => (v === null || v === undefined ? "—" : `${sign && Number(v) > 0 ? "+" : ""}${Number(v).toFixed(digits)}`);
 const bi = (o, lang) => (o ? o[lang] || o.es || "" : "");
 
+/** Icono de montura para la caja de foto cuando no hay imagen (no es copy: es un dibujo). */
+const FRAME_ICON = `<svg class="ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="14.5" r="4"/><circle cx="17.5" cy="14.5" r="4"/><path d="M10.5 14.5h3M2.5 13.5l2.5-6.5h3M21.5 13.5l-2.5-6.5h-3"/></svg>`;
+
+/**
+ * Caja con la foto de la montura (catálogo, o la que trajo el cliente por un
+ * enlace prefirmado) o el icono de montura si no hay foto. `px` es el ancho que
+ * se le pide al almacén; el tamaño impreso lo fija la clase CSS.
+ */
+export function photoBox(line, px, alt = "") {
+  const url = line?.image_url ? resolveImageSized(line.image_url, px) : "";
+  return `<div class="ph">${url ? `<img src="${esc(url)}" alt="${esc(alt)}"/>` : FRAME_ICON}</div>`;
+}
+
 export const PRINT_CSS = `
   *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}
   .job{width:100%;max-width:7.6in;margin:0 auto;padding:.25in;page-break-after:always}
+  .kv tr.hl-photo td{background:#ffd84d!important;color:#111;border-color:#c99a00;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .kv tr.hl-photo td:first-child{font-weight:800}
   .job:last-child{page-break-after:auto}
   .jh{display:flex;justify-content:space-between;gap:12px;border-bottom:2px solid #111;padding-bottom:6px}
   .jh b{font-size:16px} .jh small{display:block;color:#333}
@@ -67,18 +96,63 @@ export const PRINT_CSS = `
   .fold{margin-top:16px;border-top:2px dashed #111;padding-top:8px;display:flex;align-items:center;justify-content:space-between;gap:12px}
   .fold .big{font-size:34px;font-weight:900;letter-spacing:.02em}
   .muted{color:#555;font-size:11px}
+  .promo s{color:#777}
+  .ph{display:flex;align-items:center;justify-content:center;border:1px solid #bbb;background:#fff;overflow:hidden;flex:0 0 auto}
+  .ph img{display:block;width:100%;height:100%;object-fit:contain}
+  .ph .ico{width:55%;height:55%}
+  .job .ph{width:45mm;height:22mm;margin:4px 0 6px}
   .rcpt{width:72mm;margin:0 auto;padding:4mm 2mm;font-size:12px}
   .rcpt .c{text-align:center} .rcpt h2{font-size:15px;margin:2px 0}
-  .rcpt table{font-size:11.5px} .rcpt td{border:0;padding:2px 0} .rcpt .r{text-align:right;white-space:nowrap}
+  .rcpt table{font-size:11.5px} .rcpt td{border:0;padding:2px 0;vertical-align:top} .rcpt .r{text-align:right;white-space:nowrap}
   .rcpt .tot td{font-weight:800;font-size:13px;border-top:1px solid #111}
   .rcpt hr{border:0;border-top:1px dashed #111;margin:6px 0}
   .rcpt .qr svg{width:28mm;height:28mm}
+  .rcpt .lp{width:30mm;padding-right:2mm} .rcpt .ph{width:28mm;height:14mm}
+  .duo{display:flex;width:100%;height:200mm;overflow:hidden;font-size:10.5px;line-height:1.3}
+  .duo .half{flex:1 1 0;min-width:0;height:100%;overflow:hidden;padding:0 4mm;display:flex;flex-direction:column}
+  .duo .cut{flex:0 0 0;border-left:1.2px dashed #777;position:relative;margin:0 1mm}
+  .duo .cut span{position:absolute;top:2mm;left:-6.5px;font-size:13px;line-height:1;color:#555;background:#fff;transform:rotate(90deg)}
+  .duo .cut small{position:absolute;bottom:2mm;left:-4px;transform:rotate(-90deg);transform-origin:left top;white-space:nowrap;font-size:8px;color:#777;background:#fff}
+  .duo .dh{display:flex;justify-content:space-between;gap:8px;border-bottom:1.5px solid #111;padding-bottom:3px}
+  .duo .dh b{font-size:13px} .duo .dh small{display:block;color:#333;font-size:9.5px}
+  .duo .dh .no{font-size:16px;font-weight:900;letter-spacing:.02em}
+  .duo .reprint{font-size:10px;padding:1px 6px;margin:3px 0}
+  .duo .who{display:flex;justify-content:space-between;gap:8px;margin:4px 0;font-size:10.5px}
+  .duo table{font-size:10px} .duo th,.duo td{border:0;border-bottom:1px solid #ddd;padding:2px 3px;vertical-align:top}
+  .duo th{background:#f0f0f0;font-size:9px;text-transform:uppercase;letter-spacing:.03em}
+  .duo .r{text-align:right;white-space:nowrap} .duo .c{text-align:center}
+  .duo .lp{width:32mm} .duo .ph{width:30mm;height:14mm}
+  .duo .sum{display:flex;gap:6mm;margin-top:4px;align-items:flex-start}
+  .duo .sum>div{flex:1 1 0;min-width:0} .duo .sum table td{border-bottom:1px dotted #ccc}
+  .duo .tot td{font-weight:800;font-size:11.5px;border-top:1px solid #111;border-bottom:0}
+  .duo .due td{font-weight:900;font-size:12px;border:0}
+  .duo .foot{margin-top:auto;padding-top:4px;border-top:1px solid #999;display:flex;align-items:flex-end;justify-content:space-between;gap:6px}
+  .duo .foot .qr svg{width:16mm;height:16mm} .duo .foot .bc svg{height:9mm;width:auto}
+  .duo .copy{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;text-align:center;margin-top:4px}
+  .duo .note{font-size:9px;color:#444;margin-top:3px}
+  .jobduo{display:flex;width:100%;height:200mm;overflow:hidden;page-break-after:always}
+  .jobduo:last-child{page-break-after:auto}
+  .jobduo .half{flex:1 1 0;min-width:0;height:100%;overflow:hidden}
+  .jobduo .job{zoom:.66;max-width:none;padding:0 .12in;page-break-after:auto}
+  .jobduo .cut{flex:0 0 0;border-left:1.2px dashed #777;position:relative;margin:0 1mm}
+  .jobduo .cut span{position:absolute;top:2mm;left:-6.5px;font-size:13px;line-height:1;color:#555;background:#fff;transform:rotate(90deg)}
+  .jobduo .cut small{position:absolute;bottom:2mm;left:-4px;transform:rotate(-90deg);transform-origin:left top;white-space:nowrap;font-size:8px;color:#777;background:#fff}
+  .job .copy{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;text-align:center;margin-top:10px}
   @page{margin:8mm}
   @media print{.noprint{display:none}}
 `;
 
-/** Ficha de laboratorio: una por línea con lentes. Sin precios ni pagos. */
-export function jobHtml(doc) {
+/** Hoja carta apaisada para el recibo doble; se añade después del CSS común, así que su @page gana. */
+export const DUO_PAGE_CSS = `@page{size:letter landscape;margin:6mm} html,body{width:100%;height:100%} body{overflow:hidden}`;
+/** La ficha doble puede ocupar varias hojas (una por línea con lentes): sin recortar el cuerpo. */
+const JOB_DUO_PAGE_CSS = `@page{size:letter landscape;margin:6mm}`;
+
+/**
+ * Ficha de laboratorio: una por línea con lentes. Sin precios ni pagos.
+ * `copyKey` (opcional) pone al pie de qué copia se trata: la ficha se imprime
+ * doble, como el recibo (jobDuoHtml).
+ */
+export function jobHtml(doc, copyKey = null) {
   const lang = doc.terminal.ticket_locale === "es" ? "es" : "en";
   const t = tIn(lang);
   const head = (tk) => `
@@ -105,7 +179,8 @@ export function jobHtml(doc) {
           <td>${e.prism == null ? "—" : `${fmtRx(e.prism, 2, false)}${e.base ? ` ${esc(e.base)}` : ""}`}</td>
           <td>${fmtRx(tk.rx?.seg_height, 2, false)}</td><td>${fmtRx(tk.rx?.[`pd_${eye}`], 2, false)}</td></tr>`;
       }).join("")}
-    </tbody></table>`;
+    </tbody></table>
+    ${tk.rx?.clinical?.dominant_eye ? `<p class="muted"><b>${esc(t("adm.va.dominant"))}:</b> ${esc(t(`adm.va.eye.${tk.rx.clinical.dominant_eye}`))}</p>` : ""}`;
   return doc.tickets.map((tk) => {
     const l = tk.line;
     const handling = l.handling === "patient_own_frame" ? t("adm.doc.job.handling.own") : t("adm.doc.job.handling.supplied");
@@ -113,7 +188,7 @@ export function jobHtml(doc) {
       ${head(tk)}
       <div class="grid2">
         <div><h4>${esc(t("adm.doc.job.overview"))}</h4><table class="kv"><tbody>
-          <tr><td>${esc(t("adm.doc.job.jobType"))}</td><td>${esc(t(`adm.doc.job.type.${tk.job_type}`))}</td></tr>
+          <tr><td>${esc(t("adm.doc.job.jobType"))}</td><td>${esc(t(`adm.doc.job.type.${tk.job_type}`))}${promoOf(l) ? ` <span class="muted">· ${esc(t("adm.pm.promoTag", { pct: promoOf(l).pct }))}</span>` : ""}</td></tr>
           <tr><td>Rx #</td><td>${esc(tk.rx?.rx_number || "—")}</td></tr>
           <tr><td>${esc(t("adm.doc.job.tray"))}</td><td><b>${esc(doc.sale.tray || "—")}</b></td></tr>
           <tr><td>${esc(t("adm.doc.job.invoice"))}</td><td>${esc(doc.sale.number)}</td></tr>
@@ -121,14 +196,31 @@ export function jobHtml(doc) {
         <h4>${esc(t("adm.doc.job.lens"))}</h4><table class="kv"><tbody>
           <tr><td>${esc(t("adm.doc.job.material"))}</td><td>${esc(bi(l.lens?.material, lang) || "—")}</td></tr>
           <tr><td>${esc(t("adm.doc.job.style"))}</td><td>${esc(bi(l.lens?.design, lang) || "—")}</td></tr>
-          <tr><td>${esc(t("adm.doc.job.intrinsic"))}</td><td>${esc(bi(l.lens?.photo, lang) || "—")}</td></tr>
+          ${/* Fotocromático = recuadro con color para que salte a la vista; en blanco cuando no lleva (dueño, 15-nov-2026). */ ""}
+          <tr class="${l.lens?.photo ? "hl-photo" : ""}"><td>${esc(t("adm.doc.job.intrinsic"))}</td><td>${l.lens?.photo ? `<b>${esc(bi(l.lens.photo, lang))}</b>` : "—"}</td></tr>
           <tr><td>${esc(t("adm.doc.job.coating"))}</td><td>${esc(bi(l.lens?.ar, lang) || "—")}</td></tr>
         </tbody></table></div>
-        <div><h4>${esc(t("adm.doc.job.frame"))}</h4><table class="kv"><tbody>
+        <div><h4>${esc(t("adm.doc.job.frame"))}</h4>
+        ${photoBox(l, 480, l.image_url ? "" : t("adm.doc.rcpt.noPhoto"))}
+        <table class="kv"><tbody>
           <tr><td>${esc(t("adm.doc.job.handling"))}</td><td><b>${esc(handling)}</b></td></tr>
           ${l.own_frame
-            ? `<tr><td>${esc(t("adm.doc.job.ownDesc"))}</td><td>${esc(l.own_frame.description || "—")}</td></tr>
+            ? `${l.own_frame.brand || l.own_frame.model || l.own_frame.eye_size != null
+                ? `<tr><td>${esc(t("adm.doc.job.maker"))}</td><td>${esc(l.own_frame.brand || "—")}</td></tr>
+                   <tr><td>${esc(t("adm.doc.job.model"))}</td><td>${esc([l.own_frame.model, l.own_frame.color].filter(Boolean).join(" · ") || "—")}</td></tr>
+                   <tr><td>${esc(t("adm.doc.job.eye"))}</td><td>${esc(l.own_frame.eye_size ?? "—")}</td></tr>
+                   <tr><td>${esc(t("adm.doc.job.bridge"))}</td><td>${esc(l.own_frame.bridge ?? "—")}</td></tr>
+                   <tr><td>${esc(t("adm.doc.job.temple"))}</td><td>${esc(l.own_frame.temple ?? "—")}</td></tr>`
+                : ""}
+               <tr><td>${esc(t("adm.doc.job.ownDesc"))}</td><td>${esc(l.own_frame.description || "—")}</td></tr>
                <tr><td>${esc(t("adm.doc.job.photo"))}</td><td>${esc(l.own_frame.has_photo ? t("adm.doc.job.photoYes") : t("adm.doc.job.photoNo"))}</td></tr>`
+            : l.frame?.off_catalog
+            ? `<tr><td>${esc(t("adm.doc.job.frameSource"))}</td><td><b>${esc(t("adm.pos.store.tag"))}</b></td></tr>
+               <tr><td>${esc(t("adm.doc.job.maker"))}</td><td>${esc(l.frame.brand || "—")}</td></tr>
+               <tr><td>${esc(t("adm.doc.job.model"))}</td><td>${esc([l.frame.model, l.frame.color].filter(Boolean).join(" · ") || "—")}</td></tr>
+               <tr><td>${esc(t("adm.doc.job.eye"))}</td><td>${esc(l.frame.eye_size ?? "—")}</td></tr>
+               <tr><td>${esc(t("adm.doc.job.bridge"))}</td><td>${esc(l.frame.bridge ?? "—")}</td></tr>
+               <tr><td>${esc(t("adm.doc.job.temple"))}</td><td>${esc(l.frame.temple ?? "—")}</td></tr>`
             : `<tr><td>${esc(t("adm.doc.job.maker"))}</td><td>${esc(l.frame?.brand || "—")}</td></tr>
                <tr><td>${esc(t("adm.doc.job.model"))}</td><td>${esc([l.frame?.model, l.variant_title].filter(Boolean).join(" · ") || "—")}</td></tr>
                <tr><td>${esc(t("adm.doc.job.frameMaterial"))}</td><td>${esc(l.frame?.material || "—")}</td></tr>
@@ -141,9 +233,47 @@ export function jobHtml(doc) {
           <div class="muted">${esc(t("adm.doc.job.fold"))} · ${esc(doc.sale.number)}</div></div>
         <div>${code128Svg(doc.sale.number)}</div>
       </div>
+      ${copyKey ? `<div class="copy">${esc(t(copyKey))}</div>` : ""}
     </section>`;
   }).join("");
 }
+
+/**
+ * Ficha de laboratorio DOBLE (decisión del dueño, 9-nov-2026), como el recibo:
+ * carta apaisada, la copia del laboratorio a la izquierda y la de la tienda a
+ * la derecha, con la línea de corte en medio. Una hoja por línea con lentes.
+ */
+export function jobDuoHtml(doc) {
+  const lang = doc.terminal.ticket_locale === "es" ? "es" : "en";
+  const t = tIn(lang);
+  return doc.tickets.map((tk) => {
+    const one = { ...doc, tickets: [tk] };
+    return `<section class="jobduo">
+      <div class="half">${jobHtml(one, "adm.doc.job.labCopy")}</div>
+      <div class="cut"><span>✂</span><small>${esc(t("adm.doc.duo.cut"))}</small></div>
+      <div class="half">${jobHtml(one, "adm.doc.job.storeCopy")}</div>
+    </section>`;
+  }).join("");
+}
+
+/** Lo que se lee de una línea en los recibos: nombre, resumen de lentes (o «solo montura») y forma de pago. */
+const lineName = (l, t) => (l.kind === "own_frame" ? `${t("adm.pos.own.tag")}${l.title ? ` (${l.title})` : ""}` : [l.title, l.variant_title].filter(Boolean).join(" · "));
+const lineLens = (l, t, lang) =>
+  l.lens ? [bi(l.lens.design, lang), bi(l.lens.material, lang), bi(l.lens.photo, lang), bi(l.lens.ar, lang)].filter(Boolean).join(" · ") : l.design_code === "frame-only" ? t("adm.doc.rcpt.frameOnly") : "";
+/**
+ * «Precio antes $X · Promoción −Y %» under a line that carries the owner's item
+ * promotion (`line.promo`, docs/PRICE-MATRIX.md). The line's price is already the
+ * discounted one; the old price is struck through. Empty when there is no promo.
+ */
+const promoHtml = (l, t, m, tag = "div") => {
+  const p = promoOf(l);
+  if (!p) return "";
+  const mark = "\u0001";
+  const text = esc(t("adm.pm.promo", { before: mark, pct: p.pct })).replace(mark, `<s>${esc(m(p.before))}</s>`);
+  return `<${tag} class="muted promo">${text}</${tag}>`;
+};
+const payMethod = (p, t, lang) => (p.method ? bi(p.method, lang) : t(`adm.pos.method.${p.method_code}`));
+const payKindKey = (p) => (p.kind === "refund" ? "adm.doc.rcpt.refund" : p.method_code === "insurance" ? "adm.doc.rcpt.insurance" : p.kind === "balance" ? "adm.doc.rcpt.balancePaid" : "adm.doc.rcpt.deposit");
 
 /** Recibo del cliente: rollo de 80 mm. Sin valores de receta (dato de salud). */
 export function receiptHtml(doc) {
@@ -151,8 +281,8 @@ export function receiptHtml(doc) {
   const t = tIn(lang);
   const m = (v) => money(v, "usd", lang);
   const tot = doc.totals;
-  const method = (p) => (p.method ? bi(p.method, lang) : t(`adm.pos.method.${p.method_code}`));
-  const kindKey = (p) => (p.kind === "refund" ? "adm.doc.rcpt.refund" : p.method_code === "insurance" ? "adm.doc.rcpt.insurance" : p.kind === "balance" ? "adm.doc.rcpt.balancePaid" : "adm.doc.rcpt.deposit");
+  const method = (p) => payMethod(p, t, lang);
+  const kindKey = payKindKey;
   return `<section class="rcpt">
     <div class="c"><h2>${esc(doc.business.name)} · ${esc(doc.store.name)}</h2>
       <div>${esc([doc.store.address, doc.store.phone, doc.terminal.code].filter(Boolean).join(" · "))}</div></div>
@@ -168,11 +298,16 @@ export function receiptHtml(doc) {
     <hr/>
     <table><tbody>
       ${doc.lines.map((l) => {
-        const name = l.kind === "own_frame" ? `${t("adm.pos.own.tag")}${l.title ? ` (${l.title})` : ""}` : [l.title, l.variant_title].filter(Boolean).join(" · ");
-        const lens = l.lens ? [bi(l.lens.design, lang), bi(l.lens.material, lang), bi(l.lens.photo, lang), bi(l.lens.ar, lang)].filter(Boolean).join(" · ") : "";
-        return `<tr><td>${esc(name)}${lens ? `<br/><span class="muted">${esc(lens)}</span>` : ""}</td><td class="r">${m(l.unit_price)}</td></tr>`;
+        const lens = lineLens(l, t, lang);
+        const qty = l.quantity > 1 ? ` ×${l.quantity}` : "";
+        return `<tr><td class="lp">${photoBox(l, 320, l.image_url ? "" : t("adm.doc.rcpt.noPhoto"))}</td>
+          <td>${esc(lineName(l, t))}${qty}${l.sku ? `<br/><span class="muted">${esc(l.sku)}</span>` : ""}${lens ? `<br/><span class="muted">${esc(lens)}</span>` : ""}${promoHtml(l, t, m)}</td>
+          <td class="r">${m(l.list)}</td></tr>`;
       }).join("")}
-      ${tot.discount > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.discount", { n: tot.discount_pct }))}</td><td class="r">−${m(tot.discount)}</td></tr>` : ""}
+    </tbody></table>
+    <table><tbody>
+      ${tot.discount > 0 || tot.tax > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.subtotal"))}</td><td class="r">${m(tot.list)}</td></tr>` : ""}
+      ${discountRows(doc, t, m)}
       ${tot.tax > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.tax"))}</td><td class="r">${m(tot.tax)}</td></tr>` : ""}
       <tr class="tot"><td>${esc(t("adm.doc.rcpt.total"))}</td><td class="r">${m(tot.total)}</td></tr>
       ${doc.payments.map((p) => `<tr><td>${esc(t(kindKey(p)))} (${esc(method(p))})</td><td class="r">${m(p.amount)}</td></tr>`).join("")}
@@ -185,56 +320,212 @@ export function receiptHtml(doc) {
     </tbody></table>
     <div class="c">${code128Svg(doc.sale.number, 36)}</div>
     <div class="c qr">${qrSvg(doc.tracking_url)}<div class="muted">${esc(doc.sale.number)} · ${esc(t("adm.doc.rcpt.scan"))}</div></div>
+    ${hoursHtml(doc, t, "muted")}
     ${doc.store.receipt_note ? `<hr/><div class="muted">${esc(doc.store.receipt_note)}</div>` : ""}
     <div class="muted c">${esc(t("adm.doc.rcpt.noRx"))}</div>
   </section>`;
 }
 
-/** Imprime en un iframe oculto: funciona aunque haya habido una petición antes (sin bloqueo de ventanas). */
-function printHtml(title, body) {
+/** Una copia del recibo doble: media hoja carta, densa, con todo lo de la venta. `copyKey` es el pie (cliente / tienda). */
+/**
+ * El descuento y la promoción, cada uno con su nombre (nunca se suman: la
+ * venta usó el mayor; backend lib/promotions.ts). Una promoción sin dinero
+ * (examen gratis, regalo) sale como «Incluye: …».
+ */
+function discountRows(doc, t, m) {
+  const tot = doc.totals;
+  const pr = doc.sale.promotion;
+  const rows = [];
+  if (tot.discount > 0) {
+    const label = pr && pr.priced ? t("adm.doc.rcpt.promotion", { name: pr.name, n: tot.discount_pct }) : t("adm.doc.rcpt.discount", { n: tot.discount_pct });
+    rows.push(`<tr><td>${esc(label)}${pr && pr.priced && pr.ref ? `<br/><span class="muted">${esc(t("adm.doc.rcpt.promoRef", { ref: pr.ref }))}</span>` : ""}</td><td class="r">−${m(tot.discount)}</td></tr>`);
+  }
+  if (pr && !pr.pct) rows.push(`<tr><td>${esc(t("adm.doc.rcpt.included", { name: pr.name }))}</td><td class="r">${pr.value_cents ? `<s>${m(pr.value_cents / 100)}</s> ${esc(t("adm.doc.rcpt.free"))}` : esc(t("adm.doc.rcpt.free"))}</td></tr>`);
+  return rows.join("");
+}
+
+/** La semana de la tienda en una línea (Tiendas → Horario); nada si no tiene horario. */
+function hoursHtml(doc, t, cls) {
+  const line = weekLine(doc.store.hours, WEEKDAYS.map((d) => t(`adm.hours.short.${d}`)), t("adm.hours.closedWord"));
+  return line ? `<div class="${cls}">${esc(t("adm.doc.rcpt.hours", { hours: line }))}</div>` : "";
+}
+
+function duoCopyHtml(doc, t, lang, copyKey) {
+  const m = (v) => money(v, "usd", lang);
+  const tot = doc.totals;
+  const method = (p) => payMethod(p, t, lang);
+  const kv = (k, v) => (v ? `<tr><td>${esc(k)}</td><td class="r">${v}</td></tr>` : "");
+  return `<div class="half">
+    <div class="dh">
+      <div><b>${esc(doc.business.name)} · ${esc(doc.store.name)}</b>
+        <small>${esc([doc.store.address, doc.store.phone].filter(Boolean).join(" · "))}</small></div>
+      <div style="text-align:right"><div class="no">${esc(doc.sale.number)}</div>
+        <small>${esc(fmtDate(doc.sale.created_at, lang))}</small>
+        <small>${esc([doc.sale.seller_code ? `${t("adm.doc.rcpt.served")}: ${doc.sale.seller_code}` : "", doc.terminal.code ? `${t("adm.doc.job.pos")}: ${doc.terminal.code}` : ""].filter(Boolean).join(" · "))}</small></div>
+    </div>
+    ${doc.print.reprint ? `<div class="reprint">${esc(t("adm.doc.reprint", { date: fmtDate(new Date().toISOString(), lang) }))}</div>` : ""}
+    ${doc.sale.status === "voided" ? `<div class="reprint">${esc(t("adm.doc.voided"))}</div>` : ""}
+    <div class="who">
+      <div><b>${esc(t("adm.doc.rcpt.customer"))}:</b> ${esc(doc.customer.name || "—")}${doc.customer.phone ? ` · ${esc(t("adm.doc.rcpt.phone"))} ${esc(doc.customer.phone)}` : ""}</div>
+      <div><b>${esc(t("adm.doc.rcpt.delivery"))}:</b> ${esc(t(doc.sale.delivery === "ship" ? "adm.pos.pay.ship" : "adm.pos.pay.pickup"))}</div>
+    </div>
+    <table><thead><tr><th class="lp"></th><th>${esc(t("adm.doc.rcpt.item"))}</th><th class="c">${esc(t("adm.doc.rcpt.qty"))}</th><th class="r">${esc(t("adm.doc.rcpt.price"))}</th></tr></thead><tbody>
+      ${doc.lines.map((l) => {
+        // The product title usually starts with the brand already ("Di Caprio 407"): do not print it twice.
+        const brand = l.frame?.brand && !String(l.title || "").toLowerCase().startsWith(String(l.frame.brand).toLowerCase()) ? l.frame.brand : "";
+        const specs = [brand, l.title, l.variant_title].filter(Boolean).join(" · ");
+        const lens = lineLens(l, t, lang);
+        return `<tr><td class="lp">${photoBox(l, 320, l.image_url ? "" : t("adm.doc.rcpt.noPhoto"))}</td>
+          <td><b>${esc(l.kind === "own_frame" ? lineName(l, t) : specs || lineName(l, t))}</b>${l.sku ? ` <span class="muted">${esc(l.sku)}</span>` : ""}${lens ? `<div class="muted">${esc(lens)}</div>` : ""}${promoHtml(l, t, m)}</td>
+          <td class="c">${l.quantity}</td><td class="r">${m(l.list)}</td></tr>`;
+      }).join("")}
+    </tbody></table>
+    <div class="sum">
+      <div><table><tbody>
+        <tr><th colspan="2">${esc(t("adm.doc.rcpt.payments"))}</th></tr>
+        ${doc.payments.map((p) => `<tr><td>${esc(t(payKindKey(p)))} · ${esc(method(p))}${p.reference ? ` <span class="muted">${esc(t("adm.doc.rcpt.ref"))} ${esc(p.reference)}</span>` : ""}<br/><span class="muted">${esc(fmtDate(p.created_at, lang))}</span></td><td class="r">${m(p.amount)}</td></tr>`).join("")}
+        ${kv(t("adm.doc.rcpt.paid"), m(tot.paid))}
+        ${tot.insurance > 0 ? kv(t("adm.doc.rcpt.insurance"), m(tot.insurance)) : ""}
+        ${kv(t("adm.doc.rcpt.promised"), esc(doc.sale.promised_on || ""))}
+        ${kv(t("adm.doc.rcpt.tray"), doc.sale.tray ? `<b>${esc(doc.sale.tray)}</b>` : "")}
+      </tbody></table></div>
+      <div><table><tbody>
+        <tr><td>${esc(t("adm.doc.rcpt.subtotal"))}</td><td class="r">${m(tot.list)}</td></tr>
+        ${discountRows(doc, t, m)}
+        ${tot.tax > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.tax"))}</td><td class="r">${m(tot.tax)}</td></tr>` : ""}
+        <tr class="tot"><td>${esc(t("adm.doc.rcpt.total"))}</td><td class="r">${m(tot.total)}</td></tr>
+        <tr class="due"><td>${esc(t("adm.doc.rcpt.balance"))}</td><td class="r">${m(tot.balance)}</td></tr>
+      </tbody></table></div>
+    </div>
+    ${hoursHtml(doc, t, "note")}
+    ${doc.store.receipt_note ? `<div class="note">${esc(doc.store.receipt_note)}</div>` : ""}
+    <div class="foot">
+      <div class="bc">${code128Svg(doc.sale.number, 30)}<div class="muted">${esc(t("adm.doc.rcpt.noRx"))}</div></div>
+      <div class="qr c">${qrSvg(doc.tracking_url)}<div class="muted">${esc(t("adm.doc.rcpt.scan"))}</div></div>
+    </div>
+    <div class="copy">${esc(t(copyKey))}</div>
+  </div>`;
+}
+
+/**
+ * Recibo «doble»: UNA hoja carta apaisada con dos copias iguales — cliente a la
+ * izquierda, tienda (archivo) a la derecha — y una línea de corte entre las dos.
+ * Para puntos de venta con impresora normal; el rollo sigue para las térmicas.
+ */
+export function receiptDuoHtml(doc) {
+  const lang = doc.terminal.receipt_locale === "en" ? "en" : "es";
+  const t = tIn(lang);
+  return `<section class="duo">
+    ${duoCopyHtml(doc, t, lang, "adm.doc.duo.customerCopy")}
+    <div class="cut"><span>✂</span><small>${esc(t("adm.doc.duo.cut"))}</small></div>
+    ${duoCopyHtml(doc, t, lang, "adm.doc.duo.storeCopy")}
+  </section>`;
+}
+
+/** Espera a que carguen (o fallen) todas las imágenes del documento, con un tope: una foto a medias se imprime en blanco. */
+function imagesSettled(doc, timeoutMs = 4000) {
+  const pending = [...doc.images].filter((img) => !img.complete);
+  if (!pending.length) return Promise.resolve();
+  return Promise.race([
+    Promise.all(pending.map((img) => new Promise((resolve) => { img.addEventListener("load", resolve, { once: true }); img.addEventListener("error", resolve, { once: true }); }))),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
+/**
+ * Imprime en un iframe oculto: funciona aunque haya habido una petición antes
+ * (sin bloqueo de ventanas). No llama a print() hasta que las fotos están
+ * cargadas (o pasan 4 s). `extraCss` va después del CSS común (p. ej. el @page
+ * apaisado del recibo doble).
+ */
+async function printHtml(title, body, extraCss = "") {
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
   document.body.appendChild(frame);
   const d = frame.contentDocument;
   d.open();
-  d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PRINT_CSS}</style></head><body>${body}</body></html>`);
+  d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PRINT_CSS}${extraCss}</style></head><body>${body}</body></html>`);
   d.close();
-  setTimeout(() => {
-    frame.contentWindow.focus();
-    frame.contentWindow.print();
-    setTimeout(() => frame.remove(), 60000);
-  }, 250);
+  await imagesSettled(d);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  frame.contentWindow.focus();
+  frame.contentWindow.print();
+  setTimeout(() => frame.remove(), 60000);
 }
 
-export default function SaleDocuments({ saleId, compact = false }) {
+/**
+ * `printer`: cómo describió el dueño la impresora del punto de venta (campo
+ * `printer` del terminal). Con una térmica, el recibo principal es el rollo; con
+ * cualquier otra (o sin dato), el recibo doble en carta, y el rollo queda como
+ * botón secundario.
+ */
+/**
+ * Recién cobrada la venta, la pantalla todavía tiene la foto que se tomó de la
+ * montura escrita a mano (del paciente o fuera de catálogo). Si el servidor no
+ * la devolvió (no la pudo guardar), se pone esa en su lugar: el recibo y el
+ * ticket de laboratorio llevan foto igual que con una montura del catálogo.
+ * `localPhotos` va en el orden de las líneas de la venta; una venta lleva una
+ * sola montura (`MAX_LINES`), así que se emparejan por orden entre las escritas.
+ */
+function withLocalPhotos(doc, localPhotos) {
+  const photos = (localPhotos || []).filter(Boolean);
+  if (!photos.length) return doc;
+  const typed = (l) => l && (l.kind === "own_frame" || l.frame?.off_catalog);
+  const fill = (list) => {
+    let i = 0;
+    return list.map((l) => {
+      if (!typed(l)) return l;
+      const photo = photos[i++];
+      if (l.image_url || !photo) return l;
+      return { ...l, image_url: photo, ...(l.own_frame ? { own_frame: { ...l.own_frame, has_photo: true } } : {}) };
+    });
+  };
+  return {
+    ...doc,
+    ...(doc.lines ? { lines: fill(doc.lines) } : {}),
+    ...(doc.tickets ? { tickets: (() => { const lines = fill(doc.tickets.map((tk) => tk.line)); return doc.tickets.map((tk, k) => ({ ...tk, line: lines[k] })); })() } : {}),
+  };
+}
+
+export default function SaleDocuments({ saleId, compact = false, printer = null, localPhotos = null, rxPending = false }) {
   const { t } = useLang();
   const { toast } = useFeedback();
   const [busy, setBusy] = useState("");
   const [photo, setPhoto] = useState(null);
+  const [emailDetail, setEmailDetail] = useState(false);
+  const thermal = isThermalPrinter(printer);
 
   const print = async (kind) => {
     setBusy(kind);
     try {
-      const { document: doc } = await adminFetch(`/admin/pos/sales/${encodeURIComponent(saleId)}/documents`, { method: "POST", body: { kind } });
+      const { document: served } = await adminFetch(`/admin/pos/sales/${encodeURIComponent(saleId)}/documents`, { method: "POST", body: { kind } });
+      const doc = withLocalPhotos(served, localPhotos);
       if (kind === "job") {
         if (!doc.tickets?.length) { toast({ tone: "info", title: t("adm.doc.noLenses") }); return; }
         const own = doc.tickets.find((tk) => tk.line.own_frame?.photo_url);
         setPhoto(own ? own.line.own_frame.photo_url : null);
-        printHtml(`${doc.sale.number} · job`, jobHtml(doc));
+        await printHtml(`${doc.sale.number} · job`, jobDuoHtml(doc), JOB_DUO_PAGE_CSS);
+      } else if (kind === "receipt_duo") {
+        await printHtml(`${doc.sale.number} · receipt`, receiptDuoHtml(doc), DUO_PAGE_CSS);
       } else {
-        printHtml(`${doc.sale.number} · receipt`, receiptHtml(doc));
+        await printHtml(`${doc.sale.number} · receipt`, receiptHtml(doc));
       }
     } catch (e) {
       toast({ tone: "error", title: t(e.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic") });
     } finally { setBusy(""); }
   };
 
+  const receiptButtons = thermal
+    ? [["receipt", "adm.doc.printReceipt"], ["receipt_duo", "adm.doc.printReceiptDuo"]]
+    : [["receipt_duo", "adm.doc.printReceiptDuo"], ["receipt", "adm.doc.printReceiptRoll"]];
+
   const send = async () => {
     setBusy("email");
     try {
-      const r = await adminFetch(`/admin/pos/sales/${encodeURIComponent(saleId)}/receipt`, { method: "POST", body: {} });
-      toast({ tone: "success", title: t("adm.doc.sent", { to: r.to }) });
+      const r = await adminFetch(`/admin/pos/sales/${encodeURIComponent(saleId)}/receipt`, { method: "POST", body: { receipt_detail: emailDetail } });
+      setEmailDetail(false);
+      toast({ tone: "success", title: t(r.detailed ? "adm.doc.sentDetail" : "adm.doc.sent", { to: r.to }) });
     } catch (e) {
       toast({ tone: "error", title: t(e.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic") });
     } finally { setBusy(""); }
@@ -242,9 +533,14 @@ export default function SaleDocuments({ saleId, compact = false }) {
 
   return (
     <div className={`pos-docs ${compact ? "compact" : ""}`}>
-      <button type="button" className="btn-sm" disabled={Boolean(busy)} onClick={() => print("job")}><Icon name="printer" size={14} /> {busy === "job" ? "…" : t("adm.doc.printJob")}</button>
-      <button type="button" className="btn-sm" disabled={Boolean(busy)} onClick={() => print("receipt")}><Icon name="receipt" size={14} /> {busy === "receipt" ? "…" : t("adm.doc.printReceipt")}</button>
+      {/* Sin graduación la orden de laboratorio no sale (backend lib/rx-pending.ts): se dice por qué. */}
+      <button type="button" className="btn-sm" disabled={Boolean(busy) || rxPending} title={rxPending ? t("adm.doc.jobRxPending") : undefined} onClick={() => print("job")}><Icon name="printer" size={14} /> {busy === "job" ? "…" : t("adm.doc.printJob")}</button>
+      {receiptButtons.map(([kind, label]) => (
+        <button key={kind} type="button" className="btn-sm" disabled={Boolean(busy)} onClick={() => print(kind)}><Icon name="receipt" size={14} /> {busy === kind ? "…" : t(label)}</button>
+      ))}
       <button type="button" className="btn-sm" disabled={Boolean(busy)} onClick={send}><Icon name="mail" size={14} /> {busy === "email" ? "…" : t("adm.doc.emailReceipt")}</button>
+      <label className="pos-check" title={t("adm.pos.pay.notifyDetailOn")}><input type="checkbox" checked={emailDetail} disabled={Boolean(busy)} onChange={(e) => setEmailDetail(e.target.checked)} /> {t("adm.doc.emailDetail")}</label>
+      {rxPending && <small className="pos-docs-note">{t("adm.doc.jobRxPending")}</small>}
       {photo && <a className="btn-sm" href={photo} target="_blank" rel="noreferrer"><Icon name="camera" size={14} /> {t("adm.doc.ownPhoto")}</a>}
     </div>
   );

@@ -41,6 +41,9 @@ from pydantic import BaseModel, Field  # noqa: E402
 
 from services.vision_measure.config import (  # noqa: E402
     MissingApiKeyError,
+    default_image_engine,
+    default_model_for,
+    default_provider_id,
     describe_providers,
     get_provider,
     load_env_files,
@@ -61,8 +64,12 @@ from services.vision_measure.version import banner, describe_build  # noqa: E402
 
 load_env_files()
 
+# The optician this deployment serves. Same variable as the backend (they share a
+# container in production); the default keeps the name this service always had.
+STORE_NAME = os.environ.get("STORE_NAME", "").strip() or "RUBILENS"
+
 app = FastAPI(
-    title="RUBILENS · Medición óptica multimodal",
+    title=f"{STORE_NAME} · Medición óptica multimodal",
     version="1.0.0",
     description=(
         "Combina una foto frontal del paciente con la foto de una montura y devuelve "
@@ -96,16 +103,26 @@ class MeasureRequest(BaseModel):
             "el prompt como UN MISMO producto. Vacío o ausente usa glassesImage."
         ),
     )
-    provider: str = Field("openai", description="Identificador del proveedor multimodal")
-    model: Optional[str] = Field(None, description="Modelo concreto; vacío usa el de por defecto")
+    provider: Optional[str] = Field(
+        None,
+        description="Identificador del proveedor multimodal; vacío usa VISION_DEFAULT_PROVIDER",
+    )
+    model: Optional[str] = Field(
+        None, description="Modelo concreto; vacío usa VISION_<PROVEEDOR>_MODEL o el del registro"
+    )
     apiKey: Optional[str] = Field(None, description="Clave introducida en la UI; vacío usa el entorno")
     strategy: str = Field("B", description="'A', 'B' o 'AB' para ejecutar ambas")
     context: Optional[Dict[str, Any]] = Field(None, description="Contexto medido localmente (propuesta B)")
     lang: str = Field("es", description="Idioma de los textos libres devueltos")
     includeRaw: bool = Field(True, description="Incluir la respuesta en bruto del modelo")
     renderTryOn: bool = Field(True, description="Devolver también la imagen del paciente con la montura puesta")
-    imageEngine: str = Field("local", description="'local' o un proveedor con salida de imagen")
-    imageModel: Optional[str] = Field(None, description="Modelo de imagen concreto")
+    imageEngine: Optional[str] = Field(
+        None,
+        description="'local' o un proveedor con salida de imagen; vacío usa VISION_DEFAULT_IMAGE_ENGINE",
+    )
+    imageModel: Optional[str] = Field(
+        None, description="Modelo de imagen concreto; vacío usa VISION_<PROVEEDOR>_IMAGE_MODEL"
+    )
     imageApiKey: Optional[str] = Field(None, description="Clave del motor de imagen; vacío usa la del proveedor de medida")
     renderProfile: bool = Field(False, description="Añadir una vista de perfil del paciente con la montura")
     extraInstructions: Optional[str] = Field(None, description="Notas del óptico añadidas al system prompt")
@@ -213,6 +230,9 @@ def providers(lang: str = "es") -> Dict[str, Any]:
     """Catalogue for the panel: vendors, default models, and which keys are configured."""
     return {
         "providers": describe_providers(),
+        # What a request that names no provider / engine gets (VISION_DEFAULT_*)
+        "defaultProvider": default_provider_id(),
+        "defaultImageEngine": default_image_engine(),
         "strategies": describe_strategies(lang),
         "imageEngines": describe_image_engines(),
         # Lets the panel notice it is talking to a service older than itself
@@ -478,7 +498,7 @@ def _summarize_for_notification(
     subject = "Tu medición ya está lista" if is_es else "Your measurement is ready"
     body = "\n".join(
         [
-            "Tu medición de RUBILENS ya está lista:" if is_es else "Your RUBILENS measurement is ready:",
+            f"Tu medición de {STORE_NAME} ya está lista:" if is_es else f"Your {STORE_NAME} measurement is ready:",
             "",
             *(lines or (["(sin valores numéricos en esta propuesta)"] if is_es else ["(no numeric values in this proposal)"])),
             "",
@@ -723,7 +743,7 @@ def models(request: ModelsRequest) -> JSONResponse:
             "ok": True,
             "provider": spec.id,
             "providerLabel": spec.label,
-            "defaultModel": spec.default_model,
+            "defaultModel": default_model_for(spec),
             "models": found,
         },
     )
@@ -740,6 +760,18 @@ def main() -> None:
     print(banner(), flush=True)
     print(
         f"[VISION] Servicio de medición multimodal en http://{host}:{port}/api/health",
+        flush=True,
+    )
+    # The models that answer when a request leaves them empty (the storefront does), so
+    # "which model is production using?" is answered by the log instead of by the code.
+    default_spec = get_provider(default_provider_id())
+    image_engine = default_image_engine()
+    image_model = next(
+        (e["defaultModel"] for e in describe_image_engines() if e["id"] == image_engine), None
+    )
+    print(
+        f"[VISION] Por defecto: medición {default_spec.id} / {default_model_for(default_spec)}"
+        f" · imagen {image_engine}" + (f" / {image_model}" if image_model else ""),
         flush=True,
     )
     uvicorn.run(app, host=host, port=port, log_level="info")

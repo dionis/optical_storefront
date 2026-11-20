@@ -5,6 +5,7 @@ import type {
   LensIndex,
 } from "@eyewear/shared";
 
+
 /**
  * Fulfillability ranges (configurable via env with these defaults).
  * Values are inclusive bounds.
@@ -22,8 +23,14 @@ export interface RxRanges {
   pd_single_max: number;
   pd_dual_min: number;
   pd_dual_max: number;
+  prism_min: number;
+  prism_max: number;
+  seg_height_min: number;
+  seg_height_max: number;
 }
 
+// Same rules as the point of sale (apps/capri-storefront/src/admin/rxRules.js):
+// change one side and change the other.
 export const DEFAULT_RX_RANGES: RxRanges = {
   sph_min: -20.0,
   sph_max: 12.0,
@@ -37,7 +44,14 @@ export const DEFAULT_RX_RANGES: RxRanges = {
   pd_single_max: 80,
   pd_dual_min: 25,
   pd_dual_max: 40,
+  prism_min: 0,
+  prism_max: 10,
+  seg_height_min: 10,
+  seg_height_max: 35,
 };
+
+/** Prism base directions the lab accepts, as stored in `base`. */
+export const PRISM_BASES = ["up", "down", "in", "out"] as const;
 
 /**
  * Validates a prescription and returns fulfillability, warnings,
@@ -53,6 +67,7 @@ export function validatePrescription(
   context: { usage_type?: string; eye_size?: number } = {}
 ): PrescriptionValidationResult {
   const warnings: PrescriptionWarning[] = [];
+  const warn = (w: PrescriptionWarning) => warnings.push(w);
   let fulfillable = true;
 
   const eyes = [
@@ -118,6 +133,33 @@ export function validatePrescription(
         fulfillable = false;
       }
     }
+
+    // Prism is optional; when it is there it needs a base direction.
+    const prism = data.prism ?? null;
+    if (prism !== null) {
+      if (prism < ranges.prism_min || prism > ranges.prism_max) {
+        warn({
+          code: "prism_out_of_range",
+          eye,
+          params: { value: prism, min: ranges.prism_min, max: ranges.prism_max },
+        });
+        fulfillable = false;
+      }
+      if (prism > 0 && !(PRISM_BASES as readonly string[]).includes(data.base ?? "")) {
+        warn({ code: "prism_base_required", eye });
+        fulfillable = false;
+      }
+    }
+  }
+
+  // Fitting height (multifocals): the lab cuts the corridor to it.
+  const seg = rx.seg_height ?? null;
+  if (seg !== null && (seg < ranges.seg_height_min || seg > ranges.seg_height_max)) {
+    warn({
+      code: "seg_height_out_of_range",
+      params: { value: seg, min: ranges.seg_height_min, max: ranges.seg_height_max },
+    });
+    fulfillable = false;
   }
 
   // ADD required for progressive

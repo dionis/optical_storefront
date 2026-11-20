@@ -4,6 +4,8 @@ import {
 } from "@medusajs/framework/http";
 import { applyReport, getAsset } from "../../../../lib/frame-media-writes";
 import { isRetryable, MAX_ATTEMPTS } from "../../../../lib/frame-media";
+import { isNoCreditError } from "../../../../lib/ai-usage";
+import { recordAiUsage } from "../../../../lib/ai-usage-data";
 import type { ReportFrameMediaSchema } from "../middlewares";
 
 /**
@@ -88,6 +90,32 @@ export async function POST(
         timestamp: new Date().toISOString(),
       })
     );
+  }
+
+  // «Consumo IA»: the receipt's own figure, kept as reported. One event per
+  // (asset, run, status) so a retried report is not counted twice.
+  const activity = current["kind"] === "video" ? "media_video" : "media_views";
+  if (body.cost_usd) {
+    void recordAiUsage(req.scope, {
+      provider: "gemini",
+      model: body.provider_model ?? null,
+      activity,
+      input_tokens: body.tokens_prompt ?? null,
+      output_tokens: body.tokens_output ?? null,
+      cost_usd: body.cost_usd,
+      rate_note: body.billing_unit ? `receipt (${body.billing_unit})` : "receipt",
+      event_key: `media:${body.id}:${body.run_id}:${body.status}`,
+      ref_id: body.id,
+    });
+  } else if (failed && isNoCreditError(`${body.reason ?? ""} ${body.note ?? ""}`)) {
+    void recordAiUsage(req.scope, {
+      provider: "gemini",
+      model: body.provider_model ?? null,
+      activity,
+      status: "no_credit",
+      event_key: `media:${body.id}:${body.run_id}:no_credit`,
+      ref_id: body.id,
+    });
   }
 
   res.json({ id: body.id, status: body.status, attempts: nextAttempts });

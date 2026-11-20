@@ -95,9 +95,16 @@ function DangerZone({ t, lang, demo }) {
  */
 const GROUPS = [
   ["secrets", (k) => k.startsWith("secret.") || k.startsWith("storage.")],
-  ["access", (k) => k.startsWith("auth.") || k.startsWith("cors.") || k.startsWith("urls.") || k.startsWith("node_env.") || k.startsWith("security.")],
+  // `db.` (migrations applied at boot) lives with the server's access checks:
+  // without a matcher the row was silently dropped and a failed migration
+  // never showed up here.
+  ["access", (k) => k.startsWith("auth.") || k.startsWith("cors.") || k.startsWith("urls.") || k.startsWith("node_env.") || k.startsWith("security.") || k.startsWith("db.") || k.startsWith("owner.")],
   ["payments", (k) => k.startsWith("payments.")],
   ["services", (k) => k.startsWith("notifications.") || k.startsWith("sheet.") || k.startsWith("ocr.")],
+  // Perfil, dueño explícito y puesta en marcha (multi-óptica): salen de la base de datos.
+  ["tenant", (k) => k.startsWith("tenant.")],
+  // La tienda online sobre este mismo backend (lib/web-channel.ts): dominios, marca, clave, cobro, envío y último pedido.
+  ["web", (k) => k.startsWith("web.")],
 ];
 
 export default function Security() {
@@ -168,7 +175,7 @@ export default function Security() {
                       <span className="adm-sec-mark" aria-hidden="true"><Icon name={c.ok ? "check" : "close"} size={15} /></span>
                       <span className="adm-sec-main">
                         <b>{label(c.key)}</b>
-                        {c.detail ? <small className="muted"> · {c.detail}</small> : null}
+                        {c.detail ? <small className="muted"> · {c.key === "web.last_order" && c.detail === "0" ? t("adm.sec.web.noOrders") : c.detail}</small> : null}
                         {!c.ok && hint(c.key) ? <small className="adm-sec-hint">{hint(c.key)}</small> : null}
                       </span>
                     </li>

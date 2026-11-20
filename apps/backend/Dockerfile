@@ -14,7 +14,11 @@ COPY packages/shared/package.json packages/shared/package.json
 COPY apps/backend/package.json apps/backend/package.json
 
 FROM manifests AS deps
-RUN pnpm install --frozen-lockfile
+# NODE_ENV forced to development for THIS install only: Coolify passes every
+# env var marked "Available at Buildtime" as a build arg, and NODE_ENV=production
+# here makes pnpm skip devDependencies — TypeScript included, so the build stage
+# dies with `tsc: not found`. The runner stage below sets production itself.
+RUN NODE_ENV=development pnpm install --frozen-lockfile
 
 FROM deps AS build
 # tsconfig.base.json lives at the repo root and is extended by both
@@ -77,7 +81,9 @@ WORKDIR /app/vision-measure
 # --no-install-project mirrors [tool.uv] package = false in that pyproject.toml
 # — vision_api.py resolves its own repo root at runtime and needs no install
 # step for "services" itself, only its third-party dependencies.
-RUN uv sync --frozen --no-install-project --no-dev
+# The cache is only needed while installing: cleaned in the same layer so the
+# image ships no /root/.cache/uv (smaller, and nothing for uv to touch at runtime).
+RUN uv sync --frozen --no-install-project --no-dev && uv cache clean
 COPY apps/vision-measure/services /app/vision-measure/services
 WORKDIR /app
 

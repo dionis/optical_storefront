@@ -2,6 +2,23 @@ import { loadEnv, defineConfig } from "@medusajs/framework/utils";
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
+// Storage keys pasted with quotes or half of the `<key>` template (`3fe…04>`)
+// fail every upload with a bare 403 that names nothing. Real keys never contain
+// these characters, so trim them once here, where both this file and
+// src/lib/s3.ts read the same process.env. The scraper does the same
+// (`_env_secret` in apps/scraper/scraper/config.py).
+for (const name of ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]) {
+  const raw = process.env[name]?.trim();
+  if (!raw || (raw.startsWith("<") && raw.endsWith(">"))) continue;
+  const cleaned = raw.replace(/^["'`<>]+|["'`<>]+$/g, "").trim();
+  if (cleaned !== process.env[name]) {
+    if (cleaned !== raw) {
+      console.warn(`[file] ${name} had quotes or '<'/'>' at its ends — trimmed. Fix the value where it is set.`);
+    }
+    process.env[name] = cleaned;
+  }
+}
+
 // The S3 provider throws from its constructor when credentials are absent,
 // which takes the whole server down at boot rather than degrading. Register it
 // only when it can actually work, so a deployment without R2 still starts.
@@ -303,6 +320,10 @@ export default defineConfig({
     {
       resolve: "./src/modules/store-pricing",
     },
+    // Surtido por tienda: marcas/modelos que una tienda NO expone (por defecto, todo). Configuración.
+    {
+      resolve: "./src/modules/store-assortment",
+    },
     // Punto de venta: formas de pago (configuración), ventas y sus pagos (datos
     // de pedido, se purgan con los pedidos) y el contador de venta por tienda.
     {
@@ -324,6 +345,18 @@ export default defineConfig({
     // Costos fijos, variables y compartidos por tienda (E13). Configuración, nunca se purga.
     {
       resolve: "./src/modules/store-cost",
+    },
+    // Corridas del scraper de catálogo (mensual y a demanda) y su programación. Configuración e historial, nunca se purga.
+    {
+      resolve: "./src/modules/catalog-sync",
+    },
+    // Consumo de IA por actividad, recargas del dueño y alertas de saldo bajo. Historial y configuración, nunca se purga.
+    {
+      resolve: "./src/modules/ai-usage",
+    },
+    // Perfil de la óptica que edita el dueño y quién es el dueño (multi-tenant). Configuración, nunca se purga.
+    {
+      resolve: "./src/modules/tenant-profile",
     },
   ],
 });

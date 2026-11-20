@@ -5,10 +5,59 @@
  * Every validator returns a reason code (the panel shows
  * `adm.err.pos.<reason>`) or the cleaned value — never prose.
  */
+import { cleanClinical, type Clinical } from "./visual-acuity";
+import { FIELD_LIMITS, isValidEmail, isValidName, isValidPhone, isValidUsZip } from "./field-rules";
+import { parseLensFinish, type LensFinish } from "./lens-finish";
 
 /** `Op2-000147`: the store's code and its own six-digit sequence. */
 export function saleNumber(storeCode: string, seq: number): string {
   return `${storeCode}-${String(seq).padStart(6, "0")}`;
+}
+
+/**
+ * Calendar date (`YYYY-MM-DD`) of an instant *in the store's timezone*.
+ *
+ * The server runs in UTC, so `date.toISOString().slice(0, 10)` is already
+ * "tomorrow" from 6–7 pm in Texas: a sale made on the evening of the 4th got
+ * promised and numbered as if it were the 5th. Every date the customer or the
+ * lab reads must go through here with the tenant's timezone.
+ */
+export function localDateISO(at: Date, timeZone: string): string {
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  } catch {
+    // A misspelt GSHEET_TIMEZONE must not stop every sale: UTC, as before.
+    fmt = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" });
+  }
+  const parts = fmt.formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/** Calendar year of an instant in the store's timezone (sequence numbers that reset yearly). */
+export function localYear(at: Date, timeZone: string): number {
+  return Number(localDateISO(at, timeZone).slice(0, 4));
+}
+
+/**
+ * Date the lab promises, `businessDays` business days after the sale, counted
+ * on the store's calendar (not the server's). Weekends are skipped; holidays
+ * are not (no calendar is configured — same rule as the web's
+ * `addBusinessDays` in order-status.ts). Zero days = the store's date of the sale.
+ */
+export function promisedDate(saleAt: Date, timeZone: string, businessDays: number): string {
+  // Anchor at noon UTC of the store's local date so adding whole days can
+  // never slip across midnight into another calendar day.
+  const [y, m, d] = localDateISO(saleAt, timeZone).split("-").map(Number);
+  const out = new Date(Date.UTC(y, m - 1, d, 12));
+  let left = businessDays;
+  while (left > 0) {
+    out.setUTCDate(out.getUTCDate() + 1);
+    const dow = out.getUTCDay();
+    if (dow !== 0 && dow !== 6) left -= 1;
+  }
+  return out.toISOString().slice(0, 10);
 }
 
 /** Codes of the seeded methods; anything else was added by the owner. */
@@ -34,6 +83,122 @@ export function sellableStores<T extends { id: string; is_active: boolean }>(
   return stores.filter((s) => s.is_active && canSellAt(scope, s.id));
 }
 
+/** A catalog variant's codes, as the frame search reads them. */
+export interface VariantCodes {
+  id: string;
+  product_id: string;
+  sku?: string | null;
+  barcode?: string | null;
+  ean?: string | null;
+  upc?: string | null;
+}
+
+/**
+ * Frames found by code (UPC/SKU on the tag, barcode, EAN): the products in
+ * order — an exact code (what a scanner sends) before a partial one (what a
+ * seller types from the tag) — and, per product, the colours whose code
+ * matched, exact first. Case-insensitive.
+ */
+export function rankCodeMatches(variants: VariantCodes[], term: string): { productIds: string[]; matched: Map<string, string[]> } {
+  const q = term.trim().toLowerCase();
+  const scored: Array<{ v: VariantCodes; exact: boolean }> = [];
+  for (const v of variants) {
+    const codes = [v.sku, v.barcode, v.ean, v.upc].filter((c): c is string => Boolean(c)).map((c) => c.toLowerCase());
+    if (codes.some((c) => c === q)) scored.push({ v, exact: true });
+    else if (q && codes.some((c) => c.includes(q))) scored.push({ v, exact: false });
+  }
+  scored.sort((a, b) => Number(b.exact) - Number(a.exact));
+  const productIds: string[] = [];
+  const matched = new Map<string, string[]>();
+  for (const { v } of scored) {
+    if (!matched.has(v.product_id)) {
+      matched.set(v.product_id, []);
+      productIds.push(v.product_id);
+    }
+    const list = matched.get(v.product_id)!;
+    if (!list.includes(v.id)) list.push(v.id);
+  }
+  return { productIds, matched };
+}
+
+/** How much a till has been used: what stops it from being deleted or deactivated. */
+export interface TerminalUsage {
+  sales: number;
+  cash_sessions: number;
+  /** Cash register open right now on this till. */
+  open_cash: number;
+  approvals: number;
+  /** Seller records assigned to this till (any state) and, of them, the active ones. */
+  sellers: number;
+  active_sellers: number;
+}
+
+export const EMPTY_TERMINAL_USAGE: TerminalUsage = { sales: 0, cash_sessions: 0, open_cash: 0, approvals: 0, sellers: 0, active_sellers: 0 };
+
+export type TerminalChangeReason = "last_terminal" | "terminal_in_use" | "terminal_has_sellers" | "terminal_cash_open";
+
+/**
+ * A till can be DELETED only if nothing ever pointed at it — sales, registers
+ * and approvals keep its id forever, and so does a seller record — and the
+ * store keeps at least one other till (every store sells from one).
+ * `siblings` = the store's live tills, this one included.
+ */
+export function terminalDeleteProblem(
+  terminal: { id: string },
+  siblings: Array<{ id: string; is_active: boolean }>,
+  usage: TerminalUsage
+): TerminalChangeReason | null {
+  if (!siblings.some((s) => s.id !== terminal.id)) return "last_terminal";
+  if (usage.sellers > 0) return "terminal_has_sellers";
+  if (usage.sales + usage.cash_sessions + usage.approvals > 0) return "terminal_in_use";
+  return null;
+}
+
+/**
+ * A till can be DEACTIVATED unless it is the store's last active one, an
+ * active seller sells from it (they would be locked out), or its register is
+ * still open (close it first, so the cash is counted).
+ */
+export function terminalDeactivateProblem(
+  terminal: { id: string },
+  siblings: Array<{ id: string; is_active: boolean }>,
+  usage: TerminalUsage
+): TerminalChangeReason | null {
+  if (!siblings.some((s) => s.id !== terminal.id && s.is_active)) return "last_terminal";
+  if (usage.active_sellers > 0) return "terminal_has_sellers";
+  if (usage.open_cash > 0) return "terminal_cash_open";
+  return null;
+}
+
+/** The seller record behind a user with the `seller` role (StaffScope.seller). */
+export interface CounterSeller {
+  id: string;
+  code: string;
+  active: boolean;
+  establishment_id: string | null;
+  terminal_id: string | null;
+}
+
+export type SellerTillReason = "seller_not_linked" | "seller_inactive" | "seller_wrong_till";
+
+/**
+ * A user with the `seller` role sells only as their seller record says: that
+ * record active, from its store and its one till. Other roles are not bound to
+ * a till (a manager covers whichever is free). Null = may sell there.
+ */
+export function sellerTillProblem(
+  scope: { is_admin: boolean; role: string | null; seller?: CounterSeller | null },
+  establishmentId: string | null,
+  terminalId: string | null
+): SellerTillReason | null {
+  if (scope.is_admin || scope.role !== "seller") return null;
+  const s = scope.seller;
+  if (!s) return "seller_not_linked";
+  if (!s.active || !s.establishment_id || !s.terminal_id) return "seller_inactive";
+  if (establishmentId !== s.establishment_id || terminalId !== s.terminal_id) return "seller_wrong_till";
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Customer
 // ---------------------------------------------------------------------------
@@ -54,51 +219,80 @@ export interface PosCustomerInput {
 }
 
 export interface PosCustomer {
+  /** "" when not given yet (lenient sale: completed later from the sale, see `missingCustomerData`). */
   first_name: string;
   last_name: string;
+  /** "" when the patient gave none (optional at the counter). */
   email: string;
+  /** "" when not given yet (lenient sale). */
   phone: string;
-  /** YYYY-MM-DD */
-  birth_date: string;
+  /** YYYY-MM-DD, or null: the counter only requires the contact data (owner's decision, same rule as `customerProblems` in the panel). */
+  birth_date: string | null;
   /** Only for shipping; optional (owner's decision). */
   address: { address_1: string; city: string; province: string | null; postal_code: string; country_code: string } | null;
 }
 
 const text = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
- * The customer data the owner asked for: full name, email, phone and birth
- * date, required; the address only when the glasses are shipped.
+ * The customer data the owner asked for: full name and phone, required; the
+ * EMAIL is optional at the counter (owner, 11-nov-2026: «solo es obligatorio
+ * el email para la tienda online») — validated when given, "" when not — and
+ * required only with `requireEmail` (a sale made in THE online store, whose
+ * receipts and stage notices travel by mail); the birth date only validated when given (the panel treats it as
+ * optional — `customerProblems` in src/data/fieldRules.js — and both sides
+ * must agree, or the sale fails at the very last step); the address only
+ * when the glasses are shipped.
  */
-export function cleanCustomer(input: PosCustomerInput | null | undefined, now = new Date()): { reason: string } | { customer: PosCustomer } {
+export function cleanCustomer(
+  input: PosCustomerInput | null | undefined,
+  now = new Date(),
+  timeZone = "UTC",
+  opts: { requireEmail?: boolean; lenient?: boolean } = {}
+): { reason: string } | { customer: PosCustomer } {
   const c = input ?? {};
-  const first_name = text(c.first_name, 80);
-  const last_name = text(c.last_name, 80);
-  if (!first_name || !last_name) return { reason: "customer_name" };
+  // Longer than allowed is refused, not cut: a silently shortened email or phone is a wrong one.
+  const first_name = text(c.first_name, FIELD_LIMITS.name + 1);
+  const last_name = text(c.last_name, FIELD_LIMITS.name + 1);
+  // `lenient` (the till and the sale's correction, owner 17-nov-2026: «se debe
+  // poder registrar la venta aunque falten datos porque luego se puede editar»):
+  // a name or phone NOT typed is allowed and recorded as missing; one typed
+  // wrong is still refused. At least the name or the phone, or nobody could
+  // find the sale again.
+  const nameOk = (v: string) => (opts.lenient && !v) || isValidName(v);
+  if (!nameOk(first_name) || !nameOk(last_name)) return { reason: "customer_name" };
 
-  const email = text(c.email, 200).toLowerCase();
-  if (!EMAIL.test(email)) return { reason: "customer_email" };
+  const email = text(c.email, FIELD_LIMITS.email + 1).toLowerCase();
+  // Optional: a patient without email is a patient. A typed one must be a real address.
+  if (email ? !isValidEmail(email) : opts.requireEmail) return { reason: "customer_email" };
 
-  const phone = text(c.phone, 30);
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length < 7 || digits.length > 15) return { reason: "customer_phone" };
+  const phone = text(c.phone, FIELD_LIMITS.phone + 1);
+  if (!((opts.lenient && !phone) || isValidPhone(phone))) return { reason: "customer_phone" };
+  if (opts.lenient && !first_name && !phone) return { reason: "customer_identity" };
 
-  const birth_date = text(c.birth_date, 10);
-  const born = /^\d{4}-\d{2}-\d{2}$/.test(birth_date) ? new Date(`${birth_date}T00:00:00Z`) : null;
-  if (!born || Number.isNaN(born.getTime()) || born.toISOString().slice(0, 10) !== birth_date) {
-    return { reason: "customer_birth_date" };
+  const birthText = text(c.birth_date, 10);
+  let birth_date: string | null = null;
+  if (birthText) {
+    const born = /^\d{4}-\d{2}-\d{2}$/.test(birthText) ? new Date(`${birthText}T00:00:00Z`) : null;
+    if (!born || Number.isNaN(born.getTime()) || born.toISOString().slice(0, 10) !== birthText) {
+      return { reason: "customer_birth_date" };
+    }
+    const age = (now.getTime() - born.getTime()) / (365.25 * 24 * 3600 * 1000);
+    if (age < 0 || age > 120) return { reason: "customer_birth_date" };
+    // Owner's rule (10-nov-2026): never born in the current year, on the store's
+    // calendar — a date of this year is the "today" the date picker opens on, not
+    // a patient. Same rule as birthProblem() in the panel's fieldRules.js.
+    if (Number(birthText.slice(0, 4)) >= localYear(now, timeZone)) return { reason: "customer_birth_date" };
+    birth_date = birthText;
   }
-  const age = (now.getTime() - born.getTime()) / (365.25 * 24 * 3600 * 1000);
-  if (age < 0 || age > 120) return { reason: "customer_birth_date" };
 
   let address: PosCustomer["address"] = null;
   const a = c.address;
   if (a && (text(a.address_1, 160) || text(a.city, 80) || text(a.postal_code, 20))) {
-    const address_1 = text(a.address_1, 160);
-    const city = text(a.city, 80);
+    const address_1 = text(a.address_1, FIELD_LIMITS.street);
+    const city = text(a.city, FIELD_LIMITS.city);
     const postal_code = text(a.postal_code, 20);
-    if (!address_1 || !city || !postal_code) return { reason: "customer_address" };
+    if (!address_1 || !city || !isValidUsZip(postal_code)) return { reason: "customer_address" };
     address = {
       address_1,
       city,
@@ -110,12 +304,45 @@ export function cleanCustomer(input: PosCustomerInput | null | undefined, now = 
   return { customer: { first_name, last_name, email, phone, birth_date, address } };
 }
 
+/** What a sale's patient data still lacks (shown on the sale until it is completed). */
+export const MISSING_KEYS = ["first_name", "last_name", "phone", "address", "prescription", "deposit"] as const;
+export type MissingKey = (typeof MISSING_KEYS)[number];
+
+/**
+ * The patient data a sale was recorded without: name, last name, phone, and
+ * the address when it ships. The prescription and the deposit are read live
+ * from the sale (`rx_pending`, nothing paid), so they are not stored. Pure.
+ */
+export function missingCustomerData(
+  c: { first_name?: string | null; last_name?: string | null; phone?: string | null; address?: unknown },
+  delivery: string
+): MissingKey[] {
+  const out: MissingKey[] = [];
+  if (!String(c.first_name ?? "").trim()) out.push("first_name");
+  if (!String(c.last_name ?? "").trim()) out.push("last_name");
+  if (!String(c.phone ?? "").trim()) out.push("phone");
+  if (delivery === "ship" && !c.address) out.push("address");
+  return out;
+}
+
+/** Everything still missing on a sale: what was stored plus the live prescription and deposit. Pure. */
+export function saleMissing(stored: unknown, sale: { rx_pending?: boolean; paid?: number; insurance?: number; total?: number; status?: string }): MissingKey[] {
+  const keys = new Set<MissingKey>((Array.isArray(stored) ? stored : []).filter((k): k is MissingKey => (MISSING_KEYS as readonly string[]).includes(String(k))));
+  if (sale.rx_pending) keys.add("prescription");
+  if (sale.status !== "voided" && (sale.total ?? 0) > 0 && (sale.paid ?? 0) + (sale.insurance ?? 0) <= 0) keys.add("deposit");
+  return MISSING_KEYS.filter((k) => keys.has(k));
+}
+
 // ---------------------------------------------------------------------------
 // Lines
 // ---------------------------------------------------------------------------
 
 export interface PosLineInput {
-  /** "frame": a catalog frame (variant); "own_frame": lenses for a frame the customer brought. */
+  /**
+   * "frame": a catalog frame (variant); "store_frame": a frame of the store that
+   * is not in the catalog (typed in, charged at the price the seller enters);
+   * "own_frame": lenses for a frame the customer brought (not charged).
+   */
   kind?: unknown;
   variant_id?: unknown;
   selection?: {
@@ -123,26 +350,111 @@ export interface PosLineInput {
     material_code?: unknown;
     photo_code?: unknown;
     ar_code?: unknown;
+    /** "stock" | "digital" (lib/lens-finish.ts); absent = the design's default. */
+    finish?: unknown;
   } | null;
   /** Own frame: what the customer brought, for the lab ticket ("Ray-Ban negro"). */
   description?: unknown;
   /** Own frame: photo as a `data:` URL, stored in the private bucket. */
   photo?: unknown;
+  /** Own frame: brand, model, color and its size (lens width, bridge, temple), for the lab. */
+  own_frame?: unknown;
+  /** Store frame off the catalog: the same specs plus `price` (dollars, required). */
+  store_frame?: unknown;
+}
+
+/**
+ * The frame the customer brought, as the lab needs it: brand, model, color and
+ * the three numbers printed on the temple (lens width – bridge – temple
+ * length, mm; e.g. 52-18-140). Every field optional.
+ */
+export interface OwnFrameSpecs {
+  brand: string | null;
+  model: string | null;
+  color: string | null;
+  eye_size: number | null;
+  bridge: number | null;
+  temple: number | null;
+}
+
+/** Plausible ranges (mm) of a frame's printed size; outside = a typo, refused. */
+export const OWN_FRAME_RANGES = { eye_size: [30, 75], bridge: [10, 30], temple: [100, 165] } as const;
+
+/** Validates the own-frame specs. Reasons: `bad_own_frame`. Pure. */
+export function cleanOwnFrame(raw: unknown): { specs: OwnFrameSpecs | null } | { reason: string } {
+  if (raw == null) return { specs: null };
+  if (typeof raw !== "object" || Array.isArray(raw)) return { reason: "bad_own_frame" };
+  const o = raw as Record<string, unknown>;
+  const out: OwnFrameSpecs = {
+    brand: text(o["brand"], 60) || null,
+    model: text(o["model"], 60) || null,
+    color: text(o["color"], 40) || null,
+    eye_size: null,
+    bridge: null,
+    temple: null,
+  };
+  for (const k of ["eye_size", "bridge", "temple"] as const) {
+    const v = o[k];
+    if (v == null || v === "") continue;
+    const n = Number(String(v).replace(",", "."));
+    const [min, max] = OWN_FRAME_RANGES[k];
+    if (!Number.isFinite(n) || n < min || n > max) return { reason: "bad_own_frame" };
+    out[k] = Math.round(n * 2) / 2;
+  }
+  return { specs: Object.values(out).some((v) => v != null) ? out : null };
+}
+
+/** «Ray-Ban RB5154 · negro · 51-21-145»: what the lab ticket and the line title say. Pure. */
+export function ownFrameSummary(specs: OwnFrameSpecs | null, description: string | null = null): string | null {
+  const size = specs && specs.eye_size != null ? [specs.eye_size, specs.bridge, specs.temple].filter((v) => v != null).join("-") : "";
+  const parts = specs ? [[specs.brand, specs.model].filter(Boolean).join(" "), specs.color, size].filter(Boolean) : [];
+  const auto = parts.join(" · ");
+  if (description && auto) return `${auto} — ${description}`.slice(0, 160);
+  return (description || auto || null);
+}
+
+/** Price limits (dollars) of a store frame typed in at the till. */
+export const STORE_FRAME_PRICE = { min: 0.01, max: 5000 } as const;
+
+/**
+ * A store frame that is not in the catalog (owner, 9-nov-2026): specs as for
+ * an own frame, a name (brand or model) required, and the price the seller
+ * charges. Reasons: `bad_store_frame` (sizes), `store_frame_needs_name`,
+ * `bad_store_frame_price`. Pure.
+ */
+export function cleanStoreFrame(raw: unknown): { specs: OwnFrameSpecs; price_cents: number } | { reason: string } {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return { reason: "store_frame_needs_name" };
+  const specs = cleanOwnFrame(raw);
+  if ("reason" in specs) return { reason: "bad_store_frame" };
+  if (!specs.specs || (!specs.specs.brand && !specs.specs.model)) return { reason: "store_frame_needs_name" };
+  const o = raw as Record<string, unknown>;
+  const p = typeof o["price"] === "number" ? o["price"] : Number(String(o["price"] ?? "").replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(p) || p < STORE_FRAME_PRICE.min || p > STORE_FRAME_PRICE.max) return { reason: "bad_store_frame_price" };
+  return { specs: specs.specs, price_cents: Math.round(p * 100) };
 }
 
 export interface PosLine {
-  kind: "frame" | "own_frame";
+  kind: "frame" | "own_frame" | "store_frame";
   variant_id: string | null;
-  selection: { design_code: string; material_code: string | null; photo_code: string | null; ar_code: string | null };
+  selection: { design_code: string; material_code: string | null; photo_code: string | null; ar_code: string | null; finish: LensFinish | null };
   description: string | null;
   photo: string | null;
+  /**
+   * The specs the clerk typed: the customer's own frame or a store frame off
+   * the catalog (brand, model, color and size; null = a catalog frame / not given).
+   */
+  own_frame: OwnFrameSpecs | null;
+  /** Store frame off the catalog: the price charged for the frame, in cents (null otherwise). */
+  frame_price_cents?: number | null;
 }
 
-export const MAX_LINES = 10;
+/** A sale carries one frame: either from the catalog or the customer's own, never both. */
+export const MAX_LINES = 1;
 
 const code = (v: unknown): string | null => {
   const s = text(v, 40);
-  return /^[a-z0-9-]+$/i.test(s) ? s : null;
+  // The dot is for lens materials: "1.67", "1.74".
+  return /^[a-z0-9.-]+$/i.test(s) ? s : null;
 };
 
 export function cleanLines(input: unknown): { reason: string } | { lines: PosLine[] } {
@@ -150,7 +462,7 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
   if (input.length > MAX_LINES) return { reason: "too_many_lines" };
   const lines: PosLine[] = [];
   for (const raw of input as PosLineInput[]) {
-    const kind = raw?.kind === "own_frame" ? "own_frame" : raw?.kind === "frame" ? "frame" : null;
+    const kind = raw?.kind === "own_frame" ? "own_frame" : raw?.kind === "store_frame" ? "store_frame" : raw?.kind === "frame" ? "frame" : null;
     if (!kind) return { reason: "bad_line" };
     const design_code = code(raw.selection?.design_code);
     if (!design_code) return { reason: "bad_line" };
@@ -159,6 +471,16 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
     // A frame the customer brought only makes sense with lenses for it.
     if (kind === "own_frame" && design_code === "frame-only") return { reason: "own_frame_needs_lenses" };
     const photo = typeof raw.photo === "string" && raw.photo.startsWith("data:image/") ? raw.photo : null;
+    const own = kind === "own_frame" ? cleanOwnFrame(raw.own_frame) : { specs: null };
+    if ("reason" in own) return own;
+    const store = kind === "store_frame" ? cleanStoreFrame(raw.store_frame) : null;
+    if (store && "reason" in store) return store;
+    const typed = kind === "own_frame" || kind === "store_frame";
+    const specs = store ? store.specs : own.specs;
+    // Only the two finish codes; anything else is a bad line, not a silent default.
+    const rawFinish = raw.selection?.finish;
+    const finish = rawFinish == null || rawFinish === "" ? null : parseLensFinish(rawFinish);
+    if (rawFinish != null && rawFinish !== "" && !finish) return { reason: "bad_line" };
     lines.push({
       kind,
       variant_id: kind === "frame" ? variant_id : null,
@@ -167,9 +489,13 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
         material_code: code(raw.selection?.material_code),
         photo_code: code(raw.selection?.photo_code),
         ar_code: code(raw.selection?.ar_code),
+        finish: design_code === "frame-only" ? null : finish,
       },
-      description: kind === "own_frame" ? text(raw.description, 160) || null : null,
-      photo: kind === "own_frame" ? photo : null,
+      // The lab reads the brand, model, color and size first, then the clerk's note.
+      description: typed ? ownFrameSummary(specs, text(raw.description, 160) || null) : null,
+      photo: typed ? photo : null,
+      own_frame: typed ? specs : null,
+      frame_price_cents: store ? store.price_cents : null,
     });
   }
   return { lines };
@@ -242,10 +568,11 @@ export function cleanPayments(
   input: unknown,
   dueCents: number,
   methods: PaymentMethodLike[],
-  opts: { establishmentId: string; requireFull?: boolean; allowInsurance?: boolean } = { establishmentId: "" }
+  opts: { establishmentId: string; requireFull?: boolean; allowInsurance?: boolean; allowNone?: boolean } = { establishmentId: "" }
 ): { reason: string; method?: string } | CleanedPayments {
   const list = Array.isArray(input) ? input : [];
-  if (list.length === 0 && dueCents > 0) return { reason: "no_payments" };
+  // `allowNone`: a sale recorded without a deposit (the whole total stays as balance; the till warned).
+  if (list.length === 0 && dueCents > 0 && !opts.allowNone) return { reason: "no_payments" };
   if (list.length > 6) return { reason: "bad_payment" };
   const byCode = new Map(methods.map((m) => [m.code, m]));
   const payments: PosPayment[] = [];
@@ -306,10 +633,14 @@ export type WornSource = (typeof WORN_SOURCES)[number];
  * here, flagged as approximate.
  */
 export function cleanRxMeta(
-  input: { rx_date?: unknown; approx_months_ago?: unknown; worn_source?: unknown } | null | undefined,
+  input: { rx_date?: unknown; approx_months_ago?: unknown; worn_source?: unknown; clinical?: unknown } | null | undefined,
   now = new Date()
-): { reason: string } | { rx_date: string | null; rx_date_approx: boolean; worn_source: WornSource | null } {
+): { reason: string; field?: string } | { rx_date: string | null; rx_date_approx: boolean; worn_source: WornSource | null; clinical?: Clinical | null } {
   const i = input ?? {};
+  // Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts), optional.
+  const clinical = cleanClinical(i.clinical);
+  if (clinical && "reason" in clinical) return clinical;
+  const withClinical = <T extends object>(o: T) => (clinical ? { ...o, clinical } : o);
   const source = i.worn_source == null || i.worn_source === "" ? null : String(i.worn_source);
   if (source !== null && !(WORN_SOURCES as readonly string[]).includes(source)) return { reason: "bad_worn_source" };
   const worn_source = source as WornSource | null;
@@ -318,13 +649,13 @@ export function cleanRxMeta(
     const months = Number(i.approx_months_ago);
     if (!Number.isInteger(months) || months < 0 || months > 600) return { reason: "bad_rx_date" };
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1));
-    return { rx_date: d.toISOString().slice(0, 10), rx_date_approx: true, worn_source };
+    return withClinical({ rx_date: d.toISOString().slice(0, 10), rx_date_approx: true, worn_source });
   }
   const raw = i.rx_date == null || i.rx_date === "" ? null : String(i.rx_date);
-  if (raw === null) return { rx_date: null, rx_date_approx: false, worn_source };
+  if (raw === null) return withClinical({ rx_date: null, rx_date_approx: false, worn_source });
   const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00Z`) : null;
   if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== raw || d > now) return { reason: "bad_rx_date" };
-  return { rx_date: raw, rx_date_approx: false, worn_source };
+  return withClinical({ rx_date: raw, rx_date_approx: false, worn_source });
 }
 
 /** RX-2026-00812 */

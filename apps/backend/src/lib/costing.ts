@@ -1,11 +1,16 @@
 import type { IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import type { Knex } from "@mikro-orm/knex";
 import { COSTING_MODULE } from "../modules/costing/index";
 import type CostingModuleService from "../modules/costing/service";
 import { LENS_CONFIG_MODULE } from "../modules/lens-config/index";
 import type LensConfigModuleService from "../modules/lens-config/service";
+import { ensureFrameCostCache, frameCostCents, type FrameCostLookup } from "./frame-cost";
+import { ensureLensCellCostCache, lensCellCostCents, type LensCostLookup } from "./lens-cost";
+import { lensFinishLabel, type LensFinish } from "./lens-finish";
 import type { BoardOrder } from "./order-board";
 import { listSellers } from "./sellers";
+import { isEnabled, loadCostToggles, type CostToggleRow } from "./store-cost-toggle";
 
 /**
  * Ficha de costo por venta — what each order cost the shop, so the panel can
@@ -30,6 +35,12 @@ import { listSellers } from "./sellers";
  *   - RULES (`cost_rule` table): the owner's template. "A Flexure frame costs
  *     me 18", "the lab charges 12 per order", "Stripe keeps 2.9% + 0.30".
  *     Amount 0 means "not defined yet" and the panel highlights it.
+ *   - THE FRAME'S REAL COST (`store_frame_cost` + its per-store variations,
+ *     lib/frame-cost.ts): what THIS store pays for that exact model, else what
+ *     the supplier charges for it, else what the owner typed over that.
+ *     It REPLACES the frame rule for its line (never adds to it), because a
+ *     real invoice beats an average the owner once estimated. A model nothing
+ *     knows the cost of stays "undefined", never 0.
  *   - PER ORDER (`order.metadata.cost_sheet`): an optional manual override of
  *     the lines, written by the owner from the panel. Absent → the sheet is
  *     computed live from the rules every time it is read.
@@ -138,7 +149,7 @@ export interface CostRule {
 }
 
 /** What a line is, for the API and the breakdowns (`lineKind`). `tax` is never a rule: it comes from the order. */
-export type CostLineKind = CostKind | "tax" | "seller_commission" | "manual";
+export type CostLineKind = CostKind | "tax" | "seller_commission" | "manual" | "lab_surcharge";
 
 /**
  * Which block of the model a line sits in:
@@ -161,7 +172,8 @@ export interface CostLine {
   amount: number;
   qty: number;
   subtotal: number;
-  source: "rule" | "manual" | "order" | "seller";
+  /** Where the amount came from: a cost rule, the supplier's price list / the owner's edit of it, the owner's manual sheet, the order itself or the seller. */
+  source: "rule" | "supplier" | "manual" | "order" | "seller";
   rule_id?: string;
   /** The rule's match key (brand slug, SKU, lens code, fixed-cost slug…) — what `conceptKey` groups by. */
   match_key?: string;
@@ -406,12 +418,38 @@ export interface CostOrderLike {
   shipping_total?: unknown;
   tax_total?: unknown;
   paid?: boolean;
+  /**
+   * The store the sale belongs to, when it belongs to one. It is what makes the
+   * frame's cost THAT store's cost (`store_frame_cost_variation`, see
+   * lib/frame-cost.ts): the owner's rule is that every store manages its costs
+   * separately, so a sale of store A must never be costed with store B's
+   * figure. Absent (a web order, a chain-wide projection) means the master.
+   */
+  establishment_id?: string | null;
+  /**
+   * The lab's surcharge for a high power on this order's lens jobs, in dollars
+   * (lib/lab-surcharge.ts; from `sale_fact.lab_surcharge_cents`). A material line.
+   */
+  lab_surcharge?: number | null;
   items: Array<{
     title?: string;
     quantity?: unknown;
     sku?: string | null;
+    /**
+     * The MODEL (the product title, "DC 50"), v2: the frame's cost is looked
+     * up by model first, then by SKU (lib/frame-cost.ts). Optional — without
+     * it the cost cache's catalogue aliases give the model of the SKU.
+     */
+    model?: string | null;
     brand_slug?: string | null;
-    lens?: { design_code?: string | null; material_code?: string | null; photo_code?: string | null; ar_code?: string | null } | null;
+    lens?: {
+      design_code?: string | null;
+      material_code?: string | null;
+      photo_code?: string | null;
+      ar_code?: string | null;
+      /** Stock or surfaced (lib/lens-finish.ts); absent = the design's default cell. */
+      finish?: LensFinish | null;
+    } | null;
   }>;
 }
 
@@ -520,21 +558,40 @@ function suggestedPrice(m: SheetModel, manual: boolean): number | null {
  *
  * Deductions first (shipping: actual = what the customer paid, or a fixed
  * figure; the order's taxes; the gateway's % of the gross and its fixed fee),
- * which gives the net base. Then materials per item (`frame_sku` by SKU beats
- * `frame_brand` by brand; a case/estuche only ever matches by SKU or the
- * "case" brand; one line per lens code the item carries) and per order
- * (`order_fixed`). Then the owner's percentages and the seller's commission,
- * both of the NET base. The profit target (`profitTargetPct` of the rules,
- * or `targetPct` when given) is reported, never charged.
+ * which gives the net base. Then materials per item — the frame's own cost
+ * (`frameCost`, i.e. the supplier's list / the owner's edit) when it is known,
+ * otherwise the rule that matches it (`frame_sku` by SKU beats `frame_brand`
+ * by brand; a case/estuche only ever matches by SKU or the "case" brand), plus
+ * one line per lens code the item carries — and per order (`order_fixed`).
+ * Then the owner's percentages and the seller's commission, both of the NET
+ * base. The profit target (`profitTargetPct` of the rules, or `targetPct` when
+ * given) is reported, never charged.
+ *
+ * `frameCost` defaults to the process cache + the compiled supplier list, so
+ * every existing caller gets the real cost without passing anything; tests and
+ * any caller that already holds the rows inject their own lookup. It is asked
+ * for `order.establishment_id`, so a sale of a store is costed with THAT
+ * store's figure and falls back to the chain's only where the store inherits.
+ *
+ * `lensCost` is the same idea for the lens: the matrix cell's `cost_cents`
+ * (lib/lens-cost.ts) is the lab's real price list, so when the sold
+ * (design, material, finish) cell carries one it REPLACES the `lens_design` +
+ * `lens_material` rule lines; the photochromic and AR rules still add on top.
+ * Cells without a cost, and a cache that never loaded, leave the rules in charge.
  */
 export function computeCostSheet(
   order: CostOrderLike,
   rules: CostRule[],
   seller?: { commission_pct: number } | null,
   manual?: StoredCostSheet | null,
-  targetPct?: number | null
+  targetPct?: number | null,
+  frameCost: FrameCostLookup = frameCostCents,
+  lensCost: LensCostLookup = lensCellCostCents
 ): CostSheet {
   const gross = round2(num(order.total));
+  // Which store's costs this sale is priced with. Read once: every frame line
+  // of one order belongs to the same store.
+  const storeId = order.establishment_id ? String(order.establishment_id) : null;
   const target_pct = targetPct === undefined ? profitTargetPct(rules) : targetPct !== null && targetPct > 0 ? round2(targetPct) : null;
   const orderShipping = round2(Math.max(0, num(order.shipping_total)));
   const orderTax = round2(Math.max(0, num(order.tax_total)));
@@ -626,9 +683,41 @@ export function computeCostSheet(
     const bySku = sku ? idx.get(`frame_sku:${sku}`) : undefined;
     const byBrand = brand ? idx.get(`frame_brand:${brand}`) : undefined;
     const frame = bySku ?? byBrand;
-    if (frame) {
+    // What the shop really pays the supplier for THIS model (store_frame_cost,
+    // seeded from Capri's list and editable per model). It REPLACES the rule
+    // that would have matched — exactly one `frame:` line per item either way,
+    // because `summarizeCostSheets` pairs frame lines with items by position
+    // and adding a second one would both double the cost and shift that pairing.
+    const supplierCents = sku ? frameCost(sku, storeId, item.model ?? null) : null;
+    if (supplierCents !== null) {
+      const amount = round2(supplierCents / 100);
+      materials.push({
+        key: `frame:${sku}`,
+        // The concept (and therefore the panel's by-kind breakdown) stays what
+        // it was: the matched rule's kind/key, or the brand when no rule
+        // matched. Only the AMOUNT now comes from the supplier.
+        kind: frame ? frame.kind : brand ? "frame_brand" : "frame_sku",
+        group: "material",
+        // Also the matched rule's label, for the same reason: `condenseLines`
+        // takes a concept's label from its first line, so naming the model
+        // here would label the whole "Montura Peachtree" row of the summary
+        // after whichever Peachtree was sold first. Without a rule there is
+        // nothing to inherit and the model is the clearest name.
+        label: frame ? frame.label : `Montura ${item.title ?? sku}`.trim(),
+        amount,
+        qty,
+        subtotal: round2(amount * qty),
+        source: "supplier",
+        match_key: frame ? normalizeMatchKey(frame.kind, frame.match_key) : brand ?? sku ?? undefined,
+        // A cost of 0 is still "not defined": the supplier never sells at 0, so
+        // a 0 here is the owner having typed one, and the panel must say so.
+        undefined_cost: amount === 0,
+      });
+    } else if (frame) {
       materials.push(lineFromRule(frame, `frame:${sku ?? brand}`, qty));
     } else {
+      // No supplier row and no rule: the cost is UNKNOWN, not zero. A silent 0
+      // would turn a case nobody priced into a 100 % margin.
       materials.push({
         key: `frame:${sku ?? brand ?? "?"}`,
         kind: "frame_brand",
@@ -643,12 +732,40 @@ export function computeCostSheet(
       });
     }
     const lens = item.lens ?? {};
-    const lensParts: Array<[CostKind, string | null | undefined]> = [
-      ["lens_design", lens.design_code],
-      ["lens_material", lens.material_code],
-      ["lens_photo", lens.photo_code],
-      ["lens_ar", lens.ar_code],
-    ];
+    const cellCents =
+      lens.design_code && lens.design_code !== "frame-only" && lens.material_code
+        ? lensCost(lens.design_code, lens.material_code, lens.finish ?? null)
+        : null;
+    if (cellCents !== null) {
+      // One line for the lens itself, priced by the lab's list for that cell.
+      // Kind and key stay `lens_design:<design>` so the by-kind summaries and
+      // `lineKind` read it as the lens line it replaces.
+      const amount = round2(cellCents / 100);
+      const finishWord = lens.finish ? ` · ${lensFinishLabel(lens.finish).es}` : "";
+      materials.push({
+        key: `lens_design:${lens.design_code}`,
+        kind: "lens_design",
+        group: "material",
+        label: `Lente ${lens.design_code} · ${lens.material_code}${finishWord}`,
+        amount,
+        qty,
+        subtotal: round2(amount * qty),
+        source: "supplier",
+        match_key: `${lens.design_code}:${lens.material_code}${lens.finish ? `:${lens.finish}` : ""}`,
+        undefined_cost: amount === 0,
+      });
+    }
+    const lensParts: Array<[CostKind, string | null | undefined]> = cellCents !== null
+      ? [
+          ["lens_photo", lens.photo_code],
+          ["lens_ar", lens.ar_code],
+        ]
+      : [
+          ["lens_design", lens.design_code],
+          ["lens_material", lens.material_code],
+          ["lens_photo", lens.photo_code],
+          ["lens_ar", lens.ar_code],
+        ];
     for (const [kind, code] of lensParts) {
       if (!code || code === "frame-only") continue;
       const rule = idx.get(`${kind}:${normalizeMatchKey(kind, code)}`);
@@ -658,6 +775,11 @@ export function computeCostSheet(
   }
   for (const r of active.filter((x) => x.kind === "order_fixed")) {
     materials.push(lineFromRule(r, `order_fixed:${r.match_key}`, 1));
+  }
+  const surcharge = round2(Math.max(0, num(order.lab_surcharge)));
+  if (surcharge > 0) {
+    // After the items: `summarizeCostSheets` pairs the frame lines with the items by position.
+    materials.push({ key: "lab_surcharge:rx", kind: "lab_surcharge", group: "material", label: "Recargo de laboratorio (graduación alta)", amount: surcharge, qty: 1, subtotal: surcharge, source: "rule", match_key: "lab_surcharge", undefined_cost: false });
   }
   const materials_total = round2(materials.reduce((a, l) => a + l.subtotal, 0));
 
@@ -715,6 +837,7 @@ export function lineKind(line: Pick<CostLine, "key" | "source"> & { kind?: CostL
   const [head] = line.key.split(":");
   if (head === "frame") return "frame_brand";
   if (head === "tax") return "tax";
+  if (head === "lab_surcharge") return "lab_surcharge";
   return isCostKind(head) ? head : "manual";
 }
 
@@ -723,6 +846,7 @@ export const LINE_KIND_LABEL: Record<CostLineKind, string> = {
   tax: "Impuestos",
   seller_commission: "Comisión de vendedores",
   manual: "Ajustes manuales",
+  lab_surcharge: "Recargo de laboratorio",
 };
 
 /** Group of a line; lines computed here carry it, older stored lines fall back on the kind. */
@@ -953,10 +1077,17 @@ function rowToRule(r: Record<string, unknown>): CostRule {
   };
 }
 
-/** Live rules, sorted. */
+/**
+ * Live rules, sorted. It also warms the frame-cost cache (best effort), which
+ * is what lets `computeCostSheet` stay synchronous: every caller that computes
+ * a sheet loads the rules first, so the real per-model costs are in memory by
+ * the time the math runs. A failure there is silent — the lookup then answers
+ * from the compiled supplier list.
+ */
 export async function listCostRules(container: MedusaContainer): Promise<CostRule[]> {
   const svc = costingService(container);
   const rows = (await svc.listCostRules({}, { take: 1000 })) as unknown as Record<string, unknown>[];
+  await Promise.all([ensureFrameCostCache(container), ensureLensCellCostCache(container)]);
   return rows
     .filter((r) => !r["deleted_at"])
     .map(rowToRule)
@@ -1025,28 +1156,64 @@ export async function saveStoredSheet(
   await orders.updateOrders([{ id: orderId, metadata: next }]);
 }
 
+/**
+ * The rules that count in a store: the ones it has not switched off
+ * («Se cobra», pricing panel → Reglas y comisiones). No store (a chain-wide
+ * view) or no toggles = every rule. The books (lib/financial-statement.ts), the
+ * Executive (lib/sales-insights.ts) and the order sheet all filter with this.
+ */
+export function rulesInStore(rules: CostRule[], storeId: string | null | undefined, toggles: readonly CostToggleRow[] = []): CostRule[] {
+  if (!storeId || !toggles.length) return rules;
+  return rules.filter((r) => isEnabled(r.id ?? `${r.kind}:${r.match_key}`, storeId, toggles as CostToggleRow[]));
+}
+
 /** Sheet of a projected board order (rules + seller + stored override). Best effort on the seller lookup. */
 export async function costSheetForOrder(
   container: MedusaContainer,
   order: BoardOrder,
   rules: CostRule[],
   sellerByCode: Map<string, { commission_pct: number }>,
-  metadata?: Record<string, unknown> | null
+  metadata?: Record<string, unknown> | null,
+  toggles: CostToggleRow[] = []
 ): Promise<CostSheet> {
   const seller = order.seller_code ? sellerByCode.get(order.seller_code) ?? null : null;
   const stored = readStoredSheet(metadata);
+  // A store may switch a cost rule off for itself (pricing panel → Costos).
+  // Without toggles every rule counts, which is what the chain-wide views want.
+  const live = rulesInStore(rules, order.establishment_id, toggles);
   return computeCostSheet(
-    { total: order.total, shipping_total: order.shipping_total, tax_total: order.tax_total, paid: order.paid, items: order.items },
-    rules,
+    {
+      total: order.total,
+      shipping_total: order.shipping_total,
+      tax_total: order.tax_total,
+      paid: order.paid,
+      // The store is what decides WHICH frame cost this sale is priced with.
+      establishment_id: order.establishment_id ?? null,
+      items: order.items,
+      lab_surcharge: await labSurchargeOf(container, (order as { id?: string }).id ?? null),
+    },
+    live,
     seller,
     stored
   );
 }
 
+/** The lab surcharge projected for an order (dollars; 0 when none or unreadable). */
+async function labSurchargeOf(container: MedusaContainer, orderId: string | null): Promise<number> {
+  if (!orderId) return 0;
+  try {
+    const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+    const row = (await pg("sale_fact").where({ order_id: orderId }).sum({ c: "lab_surcharge_cents" }).first()) as { c?: unknown } | undefined;
+    return (Number(row?.c) || 0) / 100;
+  } catch {
+    return 0;
+  }
+}
+
 /** Rules + seller commission map in one call; empty on failure (callers degrade). */
 export async function loadCostingContext(
   container: MedusaContainer
-): Promise<{ rules: CostRule[]; sellerByCode: Map<string, { commission_pct: number; name: string }> }> {
+): Promise<{ rules: CostRule[]; sellerByCode: Map<string, { commission_pct: number; name: string }>; toggles: CostToggleRow[] }> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   let rules: CostRule[] = [];
   const sellerByCode = new Map<string, { commission_pct: number; name: string }>();
@@ -1060,5 +1227,11 @@ export async function loadCostingContext(
   } catch (error) {
     logger.warn(`[costing] sellers unavailable: ${(error as Error).message}`);
   }
-  return { rules, sellerByCode };
+  let toggles: CostToggleRow[] = [];
+  try {
+    toggles = await loadCostToggles(container);
+  } catch (error) {
+    logger.warn(`[costing] cost toggles unavailable: ${(error as Error).message}`);
+  }
+  return { rules, sellerByCode, toggles };
 }

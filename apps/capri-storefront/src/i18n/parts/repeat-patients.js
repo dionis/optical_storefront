@@ -1,0 +1,38 @@
+// Historial de compras del paciente en la caja y promociones «desde la N.ª compra»
+// (PosSale.jsx, Promotions.jsx; backend lib/patient-purchases.ts). Dueño, 18-nov-2026.
+export default {
+  es: {
+    "adm.pos.repeat.tier.new": "Nuevo",
+    "adm.pos.repeat.tier.returning": "Recurrente",
+    "adm.pos.repeat.tier.vip": "VIP",
+    "adm.pos.repeat.tier.none": "Sin compras",
+    "adm.pos.repeat.count": "{n} compra(s)",
+    "adm.pos.repeat.last": "última {date}",
+    "adm.pos.repeat.total": "total {v}",
+    "adm.pos.repeat.first": "primera compra",
+    "adm.pos.repeat.hint": "Compras válidas en todas las tiendas y la web. Úsalo para ofrecer una promoción para pacientes que repiten.",
+    "adm.promo.fromNth": "desde la {n}.ª compra",
+    "adm.promo.pos.notYet": "aún no le toca",
+    "adm.promo.f.minPurchases": "Desde la compra n.º (pacientes que repiten)",
+    "adm.promo.f.minPurchasesPh": "vacío = para todos; 2 = desde la segunda",
+    "adm.err.pos.promo_min_purchases": "Esta promoción es para pacientes que ya compraron antes: empieza en la compra n.º {min}.",
+    "adm.err.promo.bad_promo_min_purchases": "«Desde la compra n.º» debe ser un número de 2 a 50, o vacío.",
+  },
+  en: {
+    "adm.pos.repeat.tier.new": "New",
+    "adm.pos.repeat.tier.returning": "Returning",
+    "adm.pos.repeat.tier.vip": "VIP",
+    "adm.pos.repeat.tier.none": "No purchases",
+    "adm.pos.repeat.count": "{n} purchase(s)",
+    "adm.pos.repeat.last": "last {date}",
+    "adm.pos.repeat.total": "total {v}",
+    "adm.pos.repeat.first": "first purchase",
+    "adm.pos.repeat.hint": "Valid purchases in every store and online. Use it to offer a promotion for returning patients.",
+    "adm.promo.fromNth": "from purchase #{n}",
+    "adm.promo.pos.notYet": "not yet",
+    "adm.promo.f.minPurchases": "From purchase # (returning patients)",
+    "adm.promo.f.minPurchasesPh": "empty = everyone; 2 = from the second",
+    "adm.err.pos.promo_min_purchases": "This promotion is for patients who bought before: it starts at purchase #{min}.",
+    "adm.err.promo.bad_promo_min_purchases": "«From purchase #» must be 2 to 50, or empty.",
+  },
+};

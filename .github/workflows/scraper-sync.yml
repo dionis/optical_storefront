@@ -1,9 +1,11 @@
-name: Scraper — Daily Catalog Sync
+name: Scraper — Catalog Sync (manual fallback)
 
+# No schedule any more. The catalog scraper runs as its own Coolify app
+# (python -m scraper worker): monthly, queued by the backend, and on demand from
+# the admin panel, which also shows each run's result (docs/CATALOG-SYNC.md).
+# This workflow stays as a manual fallback; note its state.db cache is separate
+# from the worker's volume, so a run here re-checks every product.
 on:
-  schedule:
-    # Daily at 06:00 UTC
-    - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       full:

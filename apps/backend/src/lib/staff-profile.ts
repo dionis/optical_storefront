@@ -1,3 +1,4 @@
+import { isValidEmail, isValidPhone } from "./field-rules";
 /**
  * Seller profile rules (HU-98 to HU-100). Pure — no I/O.
  *
@@ -11,7 +12,10 @@
  *   notes        internal notes                      — admins only
  *
  * "Admins" = the owner and superadmins (the owner's own permissions). The
- * person edits their contact and preferences; everything else only admins.
+ * person edits their contact and preferences, plus their own display name
+ * and photo (how they appear to the team — theirs to choose, QA D-15,
+ * 5-nov-2026); the receipt code is generated and the work terms are the
+ * owner's, so everything else only admins.
  */
 
 /**
@@ -26,11 +30,14 @@ export const CONTACT_FIELDS = ["phone_mobile", "phone_whatsapp", "phone_landline
 export const PREFERENCE_FIELDS = ["alert_email", "locale"] as const;
 export const WORK_FIELDS = ["hire_date", "commission_pct", "monthly_goal", "privileges"] as const;
 export const EMERGENCY_FIELDS = ["emergency_name", "emergency_relation", "emergency_phone"] as const;
-export const IDENTITY_FIELDS = ["display_name", "seller_code"] as const;
+export const IDENTITY_FIELDS = ["display_name", "seller_code", "photo_url"] as const;
 
-const SELF_EDITABLE = new Set<string>([...CONTACT_FIELDS, ...PREFERENCE_FIELDS]);
+/** What a person may change on their own profile: contact, preferences, display name and photo. */
+export const SELF_EDITABLE_FIELDS = ["display_name", "photo_url", ...CONTACT_FIELDS, ...PREFERENCE_FIELDS] as const;
+const SELF_EDITABLE = new Set<string>(SELF_EDITABLE_FIELDS);
+// The receipt code is generated (lib/staff-code.ts), never typed — not even by the owner.
 const ADMIN_EDITABLE = new Set<string>([
-  ...IDENTITY_FIELDS,
+  "display_name",
   ...CONTACT_FIELDS,
   ...PREFERENCE_FIELDS,
   ...WORK_FIELDS,
@@ -41,6 +48,7 @@ const ADMIN_EDITABLE = new Set<string>([
 export interface StaffProfileData {
   display_name: string | null;
   seller_code: string | null;
+  photo_url: string | null;
   phone_mobile: string | null;
   phone_whatsapp: string | null;
   phone_landline: string | null;
@@ -61,6 +69,7 @@ export interface StaffProfileData {
 export const EMPTY_PROFILE: StaffProfileData = {
   display_name: null,
   seller_code: null,
+  photo_url: null,
   phone_mobile: null,
   phone_whatsapp: null,
   phone_landline: null,
@@ -78,8 +87,6 @@ export const EMPTY_PROFILE: StaffProfileData = {
   internal_notes: null,
 };
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PHONE = /^\+?[\d\s().-]{7,25}$/;
 const CODE = /^[A-Z]{1,4}\d{1,4}$/;
 
 const text = (v: unknown, max: number): string | null => {
@@ -107,14 +114,14 @@ export function cleanProfilePatch(
       case "phone_landline":
       case "emergency_phone": {
         const v = text(raw, 25);
-        if (v && !PHONE.test(v)) return { reason: "bad_phone", field: key };
+        if (v && !isValidPhone(v)) return { reason: "bad_phone", field: key };
         out[key] = v;
         break;
       }
       case "email_alt":
       case "alert_email": {
         const v = text(raw, 200)?.toLowerCase() ?? null;
-        if (v && !EMAIL.test(v)) return { reason: "bad_email", field: key };
+        if (v && !isValidEmail(v)) return { reason: "bad_email", field: key };
         out[key] = v;
         break;
       }
@@ -157,6 +164,17 @@ export function cleanProfilePatch(
         out.privileges = list as Privilege[];
         break;
       }
+      case "photo_url": {
+        if (raw === null || raw === "") { out.photo_url = null; break; }
+        const v = typeof raw === "string" ? raw.trim() : "";
+        if (!v) { out.photo_url = null; break; }
+        // Accept base64 data URLs (camera/file upload resized on client) and https URLs.
+        if (!v.startsWith("data:image/") && !/^https?:\/\/.+/i.test(v)) return { reason: "bad_photo_url", field: key };
+        // Cap at 200 KB of text (a 256×256 JPEG at quality 80 encodes to ~30 KB base64).
+        if (v.length > 200_000) return { reason: "photo_too_large", field: key };
+        out.photo_url = v;
+        break;
+      }
       case "address":
       case "internal_notes":
         out[key] = text(raw, key === "internal_notes" ? 2000 : 200);
@@ -177,7 +195,7 @@ export interface Viewer {
 
 /** The profile as `viewer` may see it; hidden groups are omitted, not nulled. */
 export function viewProfile(p: StaffProfileData, viewer: Viewer): Partial<StaffProfileData> {
-  const out: Partial<StaffProfileData> = { display_name: p.display_name, seller_code: p.seller_code };
+  const out: Partial<StaffProfileData> = { display_name: p.display_name, seller_code: p.seller_code, photo_url: p.photo_url };
   const pick = (keys: readonly (keyof StaffProfileData)[]) => {
     for (const k of keys) (out as Record<string, unknown>)[k] = p[k];
   };

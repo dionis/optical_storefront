@@ -17,9 +17,21 @@ import {
   needsPrescription,
   saleNumber,
   sellableStores,
+  rankCodeMatches,
 } from "../src/lib/pos";
 
 const NOW = new Date("2026-10-27T12:00:00Z");
+
+describe("lens material codes", () => {
+  it("keeps 1.67 and 1.74, which price the lens", () => {
+    for (const material_code of ["1.67", "1.74", "cr39", "poly"]) {
+      const r = cleanLines([{ kind: "frame", variant_id: "v", selection: { design_code: "sv", material_code } }]);
+      expect("lines" in r && r.lines[0].selection.material_code).toBe(material_code);
+    }
+    const bad = cleanLines([{ kind: "frame", variant_id: "v", selection: { design_code: "sv", material_code: "1.67;drop" } }]);
+    expect("lines" in bad && bad.lines[0].selection.material_code).toBeNull();
+  });
+});
 
 describe("saleNumber", () => {
   it("is the store code and a six-digit sequence", () => {
@@ -67,12 +79,36 @@ describe("cleanCustomer", () => {
     });
   });
 
-  it("requires name, email, phone and a real birth date", () => {
+  it("requires name, email and phone; a birth date only has to be real when given", () => {
     expect(cleanCustomer({ ...ok, last_name: "" }, NOW)).toEqual({ reason: "customer_name" });
     expect(cleanCustomer({ ...ok, email: "ana@" }, NOW)).toEqual({ reason: "customer_email" });
+    // The email is optional at the counter (owner, 11-nov-2026): none = "", and the sale goes on…
+    const noEmail = cleanCustomer({ ...ok, email: "" }, NOW);
+    expect("customer" in noEmail && noEmail.customer.email).toBe("");
+    expect("customer" in cleanCustomer({ ...ok, email: undefined }, NOW)).toBe(true);
+    // …except in THE online store, where it is how the patient hears from us.
+    expect(cleanCustomer({ ...ok, email: "" }, NOW, "UTC", { requireEmail: true })).toEqual({ reason: "customer_email" });
+    expect("customer" in cleanCustomer(ok, NOW, "UTC", { requireEmail: true })).toBe(true);
     expect(cleanCustomer({ ...ok, phone: "12" }, NOW)).toEqual({ reason: "customer_phone" });
     expect(cleanCustomer({ ...ok, birth_date: "1980-02-30" }, NOW)).toEqual({ reason: "customer_birth_date" });
     expect(cleanCustomer({ ...ok, birth_date: "2027-01-01" }, NOW)).toEqual({ reason: "customer_birth_date" });
+    // Never born in the current year (owner's rule), on the store's calendar.
+    expect(cleanCustomer({ ...ok, birth_date: "2026-01-15" }, NOW)).toEqual({ reason: "customer_birth_date" });
+    expect("customer" in cleanCustomer({ ...ok, birth_date: "2025-12-31" }, NOW)).toBe(true);
+    const newYearUtc = new Date("2027-01-01T03:00:00Z"); // still 31-dec-2026 in Houston
+    expect("customer" in cleanCustomer({ ...ok, birth_date: "2026-06-01" }, newYearUtc, "America/Chicago")).toBe(false);
+    expect("customer" in cleanCustomer({ ...ok, birth_date: "2026-06-01" }, newYearUtc, "UTC")).toBe(true); // in UTC it is already 2027: why the store's zone is passed
+    expect("customer" in cleanCustomer({ ...ok, birth_date: "2025-06-01" }, newYearUtc, "America/Chicago")).toBe(true);
+  });
+
+  // The panel's customerProblems() treats the birth date as optional (owner's
+  // decision); the server must agree or the sale is refused at the last step
+  // with a message about a field the seller was never asked to fill.
+  it("accepts a customer without a birth date (blank, missing or null → null)", () => {
+    for (const birth_date of ["", "   ", null, undefined]) {
+      const r = cleanCustomer({ ...ok, birth_date }, NOW);
+      expect("customer" in r && r.customer.birth_date).toBeNull();
+    }
   });
 
   it("an address, once started, must be complete", () => {
@@ -85,16 +121,20 @@ describe("cleanCustomer", () => {
 });
 
 describe("cleanLines", () => {
-  it("accepts a catalog frame and a customer's own frame", () => {
-    const r = cleanLines([
-      { kind: "frame", variant_id: "variant_1", selection: { design_code: "frame-only" } },
-      { kind: "own_frame", description: "Ray-Ban negro", photo: "data:image/jpeg;base64,AAAA", selection: { design_code: "sv", material_code: "cr39" } },
-    ]);
-    expect("lines" in r && r.lines.map((l) => [l.kind, l.variant_id, l.photo !== null])).toEqual([
-      ["frame", "variant_1", false],
-      ["own_frame", null, true],
-    ]);
-    expect("lines" in r && needsPrescription(r.lines)).toBe(true);
+  it("accepts a catalog frame or a customer's own frame", () => {
+    const stock = cleanLines([{ kind: "frame", variant_id: "variant_1", selection: { design_code: "frame-only" } }]);
+    expect("lines" in stock && stock.lines.map((l) => [l.kind, l.variant_id, l.photo !== null])).toEqual([["frame", "variant_1", false]]);
+    const own = cleanLines([{ kind: "own_frame", description: "Ray-Ban negro", photo: "data:image/jpeg;base64,AAAA", selection: { design_code: "sv", material_code: "cr39" } }]);
+    expect("lines" in own && own.lines.map((l) => [l.kind, l.variant_id, l.photo !== null])).toEqual([["own_frame", null, true]]);
+    expect("lines" in own && needsPrescription(own.lines)).toBe(true);
+  });
+
+  it("refuses more than one frame in a sale, stock or the customer's own", () => {
+    const frame = { kind: "frame", variant_id: "v", selection: { design_code: "frame-only" } };
+    const own = { kind: "own_frame", description: "Ray-Ban negro", selection: { design_code: "sv" } };
+    expect(cleanLines([frame, own])).toEqual({ reason: "too_many_lines" });
+    expect(cleanLines([frame, frame])).toEqual({ reason: "too_many_lines" });
+    expect(cleanLines([own, own])).toEqual({ reason: "too_many_lines" });
   });
 
   it("refuses an empty sale, a frame without variant and an own frame without lenses", () => {
@@ -247,5 +287,32 @@ describe("methodCodeFor", () => {
     expect(methodCodeFor("Cheque bancario", [])).toBe("cheque-bancario");
     expect(methodCodeFor("Crédito", ["credito"])).toBe("credito-2");
     expect(methodCodeFor("!!!", [])).toBe("method");
+  });
+});
+
+describe("rankCodeMatches (frame search by the code on the tag)", () => {
+  const variants = [
+    { id: "v1", product_id: "p1", sku: "012345678905", barcode: null },
+    { id: "v2", product_id: "p1", sku: "012345678912" },
+    { id: "v3", product_id: "p2", sku: "dc406-ditalia-black" },
+    { id: "v4", product_id: "p3", sku: "999", barcode: "012345678912" },
+  ];
+
+  it("an exact code (scanner) comes before a partial one (typed from the tag)", () => {
+    const r = rankCodeMatches(variants, "012345678912");
+    expect(r.productIds).toEqual(["p1", "p3"]);
+    expect(r.matched.get("p1")).toEqual(["v2"]);
+    expect(r.matched.get("p3")).toEqual(["v4"]);
+  });
+
+  it("a partial code finds every colour that carries it", () => {
+    const r = rankCodeMatches(variants, "0123456789");
+    expect(r.productIds).toEqual(["p1", "p3"]);
+    expect(r.matched.get("p1")).toEqual(["v1", "v2"]);
+  });
+
+  it("ignores case and finds nothing for an unrelated term", () => {
+    expect(rankCodeMatches(variants, "DC406").productIds).toEqual(["p2"]);
+    expect(rankCodeMatches(variants, "zzz").productIds).toEqual([]);
   });
 });

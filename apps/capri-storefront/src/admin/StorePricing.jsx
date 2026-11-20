@@ -2,16 +2,41 @@
 // general (porcentaje o monto fijo por venta), precios exactos por modelo,
 // vista previa con el mismo cálculo del servidor e historial de cambios.
 // Backend: /admin/store-pricing/:id (lib/store-pricing.ts).
-import { useEffect, useMemo, useState } from "react";
+//
+// REAGRUPADO (nov-2026): todo esto vive ahora en «Precios y costos»
+// (admin/PricingPanel.jsx, pestaña `pricing`), junto a los lentes, las
+// comisiones, los costos y el impuesto, con el selector de tienda global —
+// como pidió el dueño. Esta pantalla se mantiene solo por el botón «Precios»
+// de Tiendas y por el historial y la vista previa, que el panel nuevo todavía
+// no reproduce; cuando Tiendas deje de abrirla, se puede borrar.
+import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import { money, shortDate } from "./adminOrders.js";
-import { fetchStorePricing, setStoreAdjustment, setStoreExactPrice, setStoreMinimum, previewStorePrices } from "./adminStores.js";
+import { fetchStorePricing, setStoreAdjustment, setStoreExactPrice, setStoreMinimum, previewStorePrices, searchStoreCatalog } from "./adminStores.js";
 import Icon from "./icons.jsx";
+import AdminFrameCard from "./AdminFrameCard.jsx";
 
 /** Lentes de ejemplo para la vista previa: un monofocal típico. */
 const SAMPLE_LENSES = 100;
+
+/** Qué toca una regla del historial: el modelo, o todas las monturas / estuches / todo. */
+function histWhat(h, t) {
+  if (h.target) return h.product_title || h.target;
+  if (h.scope === "frame") return t("adm.pricing.hist.allFrames");
+  if (h.scope === "case") return t("adm.pricing.hist.allCases");
+  return t("adm.pricing.hist.everything");
+}
+
+/** El valor de una regla, escrito según su modo (porcentaje, monto por venta, precio, mínimo). */
+function histValue(h, t, fmt) {
+  const v = Number(h.value);
+  if (h.mode === "percent") return t("adm.pricing.hist.percent", { v: v > 0 ? `+${v}` : v });
+  if (h.mode === "delta") return t("adm.pricing.hist.delta", { v: fmt(v) });
+  if (h.mode === "min" && h.scope === "all") return t("adm.pricing.hist.pctOfList", { v });
+  return fmt(v);
+}
 
 /**
  * Las reglas y el cálculo viven en el servidor; esta pantalla solo los muestra
@@ -21,17 +46,19 @@ const SAMPLE_LENSES = 100;
 export default function StorePricing({ store, onClose }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
-  const { products = [], cases = [] } = useCatalog();
+  const { products, cases } = useCatalog();
   const [data, setData] = useState(null);
   const [state, setState] = useState("loading");
   const [busy, setBusy] = useState(false);
   const [adj, setAdj] = useState({ mode: "none", value: "" });
   const [q, setQ] = useState("");
-  const [picked, setPicked] = useState(null); // { id, name, isCase }
+  const [matches, setMatches] = useState([]);
+  const [picked, setPicked] = useState(null); // { id, name, brand, isCase, exposed }
   const [exactPrice, setExactPrice] = useState("");
   const [floor, setFloor] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [preview, setPreview] = useState(null);
+  const [cardProduct, setCardProduct] = useState(null);
   const fmt = (v) => (v == null ? "—" : money(v, "usd", lang));
 
   const load = () => {
@@ -47,16 +74,21 @@ export default function StorePricing({ store, onClose }) {
   };
   useEffect(load, [store.id]);
 
-  // Modelos del catálogo (los precios son por modelo, no por color).
-  const catalog = useMemo(() => [
-    ...products.filter((p) => p.medusaId).map((p) => ({ id: p.medusaId, name: p.name, brand: p.brand, isCase: false })),
-    ...cases.filter((c) => c.medusaId).map((c) => ({ id: c.medusaId, name: c.name, brand: "", isCase: true })),
-  ], [products, cases]);
-  const matches = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (s.length < 2) return [];
-    return catalog.filter((p) => `${p.name} ${p.brand}`.toLowerCase().includes(s)).slice(0, 8);
-  }, [catalog, q]);
+  // Modelos del catálogo del SERVIDOR (los precios son por modelo, no por color).
+  // No el catálogo que cargó el navegador: ese solo trae ids de Medusa cuando la
+  // tienda web corre con VITE_USE_MEDUSA y la carga salió bien, y si no, el
+  // buscador se quedaba vacío.
+  useEffect(() => {
+    const s = q.trim();
+    if (s.length < 2 || picked) { setMatches([]); return undefined; }
+    let on = true;
+    const timer = setTimeout(() => {
+      searchStoreCatalog(store.id, { q: s, limit: 8 })
+        .then((r) => { if (on) setMatches((r.products || []).map((p) => ({ id: p.id, name: p.title, brand: p.brand, isCase: p.is_case, exposed: p.exposed }))); })
+        .catch(() => { if (on) setMatches([]); });
+    }, 250);
+    return () => { on = false; clearTimeout(timer); };
+  }, [store.id, q, picked]);
 
   useEffect(() => {
     if (!picked) { setPreview(null); return undefined; }
@@ -156,9 +188,15 @@ export default function StorePricing({ store, onClose }) {
             {matches.length > 0 && !picked && (
               <div className="adm-pricing-matches">
                 {matches.map((p) => (
-                  <button type="button" key={p.id} className="btn-xs" onClick={() => { setPicked(p); setQ(p.name); }}>
-                    {p.name}{p.brand ? ` · ${p.brand}` : ""}
-                  </button>
+                  <span key={p.id} style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                    <button type="button" className="btn-xs" onClick={() => { setPicked(p); setQ(p.name); }}>
+                      {p.name}{p.brand ? ` · ${p.brand}` : ""}
+                    </button>
+                    <button type="button" className="btn-xs" style={{ padding: "3px 6px" }} title={t("adm.profile.viewFull")}
+                      onClick={() => { const full = products.find((x) => x.medusaId === p.id) || cases.find((x) => x.medusaId === p.id); if (full) setCardProduct(full); }}>
+                      <Icon name="eye" size={13} />
+                    </button>
+                  </span>
                 ))}
               </div>
             )}
@@ -228,21 +266,63 @@ export default function StorePricing({ store, onClose }) {
             )}
           </form>
 
-          {/* Historial */}
+          {/* Historial (HU-15): cuándo · quién · qué · antes → después · tipo.
+              Todo viene resuelto del servidor (nombres, modelo, valor anterior);
+              aquí solo se pinta. Las reglas de la cadena que esta tienda hereda
+              llegan con `chain: true` y se marcan. */}
           <details className="adm-pricing-block">
             <summary><h4 style={{ display: "inline" }}>{t("adm.pricing.historyTitle", { n: data.history.length })}</h4></summary>
-            <ul className="adm-pricing-history">
-              {data.history.map((h) => (
-                <li key={h.id} className={h.valid_to ? "closed" : ""}>
-                  <span>{shortDate(h.valid_from, lang)}</span>
-                  <span>{h.mode === "min" ? (h.scope === "all" ? t("adm.pricing.histFloor", { v: h.value }) : t("adm.pricing.histMin", { v: fmt(h.value) })) : h.scope === "all" ? adjText({ mode: h.mode, value: h.value }) : t("adm.pricing.histExact", { v: fmt(h.value) })}</span>
-                  <span className="muted">{h.valid_to ? t("adm.pricing.histUntil", { d: shortDate(h.valid_to, lang) }) : t("adm.pricing.histCurrent")}</span>
-                </li>
-              ))}
-            </ul>
+            {!data.history.length && <p className="adm-sub">{t("adm.pricing.hist.empty")}</p>}
+            {data.history.length > 0 && (
+              <table className="adm-table responsive" style={{ marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    <th>{t("adm.pricing.hist.when")}</th>
+                    <th>{t("adm.pricing.hist.who")}</th>
+                    <th>{t("adm.pricing.hist.what")}</th>
+                    <th>{t("adm.pricing.hist.change")}</th>
+                    <th>{t("adm.pricing.hist.kind")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.history.map((h) => {
+                    const who = h.created_by_name || (h.created_by ? String(h.created_by).slice(-6) : t("adm.pricing.hist.unknownUser"));
+                    const closer = h.closed_by_name || (h.closed_by ? String(h.closed_by).slice(-6) : t("adm.pricing.hist.unknownUser"));
+                    return (
+                      <tr key={h.id} className={h.valid_to ? "closed" : ""}>
+                        <td data-label={t("adm.pricing.hist.when")}>{shortDate(h.valid_from, lang)}</td>
+                        <td data-label={t("adm.pricing.hist.who")}>{who}</td>
+                        <td data-label={t("adm.pricing.hist.what")}>
+                          {h.chain && <span className="adm-chip" title={t("adm.pricing.hist.chainHint")}>{t("adm.pricing.hist.chain")} </span>}
+                          {histWhat(h, t)}
+                          {h.product_sku && <> <code className="muted">{h.product_sku}</code></>}
+                        </td>
+                        <td data-label={t("adm.pricing.hist.change")}>
+                          <span className="muted">{h.previous_value == null ? t("adm.pricing.hist.none") : histValue({ ...h, mode: h.previous_mode || h.mode, value: h.previous_value }, t, fmt)}</span>
+                          {" → "}
+                          <b>{histValue(h, t, fmt)}</b>
+                          {h.valid_to && (
+                            <div className="muted" style={{ fontSize: 11 }}>
+                              {h.replaced_by
+                                ? t("adm.pricing.hist.replacedOn", { d: shortDate(h.valid_to, lang) })
+                                : t("adm.pricing.hist.removedBy", { d: shortDate(h.valid_to, lang), who: closer })}
+                            </div>
+                          )}
+                        </td>
+                        <td data-label={t("adm.pricing.hist.kind")}>
+                          {t(h.family === "adjustment" ? "adm.pricing.hist.family.adjustment" : h.family === "price" ? "adm.pricing.hist.family.price" : h.family === "minimum" ? "adm.pricing.hist.family.minimum" : "adm.pricing.hist.family.other")}
+                          {!h.valid_to && <> · <span className="muted">{t("adm.pricing.hist.current")}</span></>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </details>
         </>
       )}
+      {cardProduct && <AdminFrameCard product={cardProduct} onClose={() => setCardProduct(null)} />}
     </div>
   );
 }

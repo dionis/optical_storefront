@@ -21,6 +21,23 @@ python -m scraper sync --collection di-caprio
 python -m scraper sync --dry-run
 ```
 
+Every sync ends with a summary (new / updated / unchanged / failed / retired, and
+the new models by handle).
+
+## In production: the worker (monthly + on demand)
+
+```bash
+python -m scraper worker          # poll Medusa every minute, run what is queued
+python -m scraper worker --once   # one poll, then exit
+```
+
+The worker runs as its own Coolify app (`Dockerfile` here, build context = repo
+root). It never decides when to scrape: the backend queues a run once a month and
+the owner can queue one from `/admin` → Catálogo → Sincronización, where progress,
+«Detener» and the result of each run (with the new models) are shown. New models
+also get their 4 views generated, within the per-run cap the owner sets.
+Setup and design: [`docs/CATALOG-SYNC.md`](../../docs/CATALOG-SYNC.md).
+
 ## Configuration
 
 Copy `.env.example` to `.env` and fill in your credentials.

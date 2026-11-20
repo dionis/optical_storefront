@@ -3,11 +3,12 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { resolveEmailLocale } from "./email/copy";
 import { renderApprovalRequestEmail } from "./email/pos-emails";
 import type { EstablishmentRow } from "./establishments";
-import { storefrontOrigin } from "./order-access";
+// Staff links (panel, alerts, seller links) always use the default domain: the panel lives there.
+import { defaultStorefrontOrigin } from "./storefront-origin";
 import type { ApprovalRow } from "./pos-data";
 import { isAdminRole, resolveRole } from "./staff-roles";
 import { profilesByUser } from "./staff-profile-data";
-import { assignmentsByUser } from "./staff-scope";
+import { assignmentsByUser, ownerUserId } from "./staff-scope";
 import { tenant } from "./tenant";
 
 /**
@@ -19,11 +20,11 @@ export async function approverRecipients(container: MedusaContainer): Promise<Ar
   const users = container.resolve<IUserModuleService>(Modules.USER);
   const all = await users.listUsers({}, { take: 500, order: { created_at: "ASC" } });
   const ids = all.map((u) => u.id);
-  const [byUser, profiles] = await Promise.all([assignmentsByUser(container, ids), profilesByUser(container, ids)]);
+  const [byUser, profiles, ownerId] = await Promise.all([assignmentsByUser(container, ids), profilesByUser(container, ids), ownerUserId(container)]);
   const seen = new Set<string>();
   const out: Array<{ email: string; locale: string }> = [];
-  all.forEach((u, i) => {
-    const role = resolveRole({ isOwner: i === 0, assignments: byUser.get(u.id) ?? [] }).role;
+  all.forEach((u) => {
+    const role = resolveRole({ isOwner: u.id === ownerId, assignments: byUser.get(u.id) ?? [] }).role;
     if (!isAdminRole(role)) return;
     const p = profiles.get(u.id);
     const email = (p?.alert_email || u.email || "").toLowerCase();
@@ -47,7 +48,7 @@ export async function notifyApprovalRequest(
 ): Promise<number> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const notifications = container.resolve<INotificationModuleService>(Modules.NOTIFICATION);
-  const link = `${storefrontOrigin()}/admin?tab=approvals&approval=${encodeURIComponent(approval.id)}`;
+  const link = `${defaultStorefrontOrigin()}/admin?tab=approvals&approval=${encodeURIComponent(approval.id)}`;
   let sent = 0;
   for (const r of await approverRecipients(container)) {
     const locale = resolveEmailLocale(r.locale);
@@ -63,6 +64,7 @@ export async function notifyApprovalRequest(
           {
             storeCode: store.code,
             storeName: store.name,
+            storeColor: store.color,
             seller: sellerLabel,
             pct: approval.discount_pct,
             limitPct: approval.limit_pct,

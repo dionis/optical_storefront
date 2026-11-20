@@ -23,12 +23,20 @@ export const Establishment = model.define("establishment", {
   address: model.text().nullable(),
   phone: model.text().nullable(),
   sales_channel_id: model.text().nullable(),
-  /** own | family | partner | consignment — for the settlement with the store. */
-  kind: model.enum(["own", "family", "partner", "consignment"]).default("own"),
+  /** #RRGGBB: identifies the store at a glance in emails (src/lib/store-color.ts). */
+  color: model.text().nullable(),
+  /**
+   * own | family | partner | consignment — for the settlement with the store —
+   * or `online`: THE online store, the one the web shop is managed with
+   * (lib/online-store.ts). At most one active store is online.
+   */
+  kind: model.enum(["own", "family", "partner", "consignment", "online"]).default("own"),
   /** Warranty and exchange policy printed on this store's receipts (HU-104). */
   receipt_note: model.text().nullable(),
   /** Share of the net sales the store keeps in the settlement (HU-33); null = none. */
   settlement_pct: model.float().nullable(),
+  /** Opening hours (lib/store-hours.ts); null = not set. */
+  hours: model.json().nullable(),
   is_active: model.boolean().default(true),
   created_by: model.text().nullable(),
   updated_by: model.text().nullable(),

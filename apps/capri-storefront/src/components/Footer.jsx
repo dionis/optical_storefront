@@ -36,7 +36,8 @@ export default function Footer() {
         </div>
       </div>
       <div className="footer-bottom">
-        © {new Date().getFullYear()} {t("footer.rights")}
+        {/* Sin proveedor que acreditar (imageCredit vacío) queda solo la marca. */}
+        © {new Date().getFullYear()} {TENANT.imageCredit ? t("footer.rights", { credit: TENANT.imageCredit }) : TENANT.name}
         <Link to="/admin" className="footer-admin" title={t("adm.title")}>· {t("footer.admin")}</Link>
       </div>
       <FooterInfo topic={info} onClose={() => setInfo(null)} />

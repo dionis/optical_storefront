@@ -78,15 +78,25 @@ function ensurePrintStyle() {
   document.head.appendChild(printStyle);
 }
 
-/** Imprime (→ PDF) un nodo del panel con título y fecha. */
-export function printElement(el, title, meta = "") {
+/**
+ * Imprime (→ PDF) un nodo del panel con título y fecha.
+ *   printElement(el, "Título", "filtros")                       — forma clásica
+ *   printElement(el, { title, meta, docTitle, landscape })      — con opciones:
+ * `docTitle` sustituye `document.title` mientras dura la impresión (es lo que
+ * el navegador escribe en su encabezado, en vez del título de la tienda);
+ * `landscape` fuerza carta apaisada. Ambos se deshacen al terminar.
+ */
+export function printElement(el, titleOrOpts, meta = "") {
   if (!el) return;
+  const opts = titleOrOpts && typeof titleOrOpts === "object" ? titleOrOpts : { title: titleOrOpts, meta };
+  const title = opts.title;
+  const metaText = opts.meta ?? "";
   ensurePrintStyle();
   let root = document.getElementById("adm-print-root");
   if (!root) { root = document.createElement("div"); root.id = "adm-print-root"; document.body.appendChild(root); }
   root.innerHTML = "";
   const h = document.createElement("h1"); h.className = "adm-print-title"; h.textContent = title || document.title; root.appendChild(h);
-  const m = document.createElement("p"); m.className = "adm-print-meta"; m.textContent = `${meta ? meta + " · " : ""}${new Date().toLocaleString()}`; root.appendChild(m);
+  const m = document.createElement("p"); m.className = "adm-print-meta"; m.textContent = `${metaText ? metaText + " · " : ""}${new Date().toLocaleString()}`; root.appendChild(m);
   const clone = el.cloneNode(true);
   // Los inputs no se clonan con su valor: se copia a mano para que el PDF
   // enseñe lo que había escrito (importes de las fichas, filtros…).
@@ -94,8 +104,49 @@ export function printElement(el, title, meta = "") {
   const dst = clone.querySelectorAll("input, select, textarea");
   src.forEach((s, i) => { const d = dst[i]; if (!d) return; const span = document.createElement("span"); span.textContent = s.value; span.className = "adm-print-val"; d.replaceWith(span); });
   root.appendChild(clone);
+  const prevTitle = document.title;
+  if (opts.docTitle) document.title = opts.docTitle;
+  let pageStyle = null;
+  if (opts.landscape) { pageStyle = document.createElement("style"); pageStyle.textContent = "@media print { @page { size: letter landscape; } }"; document.head.appendChild(pageStyle); }
   document.body.classList.add("adm-printing");
-  const done = () => { document.body.classList.remove("adm-printing"); root.innerHTML = ""; window.removeEventListener("afterprint", done); };
+  const done = () => {
+    document.body.classList.remove("adm-printing"); root.innerHTML = ""; window.removeEventListener("afterprint", done);
+    if (opts.docTitle) document.title = prevTitle;
+    pageStyle?.remove();
+  };
   window.addEventListener("afterprint", done);
   setTimeout(() => { window.print(); setTimeout(done, 1500); }, 60);
+}
+
+/**
+ * Imprime un documento HTML completo en un iframe aislado: ni el CSS del panel
+ * ni sus reglas @page lo tocan, y el encabezado del navegador lleva `title`
+ * (el iframe es el documento que se imprime). `html` es el cuerpo, `css` la
+ * hoja que se incrusta tal cual (ReportDoc + report.css). Se retira solo al
+ * acabar; si el navegador no avisa (`afterprint`), a los 60 s.
+ */
+export function printHtml({ html, css = "", title = "", lang = "es" }) {
+  if (!html) return;
+  const prev = document.getElementById("adm-print-frame");
+  prev?.remove();
+  const frame = document.createElement("iframe");
+  frame.id = "adm-print-frame";
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;";
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  const safeTitle = String(title).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+  doc.write(`<!doctype html><html lang="${String(lang).replace(/[^a-zA-Z-]/g, "")}"><head><meta charset="utf-8"><title>${safeTitle}</title><style>${css}</style></head><body>${html}</body></html>`);
+  doc.close();
+  const win = frame.contentWindow;
+  let finished = false;
+  const done = () => { if (finished) return; finished = true; setTimeout(() => frame.remove(), 300); };
+  win.addEventListener("afterprint", done);
+  const go = () => {
+    // Fuentes web del reporte: se espera a que carguen (si el navegador lo permite) antes de abrir el diálogo.
+    const ready = doc.fonts?.ready ? Promise.race([doc.fonts.ready, new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve();
+    ready.then(() => { win.focus(); win.print(); setTimeout(done, 60_000); }).catch(() => { win.print(); setTimeout(done, 60_000); });
+  };
+  if (doc.readyState === "complete") setTimeout(go, 80); else win.addEventListener("load", () => setTimeout(go, 80));
 }

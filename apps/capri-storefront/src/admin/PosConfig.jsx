@@ -4,10 +4,12 @@
 //  · Formas de pago: dueño, superadmin o el privilegio «Gestionar formas de pago» (HU-111/112).
 //  · Límites de descuento y umbrales del daño óptico: dueño y superadmin (HU-16, HU-123).
 //  · Lo que deben las aseguradoras: dueño y encargados (HU-114).
+import LabSurcharges from "./LabSurcharges.jsx";
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { money } from "./adminOrders.js";
 import {
   createMethod,
@@ -89,7 +91,7 @@ function Methods({ stores, canEditStores }) {
   };
   return (
     <div className="adm-card">
-      <h3>{t("adm.pos.cfg.methods")}</h3>
+      <h3>{t("adm.pos.cfg.methods")}<HelpTip topic="posconfig.methods" /></h3>
       <p className="adm-sub">{t("adm.pos.cfg.methodsSub")}</p>
       <table className="adm-table responsive">
         <thead><tr><th>{t("adm.pos.pay.method")}</th><th>{t("adm.pos.cfg.fee")}</th><th>{t("adm.pos.cfg.stores")}</th><th>{t("adm.pos.cfg.active")}</th></tr></thead>
@@ -148,11 +150,13 @@ function Limits() {
   if (!s) return null;
   const save = async () => {
     setBusy(true);
-    try { const r = await savePosSettings({ discount_limits: s.discount_limits, optical_thresholds: s.optical_thresholds }); setS(r.settings); toast({ tone: "success", title: t("adm.pos.cfg.saved") }); }
+    try { const r = await savePosSettings({ discount_limits: s.discount_limits, optical_thresholds: s.optical_thresholds, backdate_limits: s.backdate_limits }); setS(r.settings); toast({ tone: "success", title: t("adm.pos.cfg.saved") }); }
     catch (e) { toast({ tone: "error", title: t(e.message) }); } finally { setBusy(false); }
   };
   const setL = (k) => (e) => setS((x) => ({ ...x, discount_limits: { ...x.discount_limits, [k]: e.target.value } }));
   const setT = (k) => (e) => setS((x) => ({ ...x, optical_thresholds: { ...x.optical_thresholds, [k]: e.target.value } }));
+  // Días hacia atrás que cada rol puede poner a una venta (lib/sale-date.ts); dueño y superadmin, siempre un año.
+  const setB = (k) => (e) => setS((x) => ({ ...x, backdate_limits: { ...(x.backdate_limits || {}), [k]: e.target.value === "" ? "" : Math.round(Number(e.target.value)) } }));
   return (
     <div className="adm-card">
       <h3>{t("adm.pos.cfg.limits")}</h3>
@@ -167,6 +171,13 @@ function Limits() {
       <div className="pos-form">
         {["se", "cyl", "add", "axis", "axisMinCyl"].map((k) => (
           <label key={k}>{t(`adm.pos.cfg.th.${k}`)}<input type="number" min="0" step={k === "axis" ? "1" : "0.25"} value={s.optical_thresholds[k]} onChange={setT(k)} /></label>
+        ))}
+      </div>
+      <h3>{t("adm.sdt.cfg.title")}</h3>
+      <p className="adm-sub">{t("adm.sdt.cfg.sub")}</p>
+      <div className="pos-form">
+        {["seller", "manager", "supervisor"].map((r) => (
+          <label key={r}>{t(`adm.team.role.${r}`)} ({t("adm.sdt.cfg.days")})<input type="number" min="0" max="366" step="1" value={s.backdate_limits?.[r] ?? 366} onChange={setB(r)} /></label>
         ))}
       </div>
       <button type="button" className="btn-sm primary" disabled={busy} onClick={save}><Icon name="save" size={14} /> {t("adm.pos.cfg.save")}</button>
@@ -236,6 +247,7 @@ export default function PosConfig() {
           privilegio solo se ven las propias y se quitaría sin querer de las demás. */}
       {payments && <Methods stores={ctx.stores} canEditStores={admin} />}
       {admin && <Limits />}
+      {admin && <LabSurcharges />}
       {(admin || manager) && <Claims stores={ctx.stores} />}
     </div>
   );

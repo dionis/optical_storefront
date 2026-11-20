@@ -1,6 +1,7 @@
 // Tiendas físicas (API real /admin/establishments). Módulo sin hook de idioma:
 // los errores viajan como CLAVES adm.err.stores.* y traduce quien pinta.
-import { adminFetch } from "./adminApi.js";
+import { adminFetch, invalidateCache } from "./adminApi.js";
+import { ADMIN_LENS_MATRIX_PATH } from "../data/lensCatalog.js";
 
 const reasonKey = (e, fallback) => {
   const r = (e && e.reason) || (e && e.payload && e.payload.reason);
@@ -11,9 +12,9 @@ export async function fetchStores() {
   return adminFetch("/admin/establishments");
 }
 
-export async function createStore({ name, address = "", phone = "" }) {
+export async function createStore({ name, address = "", phone = "", color }) {
   try {
-    return await adminFetch("/admin/establishments", { method: "POST", body: { name, address, phone } });
+    return await adminFetch("/admin/establishments", { method: "POST", body: { name, address, phone, ...(color ? { color } : {}) } });
   } catch (e) {
     throw new Error(reasonKey(e, "adm.err.stores.saveFailed"));
   }
@@ -63,7 +64,10 @@ export async function setStoreMinimum(id, { scope, productId = null, value }) {
 /** Plan (apply=false) o aplicación (apply=true) de la lista de precios del dueño. */
 export async function importOwnerPrices(prices, apply = false) {
   try {
-    return await adminFetch("/admin/store-pricing/import", { method: "POST", body: { prices, apply } });
+    const data = await adminFetch("/admin/store-pricing/import", { method: "POST", body: { prices, apply } });
+    // An applied import rewrites lens cells too: the till's list (lensCatalog.js) must not keep the old one.
+    if (apply) invalidateCache(ADMIN_LENS_MATRIX_PATH);
+    return data;
   } catch (e) {
     throw new Error(pricingKey(e, "adm.err.pricing.importFailed"));
   }
@@ -75,10 +79,77 @@ export async function previewStorePrices(id, productIds, lenses = 0) {
   });
 }
 
+/**
+ * Azul de marca de la tienda online (`--blue` en styles/index.css): el canal
+ * «web» no es un establecimiento, así que su color no vive en la base de datos.
+ */
+export const ONLINE_STORE_COLOR = "#0E5AD0";
+
+/**
+ * Colores de partida; el servidor reparte uno distinto a cada tienda nueva
+ * (lib/store-color.ts, misma lista). Los cuatro últimos son los que pidió el
+ * dueño para sus tiendas: verde clínica, cobre, fucsia y el azul de la web.
+ * Qué tienda lleva cuál es dato (Tiendas → Editar), nunca código.
+ */
+export const STORE_COLORS = ["#2563EB", "#DC2626", "#16A34A", "#7C3AED", "#EA580C", "#DB2777", "#0891B2", "#854D0E", "#65A30D", "#475569", "#1B7F4C", "#B5651D", "#C2185B", ONLINE_STORE_COLOR];
+
+/** El que se propone a una tienda nueva: el primero que ninguna usa; null si no queda (lo elige el servidor). */
+export function freeStoreColor(stores) {
+  const used = new Set(stores.map((s) => String(s.color || "").toUpperCase()));
+  return STORE_COLORS.find((c) => !used.has(c)) ?? null;
+}
+
+/** Texto legible sobre el color de una tienda. */
+export function storeInk(hex) {
+  const c = /^#[0-9a-f]{6}$/i.test(hex || "") ? hex : "#2563EB";
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const v = parseInt(c.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return (l + 0.05) / 0.05 > 1.05 / (l + 0.05) ? "#111827" : "#FFFFFF";
+}
+
 export async function updateStore(id, patch) {
   try {
     return await adminFetch(`/admin/establishments/${encodeURIComponent(id)}`, { method: "POST", body: patch });
   } catch (e) {
     throw new Error(reasonKey(e, "adm.err.stores.saveFailed"));
+  }
+}
+
+/* ── Surtido por tienda (/admin/store-assortment/:id) ── */
+
+const assortmentKey = (e, fallback) => {
+  const r = (e && e.reason) || (e && e.payload && e.payload.reason);
+  return r ? `adm.err.assortment.${r}` : fallback;
+};
+
+export async function fetchStoreAssortment(id) {
+  return adminFetch(`/admin/store-assortment/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Modelos del catálogo del servidor (no el que cargó el navegador) con su
+ * exposición en la tienda: { id, title, brand, is_case, exposed }.
+ */
+export async function searchStoreCatalog(id, { q = "", brand = "", limit } = {}) {
+  const query = { q };
+  if (brand) query.brand = brand;
+  if (limit) query.limit = limit;
+  return adminFetch(`/admin/store-assortment/${encodeURIComponent(id)}/products`, { query });
+}
+
+/** Ficha de un modelo en la tienda (fotos, medidas, precios, exposición). */
+export async function fetchStoreModel(id, productId) {
+  return adminFetch(`/admin/store-assortment/${encodeURIComponent(id)}/products/${encodeURIComponent(productId)}`);
+}
+
+/** scope "brand" (slug) | "product" (id); exposed true/false, o null para volver a lo heredado. */
+export async function setAssortmentRule(id, { scope, target, exposed }) {
+  try {
+    return await adminFetch(`/admin/store-assortment/${encodeURIComponent(id)}/rule`, { method: "POST", body: { scope, target, exposed } });
+  } catch (e) {
+    throw new Error(assortmentKey(e, "adm.err.assortment.saveFailed"));
   }
 }

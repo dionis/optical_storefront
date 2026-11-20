@@ -14,13 +14,27 @@
  * The owner's own price for a model (a global price rule, src/lib/store-pricing.ts)
  * wins over the sheet: without this the 4-hourly run would put back the
  * wholesale-derived price a few hours after the owner set theirs.
+ *
+ * The CHAIN's price band (src/lib/pricing.ts) is applied to the converted
+ * price before it is written — the floor raises what the conversion priced too
+ * low, the ceiling brings down what it priced too high — and never to a price
+ * the owner typed himself. Only the chain's band: a Medusa variant holds ONE
+ * price, so a per-store band cannot live here; it is applied per store when
+ * the line is quoted (`storeLinePrice`).
  */
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { MedusaContainer } from "@medusajs/framework/types";
-import { updateProductVariantsWorkflow } from "@medusajs/medusa/core-flows";
-import { sellingPrice, normalizeModel, type PriceKind } from "./pricing";
+import {
+  applyPriceBandUsd,
+  normalizeModel,
+  priceBandFor,
+  sellingPrice,
+  type BandImpactItem,
+  type PriceBand,
+  type PriceKind,
+} from "./pricing";
 import { PRICE_BOOK, type PriceBookItem } from "../data/wholesale-prices";
-import { openRules } from "./store-pricing-data";
+import { openRules, setVariantPrices, type VariantPriceUpdate } from "./store-pricing-data";
 import { globalPriceOverrides } from "./store-pricing";
 
 export type SyncReport = {
@@ -30,21 +44,44 @@ export type SyncReport = {
   unmatched: string[]; // catalog products with no sheet price (title)
   estimatedUsed: number; // matched via brand-average estimate (no wholesale)
   ownerPriced: number; // products priced by the owner's own global price
+  bandRaised: number; // products the chain's floor lifted
+  bandLowered: number; // products the chain's ceiling brought down
   currency: string;
 };
 
 const CURRENCY = "usd";
 
-/** Build the lookup once: normalized model -> target selling price (whole dollars). */
-function buildIndex(): Map<string, { price: number; estimated: boolean }> {
-  const items: PriceBookItem[] = PRICE_BOOK;
-  const idx = new Map<string, { price: number; estimated: boolean }>();
-  for (const it of items) {
+/**
+ * THE CONVERTED PRICE of every model in the supplier's price book, before any
+ * band: the wholesale cost run through `sellingPrice`, or the sheet's own
+ * figure for a model the supplier does not list.
+ *
+ * This is the one definition of "el precio después de conversión", so the
+ * 4-hourly job and the panel's impact preview cannot disagree about what a
+ * floor or a ceiling would move.
+ */
+export function convertedPriceBook(items: readonly PriceBookItem[] = PRICE_BOOK): BandImpactItem[] {
+  return items.map((it) => {
     const kind: PriceKind = it.brand.toLowerCase() === "cases" ? "case" : "frame";
     // Recompute from wholesale when we have it (keeps the rule authoritative);
     // fall back to the sheet's estimated price when the wholesale is unknown.
-    const price = it.wholesale != null ? sellingPrice(it.wholesale, kind) : it.price;
-    idx.set(it.key, { price, estimated: it.wholesale == null });
+    return {
+      key: it.key,
+      model: it.model,
+      kind,
+      price: it.wholesale != null ? sellingPrice(it.wholesale, kind) : it.price,
+    };
+  });
+}
+
+/** Build the lookup once: normalized model -> target selling price (whole dollars). */
+function buildIndex(): Map<string, { price: number; estimated: boolean; kind: PriceKind }> {
+  const idx = new Map<string, { price: number; estimated: boolean; kind: PriceKind }>();
+  const converted = new Map(convertedPriceBook().map((c) => [c.key, c]));
+  for (const it of PRICE_BOOK) {
+    const hit = converted.get(it.key);
+    if (!hit) continue;
+    idx.set(it.key, { price: hit.price, estimated: it.wholesale == null, kind: hit.kind });
   }
   return idx;
 }
@@ -56,7 +93,10 @@ export async function syncPrices(
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const index = buildIndex();
+  // `openRules` is also what warms the band cache, so the chain's band is in
+  // hand by the time the first price is computed (lib/store-pricing-data.ts).
   const ownerPrices = globalPriceOverrides(await openRules(container, []));
+  const band: PriceBand | null = priceBandFor(null);
 
   const report: SyncReport = {
     total: 0,
@@ -65,24 +105,51 @@ export async function syncPrices(
     unmatched: [],
     estimatedUsed: 0,
     ownerPriced: 0,
+    bandRaised: 0,
+    bandLowered: 0,
     currency: CURRENCY,
   };
 
   const pageSize = 200;
   let offset = 0;
-  // We set the target price on every matched variant (idempotent — writing the
-  // same amount is harmless). We deliberately do NOT read the current variant
-  // price here: in Medusa v2 the amount lives on a price set linked to the
-  // variant, and the exact query path is version-sensitive; setting the target
-  // unconditionally is simpler and safe to run every few hours.
-  const updates: { id: string; prices: { amount: number; currency_code: string }[] }[] = [];
+  // The target price of every matched variant; only the ones that differ from
+  // what the variant has are written (see `push` below).
+  const updates: VariantPriceUpdate[] = [];
+
+  // The variant's current base price (USD, no rules): an amount that is
+  // already right is not written again. Each write replaces the price row
+  // (delete + insert), and the operation log (docs/OPERATION-LOG.md) would
+  // otherwise fill every four hours with hundreds of «changes» that change
+  // nothing. If this Medusa cannot read prices through the variant, every
+  // variant is written as before.
+  let readPrices = true;
+  const currentOf = (v: any): number | null => {
+    const base = ((v?.prices as any[]) || []).filter((x) => String(x?.currency_code).toLowerCase() === CURRENCY && !Number(x?.rules_count));
+    return base.length === 1 && Number.isFinite(Number(base[0].amount)) ? Number(base[0].amount) : null;
+  };
+  const push = (v: any, productId: string, amount: number) => {
+    if (readPrices && currentOf(v) === amount) {
+      report.unchanged++;
+      return;
+    }
+    report.updated++;
+    updates.push({ variant_id: v.id, product_id: productId, prices: [{ amount, currency_code: CURRENCY }] });
+  };
 
   for (;;) {
-    const { data: products } = await query.graph({
-      entity: "product",
-      fields: ["id", "title", "variants.id"],
-      pagination: { skip: offset, take: pageSize },
-    });
+    let products: any[] | undefined;
+    try {
+      ({ data: products } = await query.graph({
+        entity: "product",
+        fields: readPrices ? ["id", "title", "variants.id", "variants.prices.amount", "variants.prices.currency_code", "variants.prices.rules_count"] : ["id", "title", "variants.id"],
+        pagination: { skip: offset, take: pageSize },
+      }));
+    } catch (e) {
+      if (!readPrices) throw e;
+      logger.warn(`[price-sync] current prices not readable (${(e as Error).message}); writing every variant`);
+      readPrices = false;
+      continue;
+    }
     if (!products || products.length === 0) break;
 
     for (const p of products) {
@@ -90,10 +157,7 @@ export async function syncPrices(
       const owner = ownerPrices.get(p.id as string);
       if (owner != null) {
         report.ownerPriced++;
-        for (const v of (p.variants as any[]) || []) {
-          report.updated++;
-          updates.push({ id: v.id, prices: [{ amount: owner, currency_code: CURRENCY }] });
-        }
+        for (const v of (p.variants as any[]) || []) push(v, p.id as string, owner);
         continue;
       }
       const hit = index.get(normalizeModel(p.title as string));
@@ -102,20 +166,21 @@ export async function syncPrices(
         continue;
       }
       if (hit.estimated) report.estimatedUsed++;
-      for (const v of (p.variants as any[]) || []) {
-        report.updated++;
-        updates.push({
-          id: v.id,
-          prices: [{ amount: hit.price, currency_code: CURRENCY }],
-        });
-      }
+      // The floor and the ceiling, last and on the converted price only: a
+      // price the owner typed took the branch above and never gets here.
+      const amount = applyPriceBandUsd(hit.price, band, hit.kind);
+      if (amount > hit.price) report.bandRaised++;
+      else if (amount < hit.price) report.bandLowered++;
+      for (const v of (p.variants as any[]) || []) push(v, p.id as string, amount);
     }
     offset += products.length;
     if (products.length < pageSize) break;
   }
 
   logger.info(
-    `[price-sync] scanned ${report.total} products (${report.ownerPriced} at the owner's own price); ${report.updated} variant prices to update, ` +
+    `[price-sync] scanned ${report.total} products (${report.ownerPriced} at the owner's own price, ` +
+      `${report.bandRaised} lifted by the floor, ${report.bandLowered} brought down by the ceiling); ` +
+      `${report.updated} variant prices to update, ` +
       `${report.unchanged} already correct, ${report.unmatched.length} without a sheet price` +
       (opts.dryRun ? " (DRY RUN — no writes)" : "")
   );
@@ -124,10 +189,7 @@ export async function syncPrices(
     // Update in batches so a huge catalog does not build one giant transaction.
     const batchSize = 100;
     for (let i = 0; i < updates.length; i += batchSize) {
-      const batch = updates.slice(i, i + batchSize);
-      await updateProductVariantsWorkflow(container).run({
-        input: { product_variants: batch as any },
-      });
+      await setVariantPrices(container, updates.slice(i, i + batchSize));
       logger.info(`[price-sync] updated ${Math.min(i + batchSize, updates.length)}/${updates.length}`);
     }
   }

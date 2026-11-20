@@ -10,6 +10,7 @@
  */
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
+import { defaultLensFinish } from "../lib/lens-finish";
 
 const DESIGNS = [
   { code: "sv", category: "sv", requires_rx: true, requires_add: false, label_es: "Visión Sencilla", label_en: "Single Vision", sort: 0 },
@@ -72,10 +73,14 @@ export default async function seedLens2026({
   await pg("lens_design").insert(DESIGNS);
   await pg("lens_material").insert(MATERIALS);
 
-  const basePrices: { design_code: string; material_code: string; price_cents: number }[] = [];
+  // One cell per (design, material) at the design's default finish: stock, and
+  // digital for progressives (lib/lens-finish.ts). Digital single-vision and
+  // bifocal cells are the owner's to type in the pricing panel.
+  const basePrices: { design_code: string; material_code: string; finish: string; price_cents: number }[] = [];
   for (const design of Object.keys(BASE_USD)) {
+    const category = DESIGNS.find((d) => d.code === design)?.category ?? null;
     for (const material of Object.keys(BASE_USD[design])) {
-      basePrices.push({ design_code: design, material_code: material, price_cents: BASE_USD[design][material] * 100 });
+      basePrices.push({ design_code: design, material_code: material, finish: defaultLensFinish(category), price_cents: BASE_USD[design][material] * 100 });
     }
   }
   await pg("lens_base_price").insert(basePrices);

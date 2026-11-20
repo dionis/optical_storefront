@@ -13,7 +13,7 @@
  */
 
 import { OpticalMeasurements } from './optical_calculator';
-import { t, getLang, onLangChange } from './i18n';
+import { t, getLang, onLangChange, BRAND } from './i18n';
 import { checkSingleFace } from './image_validator';
 import { StoredRun, loadRun, reportUrl, saveRun } from './vision_report_store';
 import {
@@ -349,6 +349,15 @@ export class VisionMeasurePanel {
       this.imageEngineSelect.innerHTML = this.catalog.imageEngines
         .map((e) => `<option value="${e.id}">${e.label}</option>`)
         .join('');
+    }
+
+    // Start on the provider the server is configured to use (VISION_DEFAULT_PROVIDER); a
+    // saved preference, restored below, still wins. The render engine is NOT preselected
+    // the same way: here it stays on the free local composite unless the operator picks
+    // a paid one.
+    const { defaultProvider } = this.catalog;
+    if (this.providerSelect && defaultProvider && this.catalog.providers.some((p) => p.id === defaultProvider)) {
+      this.providerSelect.value = defaultProvider;
     }
 
     // A service older than this page produces symptoms that look exactly like bugs.
@@ -1508,7 +1517,7 @@ export class VisionMeasurePanel {
 
     const payload = {
       generatedAt: new Date().toISOString(),
-      source: 'RUBILENS VTO · medición multimodal',
+      source: `${BRAND} VTO · medición multimodal`,
       capture: {
         hasTrackedContext: this.captureContext !== null,
         context: this.captureContext,

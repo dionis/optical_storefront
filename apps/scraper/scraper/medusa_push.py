@@ -2,6 +2,8 @@
 
 import atexit
 import json
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -151,6 +153,31 @@ def _post(client: httpx.Client, url: str, **kwargs: Any) -> httpx.Response:
     return client.post(url, **kwargs)
 
 
+def report_ai_usage(config: Config, events: list[dict[str, Any]]) -> bool:
+    """Send AI usage events to the backend's «Consumo IA» (`POST /admin/ai-usage/ingest`).
+
+    Best-effort: a backend that does not have the route yet (404), a network
+    error or a rejected event never interrupts the sync — it is logged and
+    dropped. Returns whether the backend accepted the batch.
+    """
+    if not events or not config.medusa_admin_api_key:
+        return False
+    base_url = config.medusa_backend_url.rstrip("/")
+    try:
+        resp = _post(
+            _admin_client(config),
+            f"{base_url}/admin/ai-usage/ingest",
+            json={"events": events[:200]},
+        )
+        if resp.status_code >= 400:
+            print(f"[scraper] AI usage report refused ({resp.status_code}) — not counted.")
+            return False
+        return True
+    except Exception as err:  # noqa: BLE001 — tracking must not stop a sync
+        print(f"[scraper] AI usage report failed: {type(err).__name__}: {err}")
+        return False
+
+
 def _build_medusa_payload(
     product: ScrapedProduct,
     pricing: dict[str, Any],
@@ -261,7 +288,7 @@ def _as_update_payload(
 ) -> dict[str, Any]:
     """Adapt a create payload for `POST /admin/products/:id`.
 
-    Two things differ from create, both verified against the installed
+    What differs from create, all verified against the installed
     `@medusajs/medusa` (2.17.2) request validators:
 
     1. Medusa 2.16.0 REMOVED the product-level `options` property from the update
@@ -275,21 +302,145 @@ def _as_update_payload(
        one is CREATED rather than matched — silently duplicating every colour on
        each sync. Match the existing rows by SKU (falling back to title, since the
        colour name is what the SKU is derived from) and carry their ids over.
+
+    3. Medusa REPLACES `metadata` on update (2.17.2 has no merge). Sending only
+       the scraper's keys used to erase every key somebody else wrote: the
+       product's `first_seen_at`, and on variants the generated `views`/`video`
+       that `media sync` copies there. Existing keys are kept and ours win, so
+       the scraper still owns its own fields and nothing else.
+
+    4. A variant's `options` must name a value the product's «Color» option
+       already has, or Medusa rejects the WHOLE update ("Option value Black does
+       not exist for option Color") — and since options cannot be sent here, the
+       product never heals. A matched variant keeps its colour, so it sends no
+       `options` at all. A new colour reuses the product's own spelling when one
+       differs only in case ("BROWN" vs "Brown"), and `upsert_product` links
+       every new colour to the product first (`_new_variant_colors`).
     """
     update = {key: value for key, value in payload.items() if key != "options"}
 
+    update["metadata"] = {
+        **(existing.get("metadata") or {}),
+        **(payload.get("metadata") or {}),
+    }
+
     existing_variants = existing.get("variants") or []
     by_sku = {v["sku"]: v["id"] for v in existing_variants if v.get("sku") and v.get("id")}
-    by_title = {v["title"]: v["id"] for v in existing_variants if v.get("title") and v.get("id")}
+    # Case-insensitive: a product created as "BROWN" must not grow a "Brown" twin.
+    by_title = {
+        v["title"].casefold(): v["id"] for v in existing_variants if v.get("title") and v.get("id")
+    }
+    metadata_by_id = {v["id"]: v.get("metadata") or {} for v in existing_variants if v.get("id")}
+    color_spelling = {value.casefold(): value for value in _color_values(existing)}
 
     variants = []
     for variant in update.get("variants") or []:
-        variant_id = by_sku.get(variant.get("sku")) or by_title.get(variant.get("title"))
-        variants.append({**variant, "id": variant_id} if variant_id else variant)
+        variant_id = by_sku.get(variant.get("sku")) or by_title.get(
+            str(variant.get("title") or "").casefold()
+        )
+        if variant_id:
+            variant = {
+                key: value for key, value in variant.items() if key != "options"
+            } | {
+                "id": variant_id,
+                "metadata": {
+                    **metadata_by_id.get(variant_id, {}),
+                    **(variant.get("metadata") or {}),
+                },
+            }
+        elif variant.get("options"):
+            color = str(variant["options"].get(COLOR_OPTION, ""))
+            variant = {
+                **variant,
+                "options": {COLOR_OPTION: color_spelling.get(color.casefold(), color)},
+            }
+        variants.append(variant)
     if variants:
         update["variants"] = variants
 
     return update
+
+
+#: The single variant axis the scraper creates (see `_build_medusa_payload`).
+COLOR_OPTION = "Color"
+
+
+def _color_option(existing: dict[str, Any]) -> dict[str, Any] | None:
+    """The product's «Color» option as Medusa returned it, if it has one."""
+    for option in existing.get("options") or []:
+        if str(option.get("title") or "").casefold() == COLOR_OPTION.casefold():
+            return option
+    return None
+
+
+def _color_values(existing: dict[str, Any]) -> list[str]:
+    option = _color_option(existing)
+    return [
+        str(v["value"]) for v in (option or {}).get("values") or [] if v.get("value")
+    ]
+
+
+def _new_variant_colors(update: dict[str, Any]) -> list[str]:
+    """Colours of the variants this update CREATES (those without an `id`).
+
+    All of them, not only the ones missing from `existing["options"]`: since
+    2.17 an option is shared between products and lists every value any
+    product uses, while a variant may only name a value linked to ITS product.
+    Linking is idempotent (Medusa skips a value already linked), so linking
+    them all is the one check that cannot be fooled by a shared option.
+    """
+    colors: list[str] = []
+    for variant in update.get("variants") or []:
+        if variant.get("id"):
+            continue
+        color = str((variant.get("options") or {}).get(COLOR_OPTION) or "")
+        if color and color not in colors:
+            colors.append(color)
+    return colors
+
+
+def _link_new_colors(
+    client: httpx.Client,
+    base_url: str,
+    existing: dict[str, Any],
+    update: dict[str, Any],
+    handle: str,
+) -> None:
+    """Link the update's new colours to the product before the update names them.
+
+    `POST /admin/products/:id/options/batch` is the 2.16+ home of what the
+    update payload's `options` used to do. `{value}` reuses the option's value
+    of that name or creates it. A product without a «Color» option gets one.
+    """
+    colors = _new_variant_colors(update)
+    if not colors:
+        return
+    option = _color_option(existing)
+    if option and option.get("id"):
+        body: dict[str, Any] = {
+            "update": [
+                {"product_option_id": option["id"], "add": [{"value": c} for c in colors]}
+            ]
+        }
+    else:
+        body = {"add": [{"title": COLOR_OPTION, "values": colors}]}
+    resp = _post(client, f"{base_url}/admin/products/{existing['id']}/options/batch", json=body)
+    if resp.is_error:
+        raise RuntimeError(
+            f"Medusa rejected the new colours {colors} of {handle!r} "
+            f"with HTTP {resp.status_code}: {resp.text[:800]}"
+        )
+
+
+@dataclass(frozen=True)
+class UpsertResult:
+    """What one push did. `created` is the source of truth for "new model":
+    the local state cache can be empty (a fresh container), Medusa cannot."""
+
+    product_id: str
+    created: bool
+    # Existed with no thumbnail and now has one: its pictures arrived late.
+    images_recovered: bool = False
 
 
 def upsert_product(
@@ -297,10 +448,16 @@ def upsert_product(
     config: Config,
     pricing: dict[str, Any],
     dry_run: bool = False,
-) -> str | None:
+    run_id: str | None = None,
+) -> UpsertResult | None:
     """
     Upsert a product in Medusa by handle.
-    Returns the Medusa product ID on success, None on dry-run.
+    Returns the product id and whether it was created, or None on dry-run.
+
+    A created product is stamped `metadata.first_seen_at` (and the catalog run
+    that found it, when there is one). That stamp is how the admin panel tells
+    a new model from one the store already had; the merge in
+    `_as_update_payload` keeps it on every later update.
     """
     payload = _build_medusa_payload(
         product, pricing, sales_channel_id=config.medusa_sales_channel_id or None
@@ -319,20 +476,36 @@ def upsert_product(
         client,
         f"{base_url}/admin/products",
         # Variants are needed to carry their ids into the update payload, and
-        # they are not part of the default field set.
-        params={"handle": product.handle, "fields": "id,handle,*variants"},
+        # they are not part of the default field set. Metadata is needed to keep
+        # the keys this payload does not own (see _as_update_payload).
+        # Options give the «Color» option id and its spellings (see
+        # _as_update_payload, point 4).
+        params={
+            "handle": product.handle,
+            "fields": "id,handle,thumbnail,metadata,*variants,*options,*options.values",
+        },
     )
     search_resp.raise_for_status()
     products = search_resp.json().get("products", [])
 
+    if products and is_manual_product(products[0]):
+        # The owner's own model: the panel is its source of truth, not Capri.
+        print(f"[scraper] skip {product.handle}: added by hand in the panel (source=manual).")
+        return UpsertResult(product_id=str(products[0].get("id", "")), created=False)
+
     if products:
         existing = products[0]
+        update = _as_update_payload(payload, existing)
+        _link_new_colors(client, base_url, existing, update, product.handle)
         resp = _post(
             client,
             f"{base_url}/admin/products/{existing['id']}",
-            json=_as_update_payload(payload, existing),
+            json=update,
         )
     else:
+        payload["metadata"]["first_seen_at"] = datetime.now(UTC).isoformat(timespec="seconds")
+        if run_id:
+            payload["metadata"]["first_seen_run"] = run_id
         resp = _post(client, f"{base_url}/admin/products", json=payload)
 
     # `raise_for_status()` reports only the status line, but Medusa puts the
@@ -344,7 +517,24 @@ def upsert_product(
             f"Medusa rejected {'update' if products else 'create'} of "
             f"{product.handle!r} with HTTP {resp.status_code}: {resp.text[:800]}"
         )
-    return str(resp.json().get("product", {}).get("id", ""))
+    return UpsertResult(
+        product_id=str(resp.json().get("product", {}).get("id", "")),
+        created=not products,
+        images_recovered=bool(
+            products and not products[0].get("thumbnail") and payload.get("thumbnail")
+        ),
+    )
+
+
+def is_manual_product(product: dict[str, Any]) -> bool:
+    """True for a model the owner added by hand in the panel.
+
+    `POST /admin/catalog/frames` stamps `metadata.source = "manual"`
+    (apps/backend/src/lib/catalog-frame.ts). Such a model is not in Capri's
+    feed by definition, so the sync must neither draft it as discontinued nor
+    overwrite it if Capri ever lists a model with the same handle.
+    """
+    return ((product.get("metadata") or {}).get("source")) == "manual"
 
 
 def _list_published_handles(
@@ -355,7 +545,8 @@ def _list_published_handles(
     """Return {handle: product_id} for published products we manage.
 
     Scoped to our collections via metadata.collection_slug so reconciliation never
-    touches products created outside this scraper.
+    touches products created outside this scraper — and never a model the owner
+    added by hand (`is_manual_product`), even in one of our collections.
     """
     managed: dict[str, str] = {}
     offset, limit = 0, 100
@@ -370,6 +561,8 @@ def _list_published_handles(
         products = body.get("products", [])
         for p in products:
             collection_slug = (p.get("metadata") or {}).get("collection_slug")
+            if is_manual_product(p):
+                continue
             if collection_slug in target_collections and p.get("handle"):
                 managed[p["handle"]] = p["id"]
         count = body.get("count", len(products))

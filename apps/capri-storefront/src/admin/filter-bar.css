@@ -1,0 +1,168 @@
+/* Barra de filtros global del panel (GlobalFilterBar.jsx): pegada bajo la
+   cabecera (.adm-top) en TODAS las pestañas, misma posición y mismo orden —
+   [buscador] [tienda] [período segmentado] [rango] … [PDF · Excel · CSV]. El
+   buscador global (`.adm-bar-search`) va primero y sale siempre; sus reglas de
+   hueco en la barra viven en omni-search.css, junto al propio componente, para
+   que esta hoja siga siendo solo la de los filtros. Tokens --adm-*
+   (admin.css) y --st-* (tema de tienda, admin-theme.css). AdminShell mide la
+   cabecera real (--adm-top-real: en el móvil crece) y la propia barra
+   (--adm-bar-h) para que lo que va debajo pueda contar con ellas (fit.css). */
+
+.adm-bar {
+  position: sticky; top: var(--adm-top-real, var(--adm-top-h)); z-index: 35;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  min-height: 46px; padding: 6px clamp(12px, 1.8vw, 24px);
+  background: var(--st-bg, var(--adm-bg));
+  border-bottom: 1px solid var(--adm-line);
+  box-shadow: 0 1px 2px rgba(27, 31, 58, .03);
+}
+.adm-shell[data-mode="dark"] .adm-bar { box-shadow: 0 2px 10px -6px rgba(0, 0, 0, .6); }
+.adm-bar-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; flex: 1 1 auto; }
+.adm-bar-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.adm-bar-period { flex-wrap: wrap; gap: 6px 8px; flex: 1 1 auto; }
+
+/* El selector de tienda, a la altura de las píldoras del resto de la barra. */
+.adm-bar .adm-store-filter.compact .adm-sf-btn { min-height: 32px; }
+.adm-bar .adm-store-filter.static { min-height: 32px; }
+
+/* Control segmentado: un contenedor redondeado; el activo va relleno con el
+   acento y su tinta (botón, no texto: siempre con borde y fondo). */
+.adm-bar-seg { display: inline-flex; align-items: stretch; padding: 3px; gap: 2px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); box-shadow: var(--adm-shadow-card); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.adm-bar-seg::-webkit-scrollbar { display: none; }
+.adm-bar-seg button { flex: 0 0 auto; border: 1px solid transparent; background: transparent; border-radius: 999px; padding: 4px 9px; min-height: 24px; font: 700 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; line-height: 1.3; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
+.adm-bar-seg button:hover { color: var(--adm-ink); background: var(--adm-surface-2); border-color: var(--adm-line); }
+.adm-bar-seg button.on { background: var(--adm-accent); color: var(--st-ink, #fff); border-color: var(--adm-accent-deep, var(--adm-accent)); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .12); }
+.adm-bar-seg button.on:hover { color: var(--st-ink, #fff); background: var(--adm-accent-deep, var(--adm-accent)); }
+.adm-bar-seg button:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+
+/* Rango: píldora con las dos fechas (cuando manda) o botón con el rango en corto. */
+.adm-bar-range { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 8px 2px 10px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); color: var(--adm-muted); box-shadow: var(--adm-shadow-card); transition: border-color .15s, box-shadow .15s; }
+.adm-bar-range .adm-ico { flex: 0 0 auto; }
+.adm-bar-range-sep { color: var(--adm-faint); font-weight: 700; padding: 0 1px; }
+.adm-bar-range input[type="date"] { min-height: 26px; height: 26px; width: 106px; font: 600 12px var(--adm-font); color: var(--adm-muted); padding: 0 2px; border: 0; border-radius: 6px; background: transparent; }
+.adm-bar-range input[type="date"]:focus { outline: none; color: var(--adm-ink); background: var(--adm-surface-2); }
+.adm-bar-range:focus-within { border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.adm-bar-range.on { border-color: var(--adm-accent-line); color: var(--adm-ink); }
+.adm-bar-range.on input[type="date"] { color: var(--adm-ink); }
+.adm-bar-range-btn { font: 600 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; padding-right: 11px; white-space: nowrap; }
+.adm-bar-range-btn:hover { color: var(--adm-ink); border-color: var(--adm-accent-line); }
+.adm-bar-range-btn:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.adm-bar-range input[type="date"]::-webkit-calendar-picker-indicator { opacity: .55; cursor: pointer; }
+.adm-bar-range input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+
+/* Exportar: los tres formatos en un grupo redondeado, siempre a la derecha. */
+.adm-bar-export { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.adm-bar-export .adm-export-menu { display: inline-flex; gap: 0; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); box-shadow: var(--adm-shadow-card); overflow: hidden; }
+.adm-bar-export .adm-export-menu .btn-xs { min-height: 30px; border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 0 10px; font-weight: 700; color: var(--adm-ink); gap: 5px; }
+.adm-bar-export .adm-export-menu .btn-xs + .btn-xs { border-left: 1px solid var(--adm-line); }
+.adm-bar-export .adm-export-menu .btn-xs:hover:not(:disabled) { background: var(--adm-accent-soft); color: var(--adm-accent-ink); transform: none; }
+.adm-bar-export .adm-export-menu .btn-xs:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: -2px; }
+.adm-bar-export .adm-export-menu .btn-xs .adm-ico { color: var(--adm-muted); }
+.adm-bar-export .adm-export-menu .btn-xs:hover:not(:disabled) .adm-ico { color: inherit; }
+.adm-bar-export .adm-export-menu .btn-xs:disabled { opacity: .45; }
+.adm-bar-export .adm-export-menu.idle { border-style: dashed; }
+.adm-bar-export .adm-export-menu .btn-xs.on { background: var(--adm-accent-soft); color: var(--adm-accent-ink); }
+
+/* ── Para quién es el reporte (GlobalFilterBar → ExportGroup) ───────────────
+   Al pulsar PDF, Excel o CSV se elige entre el reporte del dueño (con costos)
+   y el estado por tienda que se socializa (sin ellos). Cuelga del grupo de
+   exportar, que es quien tiene `position: relative`; no puede ir dentro de
+   `.adm-export-menu` porque ese recorta (overflow: hidden) para redondear los
+   tres botones. Colores por tokens --adm-*, así que claro y oscuro salen solos. */
+.adm-bar-export { position: relative; }
+.adm-aud-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+  width: 310px; max-width: calc(100vw - 24px);
+  display: grid; gap: 2px; padding: 6px;
+  border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface); box-shadow: var(--adm-shadow-lg);
+  text-align: left;
+}
+.adm-aud-head { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 8px; font: 800 10.5px/1.3 var(--adm-font); letter-spacing: .1em; text-transform: uppercase; color: var(--adm-accent-ink); }
+.adm-aud-head > span { flex: 1 1 auto; min-width: 0; }
+.adm-aud-x { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--adm-muted); cursor: pointer; }
+.adm-aud-x:hover { color: var(--adm-ink); background: var(--adm-surface-2); border-color: var(--adm-line); }
+.adm-aud-x:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+
+/* Una opción: icono, nombre y una línea que dice qué lleva — se tiene que ver
+   de un vistazo cuál sale con costos y cuál no. */
+.adm-aud-opt { display: flex; align-items: flex-start; gap: 9px; width: 100%; padding: 8px 9px; border: 1px solid transparent; border-radius: var(--adm-radius-sm); background: transparent; color: var(--adm-ink); font: 600 12px var(--adm-font); text-align: left; cursor: pointer; transition: background .15s, border-color .15s; }
+.adm-aud-opt > .adm-ico { flex: 0 0 auto; margin-top: 1px; color: var(--adm-muted); }
+.adm-aud-opt > span { display: grid; gap: 2px; min-width: 0; }
+.adm-aud-opt b { font: 800 12.5px/1.3 var(--adm-font); }
+.adm-aud-opt small { font: 500 11px/1.35 var(--adm-font); color: var(--adm-muted); }
+.adm-aud-opt em { font: 700 11px/1.3 var(--adm-font); font-style: normal; color: var(--adm-accent-ink); }
+.adm-aud-opt:hover { background: var(--adm-surface-2); border-color: var(--adm-line); }
+.adm-aud-opt:hover > .adm-ico { color: var(--adm-ink); }
+.adm-aud-opt:focus-visible { outline: none; background: var(--adm-accent-soft); border-color: var(--adm-accent); }
+.adm-aud-opt.share:hover, .adm-aud-opt.share:focus-visible { background: var(--adm-accent-soft); border-color: var(--adm-accent-line); }
+.adm-aud-opt.share > .adm-ico { color: var(--adm-accent-ink); }
+
+/* El aviso de qué significa «por tienda» en la pantalla abierta. */
+.adm-aud-note { display: flex; align-items: flex-start; gap: 6px; margin: 2px 0 0; padding: 7px 8px; border-top: 1px solid var(--adm-line); font: 500 11px/1.4 var(--adm-font); color: var(--adm-muted); }
+.adm-aud-note .adm-ico { flex: 0 0 auto; margin-top: 1px; }
+@media (max-width: 480px) { .adm-aud-pop { width: calc(100vw - 24px); } }
+@media (prefers-reduced-motion: reduce) { .adm-aud-opt { transition: none; } }
+
+/* Escritorio: UNA fila siempre. Si no cabe todo (portátil con la barra lateral
+   abierta y «Rango» con sus dos fechas), cede el período segmentado: se
+   desplaza por dentro (el activo se mantiene a la vista) y un degradado avisa
+   de que hay más; exportar no baja de fila. */
+@media (min-width: 769px) {
+  .adm-bar { flex-wrap: nowrap; }
+  .adm-bar-filters { flex: 1 1 0; flex-wrap: nowrap; }
+  .adm-bar-period { flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; }
+  .adm-bar-store, .adm-bar-range, .adm-bar-export { flex: 0 0 auto; }
+  .adm-bar-seg { flex: 1 1 auto; min-width: 0; max-width: max-content; }
+  .adm-bar-seg.scrolls { mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); }
+}
+
+/* Teléfono: dos filas y sigue pegada. 1.ª: tienda · rango … exportar; 2.ª: el
+   período segmentado a lo ancho. Los envoltorios pasan a `display: contents`
+   para que las piezas se ordenen entre sí como hijas directas de la barra. */
+@media (max-width: 768px) {
+  .adm-bar { gap: 6px 8px; padding: 6px clamp(10px, 2vw, 14px); }
+  .adm-bar-filters, .adm-bar-period { display: contents; }
+  .adm-bar-store { order: 1; }
+  .adm-bar-range { order: 2; flex: 0 1 auto; justify-content: center; }
+  .adm-bar-export { order: 3; margin-left: auto; }
+  .adm-bar-seg { order: 4; flex-basis: 100%; max-width: 100%; flex-wrap: wrap; overflow: visible; justify-content: space-between; border-radius: 16px; }
+  .adm-bar-seg button { padding: 5px 7px; min-height: 30px; flex: 1 1 auto; text-align: center; font-size: 11.5px; }
+  .adm-bar-range input[type="date"] { width: 108px; }
+  .adm-bar-export .adm-export-menu .btn-xs { min-height: 34px; padding: 0 9px; }
+  .adm-bar .adm-store-filter.compact .adm-sf-txt { max-width: 34vw; }
+}
+@media (max-width: 420px) {
+  .adm-bar-export .adm-export-menu .btn-xs { padding: 0 8px; font-size: 11.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm-bar, .adm-bar-seg button, .adm-bar-range { transition: none; }
+}
+@media print {
+  .adm-bar { display: none !important; }
+}
+
+/* Tablet táctil (iPad 810–1080, Galaxy Tab 800–1280; 7-nov-2026): en una sola
+   fila no cabía nada (buscador de 130 px, período cortado). Con dedo: el
+   buscador ocupa su propia fila, debajo tienda · período · rango, y exportar
+   queda a la derecha; todo lo que se toca mide 44 px. */
+@media (pointer: coarse) {
+  .adm-bar .adm-omni-box { min-height: 44px; }
+  .adm-bar .adm-omni-input { font-size: 16px; }
+  .adm-bar .adm-store-filter.compact .adm-sf-btn, .adm-bar .adm-store-filter.static { min-height: 44px; }
+  .adm-bar-range { min-height: 44px; }
+  .adm-bar-seg button { min-height: 44px; padding: 6px 12px; }
+  .adm-bar-export .adm-export-menu .btn-xs { min-height: 44px; }
+}
+@media (pointer: coarse) and (min-width: 769px) and (max-width: 1366px) {
+  /* Dos filas como mucho (la barra es pegajosa: cada fila es pantalla perdida):
+     1.ª buscador · tienda · exportar; 2.ª período (se desplaza) · rango. */
+  .adm-bar { flex-wrap: wrap; gap: 6px 10px; }
+  .adm-bar-filters, .adm-bar-period { display: contents; }
+  .adm-bar-search { order: 1; flex: 1 1 220px; max-width: none; }
+  .adm-bar-filters > .adm-bar-search:only-child { max-width: none; }
+  .adm-bar-store { order: 2; flex: 0 0 auto; }
+  .adm-bar-export { order: 3; flex: 0 0 auto; margin-left: auto; }
+  .adm-bar-seg { order: 4; flex: 1 1 auto; min-width: 0; max-width: max-content; }
+  .adm-bar-range { order: 5; flex: 0 0 auto; }
+}

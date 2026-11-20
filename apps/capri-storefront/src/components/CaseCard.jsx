@@ -47,8 +47,10 @@ export default function CaseCard({ item }) {
           </button>
         </div>
         <Link to={to} className="card-img-link" aria-label={item.name}>
+          {/* Foto del proveedor caída (p. ej. ANGLEFIT devuelve 404 en caprioptics):
+              se cambia por el sello de Estuches en vez de dejar el icono de imagen rota. */}
           <img key={color.image} src={color.image} alt={item.name} loading="lazy" className="fade-in"
-               onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
+               onError={(e) => { const el = e.currentTarget; if (el.dataset.fb) { el.style.opacity = 0.25; return; } el.dataset.fb = "1"; el.src = "/brands/logo-case.png"; el.style.objectFit = "contain"; el.style.padding = "18%"; }} />
         </Link>
       </div>
 

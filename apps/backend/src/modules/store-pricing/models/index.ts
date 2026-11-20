@@ -6,3 +6,10 @@
  * src/modules/store-settings/models/index.ts.
  */
 export * from "./price-rule";
+export * from "./cost-toggle";
+export * from "./frame-cost";
+export * from "./frame-cost-variation";
+export * from "./price-band";
+export * from "./price-band-variation";
+export * from "./item-discount";
+export * from "./catalog-brand";

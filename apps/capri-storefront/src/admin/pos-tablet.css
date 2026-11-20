@@ -1,0 +1,157 @@
+/* Nueva venta en tablet (PosSale.jsx, 7-nov-2026). Los vendedores registran al
+   paciente, fotografían la receta y la montura del cliente en una tablet del
+   mostrador: iPad 10.2" (810×1080 / 1080×810) y Galaxy Tab (800×1280).
+   Reglas:
+   - cabecera pegajosa (pasos + total en curso) bajo la barra del panel;
+   - barra Atrás / Siguiente pegada abajo y POR ENCIMA del teclado en pantalla
+     (`--pos-kb` lo publica useKeyboardInset con visualViewport; respaldo
+     `env(keyboard-inset-height)` donde el navegador lo da);
+   - con el teclado abierto (`.kb-open`) la cabecera se compacta y la barra
+     superior del panel deja de ser pegajosa: la cuadrícula de la receta no salta;
+   - todo lo que se toca ≥ 44 px; apaisada: dos columnas donde ayuda
+     (cliente | dirección y si usa espejuelos; receta | foto);
+   - sin scroll horizontal de página. Solo tokens --adm-* (claro y oscuro). */
+
+.pos { container-type: inline-size; container-name: pos; }
+
+/* ── Cabecera pegajosa: pasos + total en curso ─────────────────────────── */
+.pos-sticky {
+  position: sticky; top: calc(var(--adm-top-real, 0px) + var(--adm-bar-h, 0px)); z-index: 7;
+  margin: 0 calc(-1 * clamp(10px, 2vw, 22px)) 10px; padding: 8px clamp(10px, 2vw, 22px) 6px;
+  background: color-mix(in srgb, var(--adm-bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3); backdrop-filter: blur(12px) saturate(1.3);
+  border-bottom: 1px solid transparent;
+  display: grid; gap: 8px;
+}
+.pos-sticky .pos-run { position: static; margin: 0; }
+.pos-sticky .pos-steps { margin: 0; }
+
+/* Pasos: barra de progreso con número; el activo dice su nombre siempre. */
+.pos-steps { display: flex; gap: 6px; padding: 0; list-style: none; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.pos-steps::-webkit-scrollbar { display: none; }
+.pos-steps li { display: flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: max-content; }
+.pos-steps li > .pos-step-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
+  min-height: 44px; padding: 0 12px 0 6px; border-radius: 999px;
+  font-size: 13px; font-weight: 700; white-space: nowrap;
+}
+.pos-step-n { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; flex: none; background: var(--adm-surface-2); border: 1px solid var(--adm-line); color: var(--adm-muted); font: 800 12.5px/1 var(--adm-font); font-variant-numeric: tabular-nums; }
+.pos-steps li.on .pos-step-n { background: rgba(255, 255, 255, .22); border-color: rgba(255, 255, 255, .35); color: var(--st-ink, #fff); }
+.pos-steps li.ok .pos-step-n { background: var(--adm-green); border-color: var(--adm-green); color: #fff; }
+.pos-steps li.ok > .pos-step-btn::before { content: none; }
+/* El «?» del paso activo: pequeño, al lado del botón (nunca otro botón-píldora). */
+.pos .pos-steps li > button.adm-help-btn { min-height: 0; width: var(--adm-help-size); height: var(--adm-help-size); padding: 0; border-radius: 999px; background: var(--adm-surface); border-color: var(--adm-line); color: var(--adm-muted); font-size: calc(var(--adm-help-size) * .68); flex: none; }
+.pos .pos-steps li > button.adm-help-btn::before { content: none; }
+
+/* ── Barra inferior Atrás / Siguiente ─────────────────────────────────── */
+.pos .pos-nav-sticky {
+  position: sticky; bottom: max(var(--pos-kb, 0px), env(keyboard-inset-height, 0px)); z-index: 7;
+  margin: 12px calc(-1 * clamp(10px, 2vw, 22px)) 0; padding: 10px clamp(10px, 2vw, 22px) calc(10px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--adm-bg) 94%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3); backdrop-filter: blur(12px) saturate(1.3);
+  border-top: 1px solid var(--adm-line);
+}
+.pos .pos-nav-sticky .btn-sm { min-height: 48px; padding: 0 20px; font-size: 15px; border-radius: 12px; }
+.pos .pos-nav-sticky .btn-sm.primary { min-width: 160px; }
+.pos .pos-nav-sticky .btn-sm.primary.big { flex: 1; max-width: 460px; }
+
+/* Teclado abierto: la barra del panel deja de ser pegajosa (60 px más para la
+   receta) y la cabecera del POS se queda en una línea de pasos. */
+.adm-shell:has(.pos.kb-open) .adm-top,
+.adm-shell:has(.pos.kb-open) .adm-bar { position: relative; top: auto; }
+.pos.kb-open .pos-sticky { top: 0; padding-top: 4px; padding-bottom: 4px; gap: 4px; }
+.pos.kb-open .pos-run-body, .pos.kb-open .pos-run-brief { display: none; }
+.pos.kb-open .pos-run-head { padding-top: 4px; padding-bottom: 4px; }
+.pos.kb-open .pos-steps li:not(.on) .pos-step-txt { display: none; }
+.pos.kb-open .pos-foot { display: none; }
+/* El campo enfocado queda por encima de la barra inferior al hacer scroll hasta él. */
+.pos input, .pos select, .pos textarea { scroll-margin-top: 140px; scroll-margin-bottom: calc(96px + var(--pos-kb, 0px)); }
+
+/* ── Paso Cliente: formulario | dirección + «¿Ya usa espejuelos?» ─────── */
+.pos-cust-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.pos-cust-main, .pos-cust-side { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.pos-cust-side .pos-picked { justify-self: start; }
+.pos-cust-side .pos-picked .btn-xs { margin-left: 6px; }
+
+/* ── Paso Receta: foto (OCR) | cuadrícula ──────────────────────────────── */
+.pos-rx-layout { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+.pos-rx-main, .pos-rx-aside { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.pos-rx-aside .pos-rx-ocr { display: flex; align-items: flex-start; gap: 8px; }
+.pos-rx-aside .pos-rx-ocr > .pos-cap { flex: 1; min-width: 0; }
+.pos-rx-aside .pos-rx-ocr > .adm-help-btn { margin-top: 14px; }
+
+/* ── Captura con cámara (PosCapture.jsx) ──────────────────────────────── */
+.pos-cap { display: grid; gap: 10px; min-width: 0; }
+.pos-cap-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.pos-cap-btn { min-height: 48px; padding: 0 16px; border-radius: 12px; font-size: 14px; border-color: var(--adm-line); color: var(--adm-ink); justify-content: center; transition: background .15s, border-color .15s; }
+.pos-cap-btn:hover { border-color: var(--adm-accent-line); background: var(--adm-accent-soft); }
+.pos-cap-btn.primary { background: var(--adm-accent); border-color: var(--adm-accent-deep, var(--adm-accent)); color: var(--st-ink, #fff); }
+.pos-cap-btn.primary:hover { background: var(--adm-accent-deep, var(--adm-accent)); color: var(--st-ink, #fff); }
+.pos-cap-btn.is-busy { opacity: .6; pointer-events: none; }
+/* Vista previa compacta (miniatura + acciones al lado) para no empujar la
+   cuadrícula de la receta fuera de la pantalla; en la columna apaisada, apilada. */
+.pos-cap-preview { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 12px; padding: 8px; border: 1px solid var(--adm-line); border-radius: 12px; background: var(--adm-surface-2); justify-self: start; max-width: 100%; }
+.pos-cap-preview img { display: block; max-width: min(220px, 50vw); max-height: 140px; width: auto; border-radius: 8px; object-fit: contain; background: var(--adm-bg); }
+.pos-cap-preview figcaption { display: flex; flex-wrap: wrap; gap: 8px; }
+.pos-cap-pdf { display: inline-flex; align-items: center; gap: 8px; padding: 10px 12px; font-weight: 700; color: var(--adm-ink); }
+.pos-cap-pdf small { font-weight: 500; color: var(--adm-muted); overflow-wrap: anywhere; }
+
+/* ── Tacto: objetivos de 44 px ─────────────────────────────────────────── */
+@media (pointer: coarse) {
+  .pos .pos-file { min-height: 48px; }
+  .pos .pos-wears { flex-wrap: wrap; gap: 4px 18px; }
+  .pos .pos-wears label, .pos .pos-check { min-height: 44px; gap: 10px; }
+  .pos .pos-presets-row button { min-height: 44px; }
+  .pos .pos-rx-type button { min-height: 44px; padding: 6px 16px; }
+  .pos .pos-rx-type { padding: 3px; }
+  .pos .pos-rx-grid input:not([type=checkbox]), .pos .pos-rx-grid select { min-height: 48px; }
+  .pos .pos-search input { min-height: 48px; }
+  .pos .pos-run-head { min-height: 44px; }
+  .pos .pos-address summary { padding: 12px 0; }
+  .pos .pos-hits button { min-height: 52px; }
+  .pos .pos-ac-row { min-height: 52px; }
+  .pos .pos-ac-variant { min-height: 44px; }
+  .pos .pos-ac-view { width: 44px; height: 44px; top: 8px; }
+  .pos .pos-ac-item.has-view .pos-ac-row { padding-right: 56px; }
+  .pos .pos-ac-clear { min-width: 44px; min-height: 44px; }
+  .pos .pos-pay select, .pos .pos-pay input { min-height: 48px; }
+  .pos .pos-discount input { min-height: 48px; }
+  .pos .pos-lines .btn-xs, .pos .pos-dup .btn-xs { min-width: 44px; }
+  .pos .pos-where select { min-height: 44px; }
+}
+
+/* ── Tablet vertical / móvil: la cabecera y la barra van de borde a borde ── */
+@media (max-width: 899.98px) {
+  .pos-sticky, .pos .pos-nav-sticky { margin-left: calc(-1 * clamp(10px, 2vw, 14px)); margin-right: calc(-1 * clamp(10px, 2vw, 14px)); padding-left: clamp(10px, 2vw, 14px); padding-right: clamp(10px, 2vw, 14px); }
+  .pos .pos-nav-sticky .btn-sm.primary.big { max-width: none; }
+  /* Total en curso legible en vertical: cifra grande a la derecha, detalle plegado. */
+  .pos-run-total b { font-size: 20px; }
+}
+/* Estrecho: solo el paso activo dice su nombre; los demás, el número. */
+@container pos (max-width: 700px) {
+  .pos-steps li:not(.on) { flex: 0 0 auto; }
+  .pos-steps li:not(.on) .pos-step-txt { display: none; }
+  .pos-steps li:not(.on) > .pos-step-btn { padding: 0 8px; width: 44px; }
+  .pos-steps li.on { flex: 1 1 auto; }
+}
+
+/* ── Apaisada (o ancho de escritorio): dos columnas donde ayuda ────────── */
+@container pos (min-width: 880px) {
+  .pos-cust-grid { grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); align-items: start; }
+  .pos-cust-main .pos-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pos-cust-side { padding-left: 14px; border-left: 1px solid var(--adm-line-2); }
+  .pos-cust-side .pos-address .pos-form { grid-template-columns: minmax(0, 1fr); }
+  .pos-rx-layout { grid-template-columns: minmax(0, 1fr) minmax(250px, 300px); grid-template-areas: "main aside"; align-items: start; }
+  .pos-rx-main { grid-area: main; }
+  .pos-rx-aside { grid-area: aside; }
+  .pos-rx-aside .pos-cap-btn { flex: 1 1 100%; }
+  .pos-rx-aside .pos-cap-preview { grid-template-columns: minmax(0, 1fr); justify-self: stretch; }
+  .pos-rx-aside .pos-cap-preview img { max-width: 100%; max-height: 220px; }
+}
+
+/* ── Oscuro ──────────────────────────────────────────────────────────── */
+.adm-shell[data-mode="dark"] .pos-sticky, .adm-shell[data-mode="dark"] .pos .pos-nav-sticky { background: color-mix(in srgb, var(--adm-bg) 90%, transparent); }
+.adm-shell[data-mode="dark"] .pos-step-n { background: var(--adm-surface); }
+
+@media (prefers-reduced-motion: reduce) { .pos-cap-btn { transition: none; } }
+@media print { .pos-sticky, .pos .pos-nav-sticky { position: static; } }

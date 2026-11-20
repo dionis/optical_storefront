@@ -1,0 +1,25 @@
+# Finales de línea: el repo guarda LF y cada copia recibe LF, también en Windows.
+#
+# Por qué existe este fichero: sin él, una copia en Windows puede acabar con los
+# mismos ficheros en CRLF y git los ve como "todas las líneas cambiadas". Pasó:
+# 23 ficheros aparecieron modificados con 10.849 líneas añadidas y 10.849
+# borradas, y ni un solo cambio real. Eso ensucia `git status`, obliga a hacer
+# stash antes de cualquier rebase y convierte un `git am` limpio en un conflicto.
+* text=auto eol=lf
+
+# Los .bat los ejecuta cmd.exe, que sí quiere CRLF.
+*.bat text eol=crlf
+
+# Binarios: que git no intente convertir nada.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.glb binary
+*.woff binary
+*.woff2 binary
+*.xlsx binary
+*.docx binary

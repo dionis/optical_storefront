@@ -20,6 +20,7 @@
   th { text-align:left; background:var(--soft); color:var(--muted); font-weight:700; }
   th,td { padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
   code { background:#f2f5fa; border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12.5px; }
+  code, a { overflow-wrap:anywhere; }
   .tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:700; }
   .ok { background:var(--okbg); color:var(--ok); }
   .wip { background:#fff7e6; color:#7a5b00; }
@@ -27,13 +28,13 @@
   li { margin:3px 0; }
   .muted { color:var(--muted); }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  @media (max-width:760px){ .grid { grid-template-columns:1fr; } }
+  @media (max-width:760px){ .grid { grid-template-columns:1fr; } section { overflow-x:auto; } }
 </style>
 </head>
 <body>
 <header>
   <h1>RUBI LENS — Documentación del proyecto</h1>
-  <p>Tienda online de espejuelos graduados · probador virtual con IA · receta con OCR · Medusa v2 + React/Vite · Actualizado: 14-oct-2026</p>
+  <p>Tienda online de espejuelos graduados · probador virtual con IA · receta con OCR · Medusa v2 + React/Vite · Actualizado: 5-nov-2026</p>
 </header>
 <main>
 
@@ -48,7 +49,303 @@
     <tr><td>Checkout + entrega (teléfono, email, dirección)</td><td><span class="tag ok">Funcional</span></td><td><code>MedusaCheckout.jsx</code>: Stripe, datos del paciente, confirmaciones email/SMS</td></tr>
     <tr><td>Panel admin <code>/admin</code></td><td><span class="tag ok">Completo</span></td><td>Dashboard EJECUTIVO (KPIs, alertas, pipeline), Pedidos (etapas + tracking con URL + email automático al cliente), catálogo (precios, descontinuar monturas/marcas, exportar a Excel/CSV), identidad propia navy/ADMIN</td></tr>
     <tr><td>Cuentas y seguimiento del cliente</td><td><span class="tag ok">Funcional</span></td><td>Cuentas con email+contraseña (auth de Medusa) que abren TODOS los pedidos de ese correo; enlace mágico como acceso sin contraseña; cancelación con política de plazos</td></tr>
+    <tr><td>Panel de tienda (staging, rama <code>develop_optical_storepos</code>)</td><td><span class="tag wip">Pendiente de push/redeploy por el dueño</span></td><td>8 commits del 5-nov-2026 (<code>226e97a</code>…<code>1e08fcf</code>) en local. Al desplegar: <code>medusa db:migrate</code> (StaffProfileDisabled4, UpgradeLensListFinish8, ExtendSaleFactLensFinish2). Comprobar backend en <a href="https://api-staging.161-153-9-98.sslip.io/version">api-staging.161-153-9-98.sslip.io/version</a> y panel en <a href="https://rubilens-staging.vercel.app">rubilens-staging.vercel.app</a>.</td></tr>
   </table>
+</section>
+
+<section>
+  <h2>Panel de tienda — hitos del 31-oct-2026 (rama <code>develop_optical_storepos</code>)</h2>
+  <p class="muted">Detalle, decisiones optométricas y contables, y reglas de trabajo con Eyewear Dev en <code>docs/HITOS-PANEL-TIENDA.md</code>. Staging: <a href="https://rubilens-staging.vercel.app/admin_stores">rubilens-staging.vercel.app/admin_stores</a>.</p>
+  <table>
+    <tr><th>Hito</th><th>Estado</th><th>Qué entrega</th></tr>
+    <tr><td>1 · Receta óptica en el POS</td><td><span class="tag ok">Listo</span></td><td>Monofocal / Multifocal primero; cuadrícula compacta como la planilla (ESF · CIL · EJE · ADD · PRISMA · BASE · DNP · ALT); reglas optométricas al escribir (eje solo con cilindro, base solo con prisma, ADD espejada, paso 0,25 con signo); lentes filtrados por tipo; OCR con «Tomar foto» y «Subir archivo». <code>PosRx.jsx</code>, <code>rxRules.js</code>.</td></tr>
+    <tr><td>2 · Montura, impresos y colores</td><td><span class="tag ok">Listo</span></td><td>Ficha profesional de la montura al elegirla (y compacta en los pasos siguientes); recibo y ticket con la foto del espejuelo; <b>recibo doble en carta</b> (2 copias con línea de corte: cliente / archivo); colores por tienda (verde clínica, cobre, fucsia, azul online; gris/negro súper admin) cambiables en Tiendas; modo claro / oscuro / sistema junto al idioma; <code>$1,234.50</code> en todo el panel.</td></tr>
+    <tr><td>3 · Contabilidad</td><td><span class="tag ok">Listo</span></td><td>Ventas de tienda por día / <b>semana</b> / mes / año con filtros fijos y totalizadores; Caja → <b>Movimientos</b> (cobros por método, movimientos con motivo, arqueos, serie diaria); <b>Estado de cuenta</b> mensual por tienda (EST-tienda-AAAAMM, liquidación); PDF y <b>Excel</b> en todo.</td></tr>
+    <tr><td>4 · Ejecutivo en una vista</td><td><span class="tag ok">Listo</span></td><td>Filtro global por tienda en todas las pantallas; acordeones con resumen ejecutivo; Ejecutivo con 10 KPIs y Pedidos de la tienda con <b>precio y costo real</b> (costo solo admin); bienvenida en cada recarga con ventas reales; tipografía Manrope + Fraunces y sistema de color premium.</td></tr>
+    <tr><td>5 · Ficha, ayuda, roles</td><td><span class="tag ok">Listo</span></td><td>Clic en cualquier venta → ficha completa en cajón lateral; «?» de ayuda con guía detallada para usuarios sin conocimientos de optometría; pantallas en una vista (Estado de tienda, Ejecutivo, etapas de pedidos); vendedores solo ven sus ventas, su dinero y su comisión y cobran saldos pendientes de otros.</td></tr>
+    <tr><td>Tras desplegar</td><td><span class="tag wip">Pendiente</span></td><td>Coolify: <code>medusa db:migrate</code> (photo_url, category de caja, colores por defecto). Revisar en staging: venta completa, ventas por semana, movimientos, estado de cuenta, modo oscuro.</td></tr>
+    <tr><td>Siguiente</td><td><span class="tag wip">Por hacer</span></td><td>Plantillas de lente para montura propia; optimización de espacios en Pedidos / Costos / Tiendas; toasts en modo oscuro; rotación del secreto del webhook y contraseña admin.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>10/11-nov-2026 — la tienda online y las tiendas físicas en un solo panel</h2>
+  <p>Un solo backend, el del panel (<code>opticaelrancho.com/admin</code>), para las tres tiendas físicas y la tienda online. Comprobado el 11-nov sobre lo desplegado: <b>la web ya usa ese backend desde el 8-nov</b> (<code>BACKEND_TARGET_OVERRIDE=staging</code> en Vercel, PR #5 de <code>develop</code>). No ha entrado ninguna compra web porque <b>no se puede pagar</b>: la web lleva la clave de Stripe en vivo y el backend del panel sigue con Stripe en pruebas. Guía y lo que falta: <code>docs/TIENDA-ONLINE-UNIFICADA.md</code>. QA: <code>docs/QA-UNIFICACION-2026-11-10.md</code>.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td>Marca por dominio: los correos y SMS de un pedido de la web salen como RUBI LENS; caja, recibos y personal siguen como Óptica El Rancho (<code>STOREFRONT_BRANDS</code>)</td><td><span class="tag ok">Listo</span></td><td><code>lib/tenant.ts</code>, <code>modules/notification-resend</code>, <code>lib/tenant-profile.ts</code></td></tr>
+    <tr><td>Pedidos: columna «Origen» (Online · marca / tienda) y filtro por la tienda de la barra</td><td><span class="tag ok">Listo</span></td><td><code>lib/order-board.ts</code>, <code>src/admin/AdminDashboard.jsx</code></td></tr>
+    <tr><td>Los pedidos web sin terminar cuentan en «En laboratorio» y «Por entregar»</td><td><span class="tag ok">Listo</span></td><td><code>lib/start-map.ts</code></td></tr>
+    <tr><td>Pacientes de la web con su nombre y dirección</td><td><span class="tag ok">Listo</span></td><td><code>lib/patient-history-data.ts</code></td></tr>
+    <tr><td>Tiendas → tarjeta «Tienda online»; Seguridad → grupo «Tienda online» (7 comprobaciones)</td><td><span class="tag ok">Listo</span></td><td><code>lib/web-channel.ts</code>, <code>GET /admin/web-channel</code>, <code>src/admin/WebStoreCard.jsx</code></td></tr>
+    <tr><td>Foto de la montura fuera de catálogo en el recibo; subirla después de la venta</td><td><span class="tag ok">Listo</span></td><td><code>lib/store-frame-photo.ts</code>, <code>POST /admin/pos/sales/:id/store-frame-photo</code></td></tr>
+    <tr><td>«Salir» cierra la sesión y abre la pantalla de entrada del panel de la óptica</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/adminAuth.js</code> (<code>signOutToLogin</code>)</td></tr>
+    <tr><td>Acabado visual: cabeceras, herramientas en una fila, filtros en rejilla</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/polish.css</code></td></tr>
+    <tr><td>Backend del panel: secretos de sesión, Stripe en vivo con su webhook, marca de la web (<code>STOREFRONT_BRANDS</code>), bucket privado; después, una compra de prueba</td><td><span class="tag wip">Pendiente del dueño</span></td><td><code>docs/TIENDA-ONLINE-UNIFICADA.md</code> §4</td></tr>
+  </table>
+  <p class="muted">Pruebas: 92 suites / 1562. El backend de producción antiguo responde 503; la tienda ya no lo usa.</p>
+</section>
+
+<section>
+  <h2>11-nov-2026 — Op4 es la tienda online: sus precios, sus costos y su contabilidad</h2>
+  <p>Decisión del dueño: <b>«Op4 · Online Optical Store» es la manera de manejar rubilens.com</b>. Una tienda se marca como <b>Tipo «Tienda online»</b> (Tiendas → Editar; solo una) y la web pasa a ser esa tienda: cobra lo que dice su columna de Productos y precios, sus pedidos son sus ventas y la contabilidad los asienta junto a sus costos. Sin ninguna tienda de ese tipo, todo queda como antes (maestro y pseudo-tienda «Tienda online»). Guía: <code>docs/TIENDA-ONLINE-UNIFICADA.md</code> §2.1 y §3.7.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td>Tipo de tienda «online», una sola activa; la migración marca a Op4 por su nombre</td><td><span class="tag ok">Listo</span></td><td><code>CreateEstablishmentOnline6</code>, <code>lib/online-store.ts</code>, <code>POST /admin/establishments/:id</code></td></tr>
+    <tr><td>La web cobra los precios de Op4: catálogo, ficha, asistente de lentes y carrito (precio fijado, por marca, ajuste, banda, lista de lentes y descuentos)</td><td><span class="tag ok">Listo</span></td><td><code>lib/web-pricing.ts</code>, <code>lib/web-pricing-http.ts</code>, <code>/store/carts/:id/configured-line</code>, <code>…/revalidate</code>, <code>/store/lens-config/*</code></td></tr>
+    <tr><td>Panel: una sola opción «Op4 · Online Optical Store» en el selector; Pedidos, Ejecutivo y el saludo la enseñan con su código y su color; Productos y precios y Costos abren su columna</td><td><span class="tag ok">Listo</span></td><td><code>useStoreTheme.js</code>, <code>StoreFilter.jsx</code>, <code>Stores.jsx</code>, <code>WebStoreCard.jsx</code>, <code>lib/start-map.ts</code></td></tr>
+    <tr><td>Contabilidad: los pedidos web se asientan en la columna de Op4 con la comisión de la pasarela, sus costos propios y su parte de los compartidos</td><td><span class="tag ok">Listo</span></td><td><code>lib/financial-statement.ts</code>, <code>lib/store-pnl.ts</code>, <code>GET /admin/finance/statement</code></td></tr>
+    <tr><td>Seguridad: «Tienda con la que se maneja la web»</td><td><span class="tag ok">Listo</span></td><td><code>lib/web-channel.ts</code></td></tr>
+    <tr><td>El surtido de Op4 todavía no oculta modelos en la web (lista lo publicado en su canal)</td><td><span class="tag wip">Después</span></td><td><code>docs/TIENDA-ONLINE-UNIFICADA.md</code> §2.1</td></tr>
+  </table>
+  <p class="muted">Pruebas: 94 suites / 1585; diccionario 6891 claves × 2. QA local: 17 comprobaciones de punta a punta y un pedido web asentado en la tienda online; pantallas revisadas en escritorio, Galaxy Tab A7 Lite y teléfono.</p>
+</section>
+
+<section>
+  <h2>11-nov-2026 — Lentes: mostrar u ocultar un trabajo, y acciones a la vista</h2>
+  <p>Pedido del dueño sobre Productos y precios → Lentes: «puede que en algún momento no se haga alguno de estos trabajos». Cada celda (diseño × material × acabado) lleva un <b>interruptor</b>: apagada, conserva su precio, su costo y los precios de cada tienda, pero <b>no se ofrece ni en caja ni en la web</b> y no se puede cotizar; al encenderla vuelve tal como estaba. La papelera, el lápiz y «añadir» dejan de esconderse en el menú «⋯» (solo asomaba al pasar el ratón) y quedan a la vista en las filas de lentes y tratamientos y en la cabecera de cada diseño.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td>Columna <code>lens_base_price.is_active</code>; una celda apagada sale de la lista de la caja y de la web y la cotización la rechaza (<code>finish_unavailable</code>)</td><td><span class="tag ok">Listo</span></td><td><code>UpgradeLensCellActive11</code>, <code>lib/lens-matrix.ts</code> (<code>isHiddenLensCell</code>, <code>includeHidden</code>), <code>lib/lens-quote.ts</code>, <code>lib/lens-compat.ts</code></td></tr>
+    <tr><td>Encender / apagar (solo dueño y superadmin, auditado)</td><td><span class="tag ok">Listo</span></td><td><code>POST /admin/pricing/lens-designs/:code/cells/active</code>, <code>lib/lens-design-data.ts</code> (<code>setLensCellActive</code>)</td></tr>
+    <tr><td>Matriz: interruptor por fila, etiqueta «Oculto», fila atenuada; iconos de añadir / editar / borrar a la vista</td><td><span class="tag ok">Listo</span></td><td><code>pricing/PriceMatrix.jsx</code>, <code>pricing/matrix/RowActions.jsx</code>, <code>pricing/price-matrix.css</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 95 suites / 1589; diccionario 6897 claves × 2. QA local: 9 comprobaciones (ocultar, lista de la web y de la caja, cotización rechazada, vendedor sin permiso, volver a mostrar) y el interruptor usado desde la pantalla en escritorio, tableta y teléfono.</p>
+</section>
+
+<section>
+  <h2>12-nov-2026 — Nueva venta: correo opcional, avisos con interruptor, buscador de monturas, fotos de cámara y receta sin barra</h2>
+  <p>Cinco pedidos del dueño sobre el trabajo diario del vendedor.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>El correo del paciente es opcional</b> al meter un trabajo; solo lo exige una venta hecha en la tienda online. Sin correo no se envía nada por correo y el paciente se busca por teléfono.</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos.ts</code> (<code>cleanCustomer</code>, <code>requireEmail</code>), <code>lib/pos-data.ts</code>, <code>lib/pos-sale-admin.ts</code>, <code>src/data/fieldRules.js</code>, <code>PosSale.jsx</code></td></tr>
+    <tr><td><b>Avisos al paciente con interruptor</b> en el paso de cobro: «Recibo y avisos por correo» y «Avisar por SMS» (apagado por defecto), para no saturar a nadie.</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code> (<code>.pos-notify</code>), <code>POST /admin/pos/sales</code> (<code>notify_sms</code>), <code>order.metadata.notify_email / notify_sms / phone</code></td></tr>
+    <tr><td><b>Desplegable de monturas</b>: la lista de resultados ya no queda tapada por la barra Atrás/Siguiente ni se sale de la pantalla; sube arriba y mide el hueco que hay (teclado incluido).</td><td><span class="tag ok">Listo</span></td><td><code>PosFrameSearch.jsx</code>, <code>admin.css</code> (<code>.ac-open</code>)</td></tr>
+    <tr><td><b>Fotos de montura tomadas con la cámara</b>: una captura sin tipo de archivo (algunas tabletas Android) se rechazaba como «no es una imagen»; ahora se reconoce por sus bytes. Las fotos grandes se reducen a 1600 px antes de subir.</td><td><span class="tag ok">Listo</span></td><td><code>src/lib/imagePrep.js</code> (<code>withSniffedType</code>), <code>pricing/matrix/ImageInput.jsx</code>, <code>posApi.js</code> (<code>photoDataUrl</code>)</td></tr>
+    <tr><td><b>Receta en la ficha de la venta sin barra de desplazamiento</b>: las seis columnas caben en la tarjeta (en el teléfono ocupa todo el ancho).</td><td><span class="tag ok">Listo</span></td><td><code>sale-detail.css</code> (<code>.sd-rx-grid</code>)</td></tr>
+  </table>
+  <p class="muted">Pruebas: 95 suites / 1590; diccionario 6904 claves × 2. QA local en Galaxy Tab A7 Lite, escritorio y teléfono: venta completa sin correo y con SMS, venta con correo, foto de cámara de 10 MB sin tipo (caja y catálogo), lista de monturas y ficha de venta con la receta más ancha posible.</p>
+</section>
+
+<section>
+  <h2>19-nov-2026 — Ventas atrasadas de hasta un año que cuadran la contabilidad · recargo +$30 en el pasado</h2>
+  <p>El dueño: «el registro de venta debe poder ponerse en la fecha que se registre y con toda la actualización necesaria de tal forma que se vaya cuadrando la contabilidad… con un año retroactivo, pero se debe incluir la fecha en la que se registró: así se sabe si fue una actualización o una venta del día». Y: «agrega los +30 dólares cuando es +6, resuelve esto».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Hasta 366 días atrás para todos los roles</b> (antes vendedor 7, encargado 31). El dueño puede limitar cada rol en Configuración del POS → «Fecha retroactiva de las ventas» (0 = no puede).</td><td><span class="tag ok">Listo</span></td><td><code>lib/sale-date.ts</code>, <code>pos_setting.backdate_limits</code> (<code>CreatePos2BackdateLimits</code>), <code>PosConfig.jsx</code></td></tr>
+    <tr><td><b>El dinero cuadra</b>: «El dinero se cobró: Ese día» (por defecto) = los cobros llevan la fecha de la venta y no entran en ninguna caja (esa caja ya se contó); cuentan ese día en el reporte de caja y en las comisiones de ese mes. «Hoy» = entra en la caja abierta de hoy.</td><td><span class="tag ok">Listo</span></td><td><code>writePayments(..., { paidAt })</code> en <code>pos-data.ts</code></td></tr>
+    <tr><td><b>«El paciente ya se llevó los lentes»</b> (se marca sola si es de hace más de 30 días): entregada con esa fecha, sin bandeja y sin mensaje al paciente. Solo con la venta pagada.</td><td><span class="tag ok">Listo</span></td><td><code>markDelivered(..., { at, silent })</code>, <code>SaleDateCard.jsx</code></td></tr>
+    <tr><td><b>Fecha de registro en cada venta</b>: columna «Registro» en Ventas de tienda («Venta del día» / «Actualización · fecha en que se registró»), línea en la ficha, y en la exportación.</td><td><span class="tag ok">Listo</span></td><td><code>SaleRow.recorded_at</code>/<code>backdated</code>, <code>PosSales.jsx</code>, <code>SaleDetailPanel.jsx</code></td></tr>
+    <tr><td>Receta sin fecha en una venta atrasada = la fecha de la venta.</td><td><span class="tag ok">Listo</span></td><td><code>api/admin/pos/sales/route.ts</code></td></tr>
+    <tr><td><b>Recargo +$30 (base &gt; +6.00) también en las ventas anteriores</b>: se recalcula solo cada 6 h y al guardar los recargos; y sale como línea «Recargo de laboratorio» en la ficha de costo del pedido y en la hoja.</td><td><span class="tag ok">Listo</span></td><td><code>reconcileLabSurcharges</code> (<code>lib/sale-facts.ts</code>), <code>costSheetForOrder</code></td></tr>
+    <tr><td><b>Para verlo en producción</b>: <code>sync-repo.bat</code> → S y Redeploy en Coolify (producción sigue en 996e252; los parches 0078–0082 están en tu carpeta).</td><td><span class="tag">Tu paso</span></td><td>—</td></tr>
+  </table>
+  <p class="muted">Pruebas: <code>tests/sale-date.test.ts</code> (7), <code>tests/costing.test.ts</code> (+1). QA local (<code>qa/bd2</code>, 29 comprobaciones): venta de hace 300 días pagada y entregada (cobro con esa fecha y fuera de caja, sin bandeja, entregada ese día sin aviso, recargo $30, receta con esa fecha, reporte de caja de ese día), 40 días con cobro hoy (caja de hoy), entrega con saldo rechazada, vendedor 200 días permitido y limitado a 7 por el dueño, relleno del recargo y línea en la ficha de costo. Capturas en Galaxy Tab A7 Lite y escritorio.</p>
+</section>
+
+<section>
+  <h2>18-nov-2026 — Historial de compras del paciente y promociones para quien repite</h2>
+  <p>El dueño: «saber cuándo un cliente hace más de una compra, un historial de compra por cliente para poder hacer promociones y descuentos».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>En la caja</b>, al elegir un paciente existente: «Recurrente · 3 compras · última 2026-10-02 · total $612.00» (todas las tiendas y la web). Si es nuevo: «primera compra».</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code>, <code>lib/patient-purchases.ts</code></td></tr>
+    <tr><td><b>Promociones «desde la N.ª compra»</b>: en Comercial → Promociones, campo «Desde la compra n.º». En la caja la promoción sale marcada y no se puede elegir si al paciente aún no le toca; el servidor lo comprueba otra vez.</td><td><span class="tag ok">Listo</span></td><td><code>Promotions.jsx</code>, migración <code>CreateStorePromotion8MinPurchases</code></td></tr>
+    <tr><td>Cambiar una venta a otro paciente y unir pacientes duplicados.</td><td><span class="tag">Pendiente</span></td><td>—</td></tr>
+  </table>
+  <p class="muted">Pruebas: <code>tests/store-hours-promotions.test.ts</code>; QA local: promoción del 10 % desde la 2.ª compra rechazada sin paciente y aplicada a un paciente con 2 compras. Requiere redeploy del backend (migración).</p>
+</section>
+
+<section>
+  <h2>18-nov-2026 — Recargos de laboratorio por graduación alta</h2>
+  <p>El dueño: «cuando la base positiva es por encima de +6 el costo de laboratorio aumenta en 30; debe poder configurarse en la app, según referencias internacionales».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Configuración del POS → «Recargos de laboratorio por graduación»</b>: tabla editable (nombre, potencia, cuándo, límite, costo extra, activo). Viene con «Base positiva alta (más de +6.00) → +$30» encendida y los escalones habituales apagados para que les ponga precio: positiva > +8, negativa > −6 y > −10, cilindro > 4.00, adición > +3.00, prisma. «Valores sugeridos» los restaura.</td><td><span class="tag ok">Listo</span></td><td><code>LabSurcharges.jsx</code>, <code>lib/lab-surcharge.ts</code></td></tr>
+    <tr><td><b>Dónde cuenta</b>: sube el costo de los lentes de esa venta en el resultado, el estado de resultados, el informe por categorías («Recargo de laboratorio (graduación alta)») y el Ejecutivo. El precio al paciente no cambia. Una vez por trabajo; en la misma potencia solo el escalón más alto.</td><td><span class="tag ok">Listo</span></td><td><code>sale_fact.lab_surcharge_cents</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: <code>tests/lab-surcharge.test.ts</code>; suite completa 108 / 1691. QA local: venta +6.50 con recargo $30, +5.00 sin recargo, el desglose cuadra con la tarjeta, el informe por categorías lo muestra. Requiere redeploy del backend (migraciones <code>CreatePos2LabSurcharges</code>, <code>ExtendSaleFactSurcharge3</code>; además la de agudeza visual pasa a llamarse <code>CreatePrescription4Clinical</code>).</p>
+</section>
+
+<section>
+  <h2>18-nov-2026 — Agudeza visual con y sin lentes, y ojo dominante</h2>
+  <p>El dueño: «la receta debe tener la agudeza visual bajo los estándares optométricos, con cristales y sin cristales, por ojos… y el ojo dominante, fácil de insertar».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Receta nueva → «Agudeza visual (lejos)»</b>: OD, OI y AO sin lentes (sc) y con lentes (cc). Se escribe como en la hoja («20», «100-2», «cd», «pl») y queda en notación de Snellen (20/20, 20/100-2, CF…); también acepta 6/x y decimal. Debajo: «Mejora con lentes: OD +7 líneas». Ojo dominante con dos botones OD / OI.</td><td><span class="tag ok">Listo</span></td><td><code>VisualAcuityCard.jsx</code>, <code>lib/visual-acuity.ts</code></td></tr>
+    <tr><td>Se guarda con la receta; se ve en la ficha de la venta, se corrige desde «Corregir receta» y sale en la evolución de la graduación del paciente. La ficha de laboratorio impresa lleva el ojo dominante.</td><td><span class="tag ok">Listo</span></td><td>migración <code>CreatePrescription4Clinical</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: <code>tests/visual-acuity.test.ts</code> y <code>scripts/test-visual-acuity.mjs</code> (mismos casos); QA local: venta con agudeza, rechazo de una no válida, ficha de laboratorio, corrección y ficha del paciente; tarjeta en Galaxy Tab A7 Lite. Requiere redeploy del backend (migración).</p>
+</section>
+
+<section>
+  <h2>18-nov-2026 — «Costos por venta» y «Se cobra» por tienda</h2>
+  <p>El dueño preguntó por qué «Costos por venta» de Op3 decía $494: eran $4 de Op3 + $10 de laboratorio × 49 ventas de todas las tiendas.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Encabezado de «Costos por venta»</b>: con una tienda elegida usa sus ventas y solo las reglas que esa tienda cobra. La fila de una regla apagada en la tienda dice $0.</td><td><span class="tag ok">Listo</span></td><td><code>pricing/CostsSection.jsx</code></td></tr>
+    <tr><td><b>«Se cobra» ahora cuenta en los libros</b>: una regla apagada en una tienda (p. ej. laboratorio) ya no se carga a las ventas de esa tienda en el resultado, el estado de resultados, el informe por categorías ni el Ejecutivo. Antes solo lo respetaba la hoja de Google.</td><td><span class="tag ok">Listo</span></td><td><code>lib/costing.ts rulesInStore</code>, <code>financial-statement.ts</code>, <code>sales-insights.ts</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: libro y Ejecutivo con una regla apagada en una tienda dan la misma respuesta. Requiere redeploy del backend (sin migraciones).</p>
+</section>
+
+<section>
+  <h2>18-nov-2026 — Venta con fecha retroactiva</h2>
+  <p>El dueño: «cuando se registre una venta se debe poder poner fecha retroactiva».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Nueva venta → Pago → «Fecha de la venta»</b>: Hoy por defecto; «Otra fecha» con Ayer/Anteayer, día, hora opcional y motivo. Explica que la venta cuenta ese día en informes, resultado, tableros y recibo; que el cobro de ahora entra en la caja de hoy; que precios y promociones son los de hoy. Antes de registrar pide confirmación.</td><td><span class="tag ok">Listo</span></td><td><code>SaleDateCard.jsx</code>, <code>PosSale.jsx</code></td></tr>
+    <tr><td><b>Reglas</b>: nunca una fecha futura; vendedor hasta 7 días, encargado y supervisor 31, dueño y superadmin 1 año. La venta y su pedido quedan con esa fecha; se guarda cuándo se registró de verdad, quién y el motivo (auditoría «Venta con fecha retroactiva»). En la ficha de la venta y en Ventas de tienda se ve marcada.</td><td><span class="tag ok">Listo</span></td><td><code>lib/sale-date.ts</code>, <code>pos-data.ts backdateSale</code>, migración <code>CreatePos11</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: <code>tests/sale-date.test.ts</code> (límites por rol, horario de verano, cambio de día); QA local 17 comprobaciones (venta, pedido, tableros, recibo, cobro en la caja de hoy, auditoría, límites de vendedor y dueño) y la caja en Galaxy Tab A7 Lite. <b>Requiere redeploy del backend</b> (migración <code>CreatePos11</code>).</p>
+</section>
+
+<section>
+  <h2>17-nov-2026 — Informe contable por categorías (con filtros y PDF)</h2>
+  <p>El dueño: «debe salir algún reporte con filtro para ver toda la contabilidad y las finanzas por categorías de costo y se debe poder exportar a PDF».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Menú Tiendas → «Contabilidad por categorías»</b> (solo dueño y superadmin): ingresos (tienda, en línea, entrega), costo de lo vendido (monturas, lentes, tratamientos, fijos por venta como el laboratorio, otros) y gastos de operación por categoría fiscal (renta, servicios, nómina, software…, comisiones del cobro y de vendedores), con subtotales, utilidad bruta, utilidad neta y margen; % de los ingresos en cada fila. Indicadores arriba y «Reparto de los costos» en barras (clic = abre esa categoría).</td><td><span class="tag ok">Listo</span></td><td><code>FinanceReport.jsx</code>, <code>finance/categoryReport.js</code>, <code>finance-report.css</code></td></tr>
+    <tr><td><b>Cada categoría se abre en sus partidas</b>: los conceptos del costo de mercancía (cada montura/marca, cada lente, cada regla por venta), cada partida de costo con tienda, proveedor, frecuencia y tipo (fijo/variable/compartido), y cada vendedor con sus ventas netas. Cuadra al centavo con la línea.</td><td><span class="tag ok">Listo</span></td><td><code>GET /admin/finance/category-report</code>, <code>lib/category-report.ts</code>; el libro guarda <code>cogs_lines</code></td></tr>
+    <tr><td><b>Filtros</b>: tienda y período de la barra global (meses completos), agrupar por mes/trimestre/año, columnas por período o por tienda, categorías en chips con atajos (Todas · Solo costos · Solo gastos · Ninguna), buscar partida/proveedor/vendedor, ver partidas y mostrar ceros. Con un filtro la vista lo dice y en vez de la utilidad da «Total de los costos elegidos».</td><td><span class="tag ok">Listo</span></td><td><code>FinanceReport.jsx</code></td></tr>
+    <tr><td><b>PDF, Excel y CSV</b> desde la barra global: lo que se ve es lo que sale (membrete, indicadores, tabla por categoría con las partidas abiertas y el reparto de los costos). El Excel/CSV lleva además la hoja «Partidas» con todas las partidas de las categorías elegidas. Sin «versión para compartir»: es la contabilidad del dueño.</td><td><span class="tag ok">Listo</span></td><td><code>ReportDoc</code> (filas <code>frp-*</code> en <code>report.css</code>)</td></tr>
+    <tr><td><b>Corregido</b>: en el desglose de «Costos del mes» (parche anterior) la comisión de cada vendedor salía dividida entre 100 dos veces ($909.90 se veía como $9.10). El total de comisiones siempre estuvo bien.</td><td><span class="tag ok">Listo</span></td><td><code>lib/pnl-breakdown.ts</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 105 suites / 1676 (las piezas suman su línea del estado por mes, trimestre, año y tienda); <code>scripts/test-category-report.mjs</code> 8 casos. QA local: 60 comprobaciones contra el estado de resultados y las tarjetas del resultado (todas las tiendas, cada tienda, la web, por trimestre), un vendedor recibe 403; pantalla en escritorio, Galaxy Tab A7 Lite y teléfono; PDF carta apaisado de 2 páginas y Excel de 4 hojas. <b>Requiere redeploy del backend</b> (ruta nueva; sin migraciones).</p>
+</section>
+
+<section>
+  <h2>17-nov-2026 — Desglose de cada tarjeta del resultado y costos iguales en varias tiendas</h2>
+  <p>El dueño: «en cada card debe aparecer, cuando se dé clic, el desglose económico financiero exacto de esos datos, de dónde sale eso; además, cuando se agrega un costo debe tener autocompletado según los costos que ya se hayan hecho, de tal manera que se puedan poner los mismos costos en todas las tiendas y poder salvar los específicos de determinadas tiendas».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Clic en una tarjeta = su desglose</b> (Resultado por tienda): <b>Ventas netas</b> (cobrado con impuesto − impuesto = neto; caja/web; gravadas/exentas; entrega; ventas y ticket promedio; por tienda), <b>Costos del mes</b> (costo de lo vendido por monturas/lentes/tratamientos/fijos por venta, comisiones del cobro por método, comisión de cada vendedor con su %, y cada partida variable, fija y compartida con su cálculo: «$50 a la semana × 52 ÷ 12», «$3 × 41 ventas», «le toca el 38 % de $600»), <b>Resultado</b> (la cuenta en cascada y por tienda), <b>Margen %</b> (contribución ÷ ventas, «de cada $100 quedan…») y <b>Punto de equilibrio</b> (fijos ÷ margen, cuánto falta y cuánto por día en lo que queda del mes). Siempre suma la tarjeta al centavo: sale del mismo libro.</td><td><span class="tag ok">Listo</span></td><td><code>PnlBreakdown.jsx</code>, <code>GET /admin/store-costs/breakdown</code>, <code>lib/pnl-breakdown.ts</code></td></tr>
+    <tr><td><b>Autocompletado al agregar un costo</b>: al escribir el nombre salen los costos que ya existen (en qué tiendas y por cuánto); elegir uno copia categoría, tipo, importe, frecuencia, proveedor y notas. En Resultado por tienda y en Reglas y comisiones.</td><td><span class="tag ok">Listo</span></td><td><code>CostNameInput.jsx</code>, <code>StoreCosts.jsx</code>, <code>pricing/CostsSection.jsx</code></td></tr>
+    <tr><td><b>El mismo costo en varias tiendas</b>: «Varias tiendas (una copia por tienda)» al agregar; al editar, «Aplicar también en otras tiendas» (la que ya lo tiene se actualiza, la que no lo recibe); en Reglas y comisiones, «Copiar a otras tiendas» en cada partida. Cada copia es una partida propia de esa tienda: se cambia por su lado (una renta distinta en Op2) sin tocar las demás.</td><td><span class="tag ok">Listo</span></td><td><code>StoreCosts.jsx</code>, <code>pricing/CostsSection.jsx</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 105 suites / 1672 (pnl-breakdown). QA local: el desglose cuadra con las tarjetas al centavo en todas las tiendas y en cada una (16 comprobaciones, dos meses); las cinco pestañas en escritorio, Galaxy Tab A7 Lite y teléfono; costo nuevo autocompletado y creado en las tres tiendas, cambio aplicado a otra tienda, y copia desde Reglas y comisiones. <b>Requiere redeploy del backend</b> (ruta nueva; sin migraciones).</p>
+</section>
+
+<section>
+  <h2>17-nov-2026 — Registrar la venta aunque falten datos (con avisos)</h2>
+  <p>El dueño: «se debe poder registrar la venta aunque falten datos porque luego se puede editar; resuelve esto de tal manera que sea cómodo pero siempre dando warnings en ventanas emergentes y explicando cómo proceder».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Siguiente siempre responde</b>: si falta algo que se puede completar después (apellido, teléfono o nombre —uno de los dos basta—, si usa espejuelos, receta nueva, altura de montaje, anticipo, dirección de envío) sale una ventana con cada dato, qué pasa si se sigue y dos botones: «Seguir sin estos datos» o «Completar ahora». Lo aceptado no se vuelve a preguntar en esa venta.</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code> (<code>stepIssues</code>, <code>askSoft</code>)</td></tr>
+    <tr><td><b>Lo que no se puede dejar, explicado</b>: datos escritos mal, ni nombre ni teléfono, sin montura, sin material, receta fuera de rango u OCR sin confirmar, descuento sin aprobar, cobro de más o línea de cobro incompleta: una ventana dice qué pasa y cómo arreglarlo, y lleva al campo. Con una receta mal escrita ofrece «Dejar la receta pendiente».</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code> (<code>explainHard</code>), <code>i18n/parts/pos-missing.js</code></td></tr>
+    <tr><td><b>Sin receta = graduación pendiente</b> automática (aviso incluido); <b>sin anticipo</b> el total queda como saldo; <b>envío sin dirección</b> se permite y queda pendiente.</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos.ts</code> (<code>cleanCustomer lenient</code>, <code>cleanPayments allowNone</code>)</td></tr>
+    <tr><td><b>Resumen antes de registrar</b>: «La venta se registrará con N dato(s) pendiente(s)», con la lista, «Registrar con datos pendientes» o «Volver y completar».</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code> (<code>tryConfirm</code>)</td></tr>
+    <tr><td><b>La venta recuerda lo que le falta</b> hasta completarlo: al terminar, la caja lo lista con «Completar ahora» (abre la ficha); la ficha lo muestra con «Completar datos»; Ventas de tienda marca «N pendiente(s)». Al corregir los datos, al pasar a recoger en tienda o al cobrar, el aviso se actualiza solo.</td><td><span class="tag ok">Listo</span></td><td><code>pos_sale.missing</code> (migración <code>CreatePos10</code>), <code>saleMissing</code>, <code>MissingData.jsx</code>, <code>SaleDetailPanel.jsx</code>, <code>PosSales.jsx</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 104 suites / 1670 (pos-missing-data). QA local: 12 comprobaciones por la API (sin nombre ni teléfono rechazado, teléfono mal escrito rechazado, solo nombre sin anticipo y envío sin dirección registrada, lo que falta en la venta y la lista, recibo, completar por partes) y el flujo en pantalla en Galaxy Tab A7 Lite, escritorio y teléfono, más las pruebas anteriores de graduación pendiente, pagos y promociones. <b>Requiere redeploy del backend</b> (migración <code>CreatePos10</code>).</p>
+</section>
+
+<section>
+  <h2>15-nov-2026 — Horario de las tiendas y promociones por tienda</h2>
+  <p>El dueño: «se debe poder editar el horario de apertura y cierre de cada tienda y manejarlo en el panel de admin; además, promociones por tienda, configura algunas 5 y que se puedan habilitar o deshabilitar, agregar otras, editar […] compre 2 lleve 1 gratis, examen de la vista gratis si compra con nosotros […] debe quedar claro qué es descuento y qué es promoción; la promoción se hace por intervalo de tiempo».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Horario de cada tienda</b>: Tiendas → «Horario»: apertura y cierre de cada día (o cerrada), «Copiar el lunes a martes–viernes» y días especiales (feriados, días cortos). El directorio dice «Abierta · cierra 18:00» o «Cerrada · abre lun 09:00»; los recibos llevan la semana en una línea; la caja avisa (sin bloquear) si se vende fuera de horario.</td><td><span class="tag ok">Listo</span></td><td><code>lib/store-hours.ts</code>, migración <code>CreateEstablishmentHours7</code>, <code>StoreHoursEditor.jsx</code>, <code>storeHours.js</code></td></tr>
+    <tr><td><b>Promociones por tienda</b> (Comercial → Promociones): nombre, tipo (compre N lleve M · % en toda la compra · servicio gratis · regalo), tiendas, fechas de inicio y fin, compra mínima, condiciones; encender/apagar, editar, añadir, quitar. Cinco de ejemplo listas y apagadas: Compre 2 lleve 1 gratis · Examen de la vista gratis con tu compra · Segundo par al 50 % · Estuche y limpiador de regalo · Temporada escolar 15 %.</td><td><span class="tag ok">Listo</span></td><td><code>lib/promotions.ts</code>, <code>lib/promotions-data.ts</code>, migración <code>CreateStorePromotion8</code>, <code>/admin/store-promotions</code>, <code>Promotions.jsx</code></td></tr>
+    <tr><td><b>En la caja</b>: en el paso Precio, «Promoción» lista las activas hoy en esa tienda. El «compre N lleve M» pide el número de las ventas pagadas. <b>Descuento y promoción nunca se suman</b>: se aplica el mayor y la pantalla, la ficha y el recibo dicen cuál («Promoción «…» (15 %)» o «Descuento 20 %»); un servicio o regalo sale como «Incluye: …». La promoción no pide aprobación.</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos-promotion.ts</code>, <code>pos_sale.promotion</code> (migración <code>CreatePos9</code>), <code>PosSale.jsx</code>, <code>SaleDocuments.jsx</code>, <code>SaleDetailPanel.jsx</code></td></tr>
+    <tr><td><b>Descuento se llama descuento</b>: el porcentaje por artículo que el dueño pone en «Productos y precios» ahora dice «Descuento −X %» (antes «Promoción −X %»).</td><td><span class="tag ok">Listo</span></td><td><code>i18n/parts/price-matrix.js</code></td></tr>
+  </table>
+  <p class="muted">Supuestos (el dueño no lo precisó): descuento y promoción no se suman (gana el mayor); el horario se usa para informar y avisar, nunca bloquea una venta; las cinco promociones de ejemplo nacen apagadas para que ninguna tienda las aplique antes de que el dueño elija. Pruebas: 103 suites / 1663 (store-hours-promotions); <code>scripts/test-store-hours.mjs</code> (8). QA local: 27 comprobaciones por la API (horario, promociones, cotización, venta, recibo, apagar a mitad de venta) y la caja, Tiendas y Promociones en escritorio, Galaxy Tab A7 Lite y teléfono. <b>Requiere redeploy del backend</b> (3 migraciones).</p>
+</section>
+
+<section>
+  <h2>15-nov-2026 — Registro de operaciones (auditoría de la base de datos)</h2>
+  <p>El dueño: «hay que guardar el log de todas las operaciones que se hagan en la base de datos con lujo de detalles para auditoría […] un clic ordena ascendente/descendente, doble clic busca un dato de esa columna […] solo en super admin […] exportar e imprimir en PDF según intervalo de tiempo, tienda, etc.; debe quedar profesional».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Todo queda escrito</b>: cada alta, cambio y borrado en cualquier tabla del negocio (ventas, pagos, caja, pedidos, pacientes, recetas, precios, costos, tiendas, equipo…) lo escribe la propia base de datos en la misma transacción: no hay ruta, job, script ni consulta a mano que se lo salte. En un cambio se guardan solo las columnas que cambiaron, antes y después. Las claves nunca se copian y de las recetas solo se guarda qué campo cambió, no el valor. El registro no se puede editar ni borrar.</td><td><span class="tag ok">Listo</span></td><td>migración <code>audit/CreateOperationLog2</code> (<code>operation_log</code>, <code>oplog_capture</code>), job <code>operation-log-maintain</code></td></tr>
+    <tr><td><b>Quién, con qué rol y desde dónde</b>: cada escritura de una petición lleva la persona, su rol, la pantalla (método y ruta), la IP, el navegador y el id de la petición; lo automático sale como «Sistema».</td><td><span class="tag ok">Listo</span></td><td><code>lib/operation-log-context.ts</code>, <code>staff-guard.ts</code>, <code>api/middlewares.ts</code></td></tr>
+    <tr><td><b>Pantalla «Registro de operaciones»</b> (Administración, solo dueño y superadmin): clic en un encabezado ordena ascendente/descendente; doble clic (o la lupa en la tableta) abre un buscador en esa columna; varias búsquedas a la vez como pastillas; filtros por hora, operación, tabla, persona, origen y búsqueda en todo (también dentro de los datos). Clic en una fila: el detalle campo por campo antes/después y las demás operaciones de la misma transacción.</td><td><span class="tag ok">Listo</span></td><td><code>OperationLog.jsx</code>, <code>operation-log.css</code>, <code>GET /admin/operation-log</code> y <code>/:seq</code>, <code>lib/operation-log.ts</code></td></tr>
+    <tr><td><b>Exportar e imprimir</b>: la barra de filtros (tienda y período, más la hora) saca PDF apaisado con la cabecera de los informes (indicadores, por operación, tablas más tocadas, personas y la tabla), Excel y CSV, hasta 5.000 filas por archivo (si hay más, lo avisa).</td><td><span class="tag ok">Listo</span></td><td><code>OperationLog.jsx</code> (<code>doExport</code> → <code>ReportDoc.exportReport</code>)</td></tr>
+    <tr><td><b>Sincronización de precios sin escrituras inútiles</b>: cada 4 h borraba y volvía a crear cada precio del catálogo aunque no cambiara; ahora solo escribe los que cambian (en local: 355 → 0).</td><td><span class="tag ok">Listo</span></td><td><code>lib/price-sync.ts</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 102 suites / 1651 (operation-log). QA local contra PostgreSQL: 167 tablas con disparador; venta de punta a punta y correcciones de pago registradas con persona, rol, ruta e IP; recetas sin valores; tokens ocultos; el registro rechaza UPDATE/DELETE; vendedor rechazado (403); orden, búsqueda por columna (también «Cambio» → UPDATE), filtro por tienda, exportación Excel y PDF; pantalla en escritorio, Galaxy Tab A7 Lite y teléfono sin desbordes. <b>Requiere redeploy del backend</b> (migración nueva). Opcional en Coolify: <code>OPLOG_RETENTION_DAYS</code> (≥ 90) para borrar lo más viejo; sin ella se guarda todo.</p>
+</section>
+
+<section>
+  <h2>15-nov-2026 — Graduación pendiente, corregir pagos y fotocromático resaltado</h2>
+  <p>El dueño: «el paciente paga $200 y debe 200, se va a la clínica a hacerse el examen y la receta llega 2 o 3 horas después […] ahora, si no pongo graduación, no me deja completar el pago»; «debo poder enmendar los problemas de registro, por ejemplo si pongo que se cobró 250 de anticipo y fue total»; «cuando imprima la orden de laboratorio, que el recuadro de fotocromático tenga un color de fondo».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Graduación pendiente</b>: en Nueva venta → Receta, la casilla «Graduación pendiente» deja seguir sin receta. Se eligen los lentes que compra (todos los diseños: aún no se sabe si es monofocal o progresivo), se cobra el anticipo y se imprime el recibo. La venta, el pedido y la línea del lente quedan marcados; el pedido espera en «Confirmado» (no pasa al laboratorio) y la ficha de laboratorio no se imprime. Cuando llega la receta: la venta → «Agregar graduación» (el formulario arranca en el tipo del lente vendido); se revisa contra el lente (un progresivo pide la adición), recibe su número de receta, se enlaza a la línea y ya se puede imprimir la ficha y pasar al laboratorio.</td><td><span class="tag ok">Listo</span></td><td><code>lib/rx-pending.ts</code>, <code>pos_sale.rx_pending</code> (migración <code>CreatePos8</code>), <code>rx_pending</code> en <code>POST /admin/pos/sales</code>, <code>PosSale.jsx</code>, <code>SaleDetailPanel.jsx</code></td></tr>
+    <tr><td><b>Saltar entre pasos</b> de la venta: los botones de pasos llevan a cualquier paso ya visitado (atrás y adelante); si algo de en medio dejó de estar completo, se para ahí y lo dice.</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code> (<code>maxStep</code>, <code>jumpTo</code>)</td></tr>
+    <tr><td><b>Corregir pagos</b>: la venta → Pagos → «Corregir pagos». Se deja la lista como debió quedar (cambiar importe, método o referencia; quitar un pago anotado por error; añadir el que faltó; botón «Pagó el total»), con motivo. El efectivo que cambia entra o sale como «corrección» en la caja ABIERTA de esa tienda (una caja cerrada y firmada no se toca). Cada pago corregido guarda su historial y queda en Auditoría (<code>payment.correct</code>). Si los pagos cambiaron mientras se corregía, no se escribe nada.</td><td><span class="tag ok">Listo</span></td><td><code>lib/payment-correction.ts</code> (puro), <code>lib/payment-correction-data.ts</code>, <code>POST /admin/pos/sales/:id/payments/correct</code>, <code>PaymentCorrection.jsx</code></td></tr>
+    <tr><td><b>Fotocromático resaltado</b>: en Lentes el recuadro se pinta amarillo con «CON FOTO» al elegirlo, el resumen lo marca y en la ficha de laboratorio impresa la fila «Intrinsic Property» sale con fondo amarillo; en blanco cuando no lleva.</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code>, <code>PosSaleSummary.jsx</code>, <code>SaleDocuments.jsx</code> (<code>tr.hl-photo</code>)</td></tr>
+  </table>
+  <p class="muted">Pruebas: 101 suites / 1640 (payment-correction, rx-pending). QA local: 31 comprobaciones de punta a punta por la API (venta con graduación pendiente, ficha y laboratorio bloqueados, receta sin adición rechazada, receta agregada, ficha con foto; corrección del anticipo al total con su línea de caja, efectivo → tarjeta, pago dividido, pago no cobrado, sin cambios, pantalla vieja), la auditoría contable (39 cruces) y el flujo en pantalla en la tableta, el teléfono y el escritorio. <b>Requiere redeploy del backend</b> (migración <code>CreatePos8</code>).</p>
+</section>
+
+<section>
+  <h2>13-nov-2026 — Tienda online a «3 × costo», entrega fija de $30 y guía contable</h2>
+  <p>El dueño: «quiero que la regla para los espejuelos de la tienda online sea 3 veces su costo (el del marco) […] el delivery tiene un precio de venta fijo de 30 dólares solo para USA […] debe quedar siempre claro un ejemplo de la contabilidad […] especificar para cada cosa si es un costo para una tienda exactamente o un costo que se divide».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Regla «N veces el costo de la montura»</b> por tienda (N de 1 a 20), en «Reglas y comisiones → Ajuste general». Al guardarla, cada montura con costo queda en esa tienda a costo × N: en la caja, la matriz («COSTO ×»), la web y los informes. El precio sigue al costo solo (al cambiarlo, al importar una lista y cada 4 h). Un precio que el dueño escribe a mano en un modelo manda sobre la regla; vaciarlo lo devuelve a costo × N al momento. Sin costo no hay precio derivado (el modelo conserva el que tenía). Lentes, tratamientos y estuches no se tocan. El suelo y techo no recortan este precio.</td><td><span class="tag ok">Listo</span></td><td><code>lib/cost-multiple.ts</code>, migración <code>UpgradePriceRuleCostMultiple10</code>, <code>POST /admin/pricing/frames/rule</code> (<code>mode: "cost_multiple"</code>), <code>pricing/FramesSection.jsx</code> (RuleRow)</td></tr>
+    <tr><td><b>La regla «no se veía / no se podía cambiar»</b>: el campo del valor era tan estrecho que «299.93» se leía «299». Ahora es ancho, dice su unidad (% · USD · × costo) y el botón dice «Guardando…».</td><td><span class="tag ok">Listo</span></td><td><code>admin/pricing.css</code> (<code>.pp-num.wide</code>)</td></tr>
+    <tr><td><b>Entrega a precio fijo: $30, solo EE. UU.</b> El servidor cotiza UNA opción a $30 valga lo que valga el carrito; ya no existe la segunda mensajería más barata (se podía pedir por API a $7.95). El checkout muestra el precio que cotiza el servidor. Fuera de EE. UU. no se vende (422 <code>us_only</code>, y la región de Medusa tampoco lo admite).</td><td><span class="tag ok">Listo</span></td><td><code>lib/shipping-rates.ts</code> (<code>SHIPPING_FLAT_RATE</code>, por defecto 30), <code>pages/MedusaCheckout.jsx</code></td></tr>
+    <tr><td><b>La entrega cobrada entra en los libros</b>: es ingreso de la tienda online, junto a sus ventas («Entrega cobrada»), en el resultado de la tienda, el estado de resultados y el informe fiscal; y la comisión de la pasarela se calcula sobre lo pagado (ventas + entrega). Antes esos dólares no aparecían en ningún informe. Gravadas + exentas siguen sumando las ventas netas.</td><td><span class="tag ok">Listo</span></td><td><code>EntityMonth.shipping_income</code>, <code>Statement.revenue.shipping</code> en <code>lib/financial-statement.ts</code>; <code>Pnl.shipping_income</code></td></tr>
+    <tr><td><b>Cada costo dice de quién es</b>: bajo cada fila, de corrido: «Solo de Op1» o «Compartido · 3 tiendas, se reparte según lo que vende cada una»; la cuenta de su frecuencia («$100.00 a la semana × 52 ÷ 12 = $433.33 al mes»); lo que cargó a cada tienda ESTE mes; y dónde cae («Costo fijo → Renta (Schedule C 20b · 1120-S 11)»).</td><td><span class="tag ok">Listo</span></td><td><code>admin/finance/explain.js</code>, <code>pricing/CostsSection.jsx</code>, <code>items[].charged</code> en <code>GET /admin/finance/rules</code></td></tr>
+    <tr><td><b>Guía contable</b> (botón junto a «Informe fiscal»): cada partida (de quién, cada cuánto, cómo entra al mes, dónde cae), un mes de ejemplo línea por línea con la cuenta al lado, el «vector fiscal» (las mismas cifras por renglón del Schedule C y del 1120-S), un pedido de la tienda online (3 × costo, lentes, entrega de $30, pasarela, transportista) y «Tus números» del mes en el mismo orden.</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/AccountingGuide.jsx</code>, <code>finance/guideExample.js</code> (el ejemplo se calcula, no se escribe a mano)</td></tr>
+  </table>
+  <p class="muted">Pruebas: 99 suites / 1619 (cost-multiple, shipping-rates, shipping-income); <code>scripts/test-finance-guide.mjs</code> (10); diccionario 7174 claves × 2. QA local: 29 comprobaciones de la regla de punta a punta (la web cobra costo × 3, el precio sigue al costo, precio a mano, quitar la regla), 10 de la entrega, y la auditoría contable ampliada a 39 cruces (la entrega cobrada = Σ de las líneas de envío de los pedidos; lo que cada partida dice que cargó = lo que carga el estado). <b>Requiere redeploy del backend</b> (migración nueva). En Coolify: <code>SHIPPING_FEDEX_RATE</code> y <code>SHIPPING_DHL_RATE</code> ya no se leen.</p>
+</section>
+
+<section>
+  <h2>13-nov-2026 — Costos: autoguardado, revisión de la contabilidad e informe fiscal</h2>
+  <p>El dueño ya trabaja en vivo y avisó: «cuando se modifica algo en los costos no se está autoguardando».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Autoguardado en «Reglas y comisiones»</b>. Antes un costo solo se guardaba con Enter o la ✓ pequeña, y al guardarse cualquier fila las demás volvían a lo del servidor (se perdía lo escrito). Ahora cada fila se guarda sola (lista o interruptor: al momento; texto: 1,2 s después de la última tecla, al salir de la fila y al cerrar la pantalla), lo escrito nunca se pisa (ni por la relectura ni por un fallo de red: queda marcado para reintentar), dos guardados seguidos se encolan y las filas no cambian de sitio mientras se trabaja. También las reglas por venta, el impuesto de venta y el % de cada vendedor.</td><td><span class="tag ok">Listo</span></td><td><code>pricing/CostsSection.jsx</code>, <code>pricing/CommissionsSection.jsx</code>, <code>PricingPanel.jsx</code> (<code>onFinSaved({ quiet })</code>), <code>finance/finance.css</code></td></tr>
+    <tr><td><b>Revisión de los números</b>: el mismo mes leído por las tres rutas (reglas, resultado por tienda, estado de resultados) y directo de <code>sale_fact</code> cuadra al centavo: identidad ingresos − costo − gastos = utilidad, consolidado = suma de tiendas, punto de equilibrio, reparto de compartidos, y cada frecuencia (diaria … anual) guarda el importe exacto y mueve el resultado en su equivalente mensual. 37 comprobaciones sobre los datos locales.</td><td><span class="tag ok">Sin diferencias</span></td><td><code>lib/financial-statement.ts</code>, <code>lib/store-pnl.ts</code>, <code>lib/store-costs.ts</code></td></tr>
+    <tr><td><b>Informe fiscal en PDF</b>: botón junto a «Estado de resultados»; se elige el período (mes pasado, trimestre, año, de mes a mes) y de quién (consolidado o una tienda) y sale el PDF: resumen, impuesto de venta mes a mes con ventas <b>gravadas</b> y <b>exentas</b>, ingresos y gastos por línea del Schedule C / Form 1120-S y desglose por tienda.</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/FiscalReport.jsx</code>, <code>Statement.taxable_sales / exempt_sales</code> en <code>lib/financial-statement.ts</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 96 suites / 1593; diccionario 6941 claves × 2. QA local: 9 casos de autoguardado en pantalla (salir de la fila, pausa, dos filas a la vez, lista, fila con texto sin guardar, fallo de red y reintento, fila nueva, recargar justo después de escribir), 37 comprobaciones contables y el PDF generado y revisado.</p>
+</section>
+
+<section>
+  <h2>Panel de tienda — 5-nov-2026: auditoría contra el documento v2.2 y correcciones</h2>
+  <p>Se contrastó la especificación <b>«Gestión de Tiendas RUBI LENS v2.2»</b> (HU-01…HU-73) con el código de la rama <code>develop_optical_storepos</code>: unos 80 puntos, de los que antes de las correcciones de hoy <b>45 estaban hechos, 24 parciales y 11 faltaban</b>. La tabla completa, punto por punto, está en el documento del proyecto de Claude <code>auditoria-spec-v22-vs-codigo-2026-11-05.md</code> y en <code>docs/HITOS-PANEL-TIENDA.md</code> (hitos 6 a 9).</p>
+
+  <h3>Corregido o añadido hoy (un commit por fila)</h3>
+  <table>
+    <tr><th>Qué</th><th>HU</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><code>226e97a</code> · Los privilegios «Ver costos» / «Gestionar costos» ya alcanzan los costos de montura y la banda de precios: un encargado con el permiso recibía 403 porque <code>/admin/pricing/*</code> no estaba en la lista de rutas permitidas a no administradores; ahora se nombran las tres rutas y el resto de <code>/admin/pricing</code> sigue solo para admin.</td><td>HU-12 / roles</td><td><span class="tag ok">Listo</span></td><td><code>apps/backend/src/lib/staff-roles.ts</code>, <code>src/api/middlewares.ts</code>, <code>/admin/pricing/frames/{costs,cost,band}</code>; <code>tests/staff-roles.test.ts</code></td></tr>
+    <tr><td><code>a3fd890</code> · Una persona borrada o desactivada pierde el acceso en su siguiente petición (antes un token vivo tras <code>DELETE /admin/team/:id</code> resolvía como superadmin hasta caducar). Nuevo <b>Desactivar / Reactivar</b> sin borrar: usuario, roles, perfil, ficha de vendedor e historial se conservan; chip «Inactivo» en Equipo; auditoría <code>user.deactivate</code> / <code>user.reactivate</code>.</td><td>HU-04</td><td><span class="tag ok">Listo</span></td><td><code>lib/staff-scope.ts</code>, <code>POST /admin/team/:id/status</code>, migración <code>StaffProfileDisabled4</code>, <code>src/admin/Team.jsx</code>; <code>docs/ADMIN-PANEL.md</code> «Equipo: desactivar sin borrar…»</td></tr>
+    <tr><td><code>23e3d00</code> · Tres carreras leer-y-escribir del POS cerradas con un solo <code>UPDATE … RETURNING</code> guardado: una aprobación de descuento se usa una sola vez (y se libera si la venta falla); decidir una aprobación solo sobre una pendiente; cobrar un saldo suma en la base y rechaza <code>overpaid</code> / <code>nothing_due</code> / <code>sale_voided</code>; el libro y <code>sale_fact</code> se escriben después de la reclamación.</td><td>HU-27, HU-30</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos-data.ts</code>; <code>tests/pos-data-atomic.test.ts</code> (17 pruebas)</td></tr>
+    <tr><td><code>34ff37b</code> · Importes de la franja de etapas solo para administradores (el servidor los anula para encargados/supervisores, <code>redactBoardMoney</code>; vendedores 403); chip <b>«Atrasados»</b> y píldora «N d» en pedidos pasados de <code>promised_on</code>; filas de surtido con <code>sku</code> y de costos con <code>price_cents</code> para que costo → precio → margen se rellene en todos los modelos; correos de etapa respetan la baja de <code>notify_email</code>.</td><td>HU-33, HU-12</td><td><span class="tag ok">Listo</span></td><td><code>lib/order-board.ts</code>, <code>/admin/order-board</code>, <code>/admin/store-assortment/:id/products</code>, <code>src/admin/StoreOrders.jsx</code>, <code>lateness.js</code></td></tr>
+    <tr><td><code>069e1b8</code> · Lente <b>stock vs tallado digital</b>: una celda por (diseño, material, acabado) con precio y costo de laboratorio, editable en Precios y costos → Lentes (costo solo maestro y con privilegio); el POS manda <code>selection.finish</code> y el servidor responde <code>finish_unavailable</code> si no está tarifada; recibos, ticket y ficha nombran el acabado; el costo de la celda vendida manda en márgenes y tableros; la matriz pública nunca lleva costos.</td><td>HU-10, HU-11</td><td><span class="tag ok">Listo</span></td><td><code>lib/lens-finish.ts</code>, <code>lib/lens-cost.ts</code>, migraciones <code>UpgradeLensListFinish8</code> y <code>ExtendSaleFactLensFinish2</code>, <code>src/admin/pricing/LensesSection.jsx</code>; <code>docs/HITOS-PANEL-TIENDA.md</code> hito 6</td></tr>
+    <tr><td><code>803a641</code> · POS: <b>total en curso</b> pegajoso desde el paso Montura (misma cotización <code>/admin/pos/quote</code>, 400 ms, respuestas viejas descartadas, solo precios de lista); <b>opciones rápidas</b> de lente para montura propia (monofocal básico / AR / fotocromático, bifocal, progresivo / + AR); aviso de <b>teléfono o correo ya registrado</b> con «Usar este cliente» / «Es otra persona»; el servidor rechaza con 422 lo que antes solo sugería el navegador (<code>design_needs_add</code>, <code>design_no_add</code>, <code>rx_add_mismatch</code>, <code>photo_unavailable</code> —se cobraba $0—, <code>ar_unavailable</code>, <code>rx_unconfirmed</code>).</td><td>HU-18, HU-20, HU-22</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos-lens-rules.ts</code>, <code>lib/lens-quote.ts</code>, <code>src/admin/PosSale.jsx</code>, <code>PosSaleSummary.jsx</code>, <code>harness/pos.jsx</code>; hitos 7 y 8</td></tr>
+    <tr><td><code>27ebe66</code> · <b>Recuperar la contraseña uno mismo</b> («¿Olvidaste tu contraseña?», flujo de Medusa, enlace de 15 min de un solo uso, límites por IP y correo); <b>un modelo en todas las tiendas</b> (bloque en Precios → Monturas, misma fórmula de la caja, clic en la celda cambia de tienda); <b>historial de precios</b> con quién, qué, antes → después y reglas de la cadena; <b>cobrar saldo y entregar</b> en un paso (entrega atómica que recorre la etapa del pedido hasta «entregado», un solo correo); <b>aviso de anulación solicitada</b> por correo a los administradores; resumen diario con pedidos web, centavos enteros y anuladas fuera de «tienda sin ventas»; job <code>sale-fact-reconcile</code> cada 6 h; <b>meta del mes por vendedor</b> para el dueño (base neta, como la comisión). +66 pruebas (1157 en total).</td><td>HU-03, HU-13, HU-15, HU-28, HU-32, HU-40</td><td><span class="tag ok">Listo</span></td><td><code>lib/password-reset.ts</code> + subscriber <code>auth-password-reset.ts</code>, <code>GET /admin/pricing/frames/across</code> (<code>lib/pricing-across.ts</code>), <code>lib/store-pricing-data.ts</code>, <code>POST /admin/pos/sales/:id/deliver</code>, <code>lib/alerts.ts</code>, <code>jobs/sale-fact-reconcile.ts</code>, <code>/admin/sellers/stats</code>; <code>docs/ADMIN-PANEL.md</code> (HU-03, HU-13/HU-15), <code>docs/CONTABILIDAD.md</code> «Notas del 5-nov-2026», hito 9</td></tr>
+    <tr><td><code>1e08fcf</code> · El enlace «Abrir la venta» del correo de anulación solicitada aterriza en la venta: <code>/admin?tab=possales&amp;number=…</code> filtra Ventas de tienda por número y abre su ficha en cuanto la lista la tiene.</td><td>HU-28</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/PosSales.jsx</code></td></tr>
+  </table>
+
+  <h3>Sigue pendiente del documento v2.2</h3>
+  <table>
+    <tr><th>HU</th><th>Qué falta</th></tr>
+    <tr><td>HU-05</td><td>Elección de tienda al entrar (hoy: selector global dentro del panel).</td></tr>
+    <tr><td>HU-06</td><td>Carga de catálogo desde Excel.</td></tr>
+    <tr><td>HU-07</td><td>Alta manual de una montura desde el panel propio.</td></tr>
+    <tr><td>HU-09</td><td>Etiquetas de producto y lectura con cámara.</td></tr>
+    <tr><td>HU-14</td><td>Programar precios a futuro.</td></tr>
+    <tr><td>HU-21</td><td>Recordatorio de receta con más de 1 año.</td></tr>
+    <tr><td>HU-29</td><td>Devolución / cambio.</td></tr>
+    <tr><td>HU-31</td><td>Etapa «listo para recoger».</td></tr>
+    <tr><td>HU-34</td><td>Rehecho por garantía.</td></tr>
+    <tr><td>HU-72</td><td>Copia diaria de la base real (Supabase).</td></tr>
+    <tr><td class="muted">—</td><td>Número propio de ficha de laboratorio y bandejas por tienda.</td></tr>
+  </table>
+
+  <h3>Decisiones del dueño que difieren del documento</h3>
+  <ul>
+    <li>Comisión del encargado <b>15 %</b> (el documento dice 20 %).</li>
+    <li>Aprobación de descuentos <b>solo dueño / superadmin</b>.</li>
+    <li>Códigos de tienda <code>Op#</code> (el documento usa <code>T#</code>).</li>
+    <li>Material por encima de <code>max_abs</code> queda como <b>recomendación</b>, no como bloqueo.</li>
+  </ul>
 </section>
 
 <section>

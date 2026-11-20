@@ -18,6 +18,7 @@ import { resolveImageSized, imageSrcSet } from "../data/imageUrl.js";
 import { viewsBySku } from "../data/frameMediaSample.js";
 import { useFrameMediaVersion } from "../data/frameMediaLive.js";
 import { Icon360, IconHeart, IconDiscount, IconGender, IconFemale, IconUnisex, IconKids } from "./UiIcons.jsx";
+import { IconReceta } from "./LensGraphics.jsx";
 import { DISCOUNTS_ENABLED } from "../config/features.js";
 
 // (El descuento por hash se eliminó: el precio tachado ahora es SIEMPRE el
@@ -185,7 +186,7 @@ export default function ProductCard({ product }) {
                    corridor: p.corridor, segHeight: p.segHeight,
                    bifocal: p.bifocal, suitable: p.suitable,
                  };
-                 navigate(`/recetas/${product.slug}`, { state: { openRxOcr: true, tryOnMeasurement: light } });
+                 navigate(`/recetas/${product.slug}?color=${p.colorIndex ?? active}`, { state: { openRxOcr: true, tryOnMeasurement: light } });
                }}
                onBuyFrameOnly={(p) => {
                  // "Comprar solo el marco": directo al resumen del pedido (solo montura).
@@ -247,6 +248,17 @@ export default function ProductCard({ product }) {
             </span>
           </button>
         )}
+        {/* Receta directa, con el MISMO peso que el probador: probárselos es una
+            opción, no un paso obligatorio. Antes era un enlace de texto pequeño
+            bajo el carrito y el cliente creía que tenía que pasar por la cámara. */}
+        <button type="button" className="card-tryon btn-glass card-rxflow"
+                aria-label={t("card.lensFlow")} title={t("card.lensFlow")}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/recetas/${product.slug}?color=${active}`); }}>
+          <span className="btn-glass-fb">
+            <IconReceta className="card-rxflow-ic" aria-hidden="true" />
+            {t("card.lensFlow")}
+          </span>
+        </button>
         {/* Acción secundaria: añadir SOLO la montura al carrito. */}
         <button
           type="button"
@@ -265,13 +277,6 @@ export default function ProductCard({ product }) {
               </span>
             </>
           )}
-        </button>
-        {/* Atajo directo a receta: el cliente puede ir al flujo de lentes
-            graduados SIN pasar por el probador ni por la ficha (PDP). Cubre el
-            caso "no necesito probármelos, solo quiero poner la receta". */}
-        <button type="button" className="card-lensflow"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/recetas/${product.slug}?color=${active}`); }}>
-          {t("card.lensFlow")} →
         </button>
       </div>
     </div>

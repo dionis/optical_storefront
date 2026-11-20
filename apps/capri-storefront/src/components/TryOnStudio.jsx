@@ -4,6 +4,7 @@ import { loadCache, saveCache } from "../lib/appCache.js";
 import { brandByName } from "../data/brands.js";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { TENANT } from "../config/tenant.js";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
 import { IconMaterial, IconMeasures, IconGender, IconCamera, IconCheck, Icon360, IconGlasses as IconGlassesUi } from "./UiIcons.jsx";
 import MeasureReport from "./MeasureReport.jsx";
@@ -1075,7 +1076,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   async function shareResult() {
     const src = mData?.frontImage || frontImg;
     const text = t("vm.shareText");
-    const title = "RUBI LENS";
+    const title = TENANT.name;
     const url = typeof location !== "undefined" ? location.href : "";
     try {
       if (src && typeof navigator !== "undefined" && navigator.canShare) {
@@ -1188,7 +1189,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       cx.textBaseline = "alphabetic";
       cx.fillStyle = "#ffffff";
       cx.font = `800 ${Math.round(38 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
-      cx.fillText("RUBI LENS", pad, gy + Math.round(50 * s));
+      cx.fillText(TENANT.name, pad, gy + Math.round(50 * s));
       cx.fillStyle = "rgba(200,215,240,0.92)";
       cx.font = `600 ${Math.round(26 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
       const sub = [product?.name, product?.brand, color?.name].filter(Boolean).join("   ·   ");
@@ -1262,6 +1263,45 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     try { saveMeasureResult(product, { data: mData, frontImg, sideImg, prescription: payload }); } catch { /* cuota */ }
     setAddedState("added");
     if (typeof onAddPrescription === "function") onAddPrescription(payload);
+  }
+
+  // "Añadir receta sin medir": la medición con IA es un EXTRA, no un paso previo
+  // obligatorio. Desde la captura, la revisión o con los intentos agotados, el
+  // cliente puede ir a la receta sin medidas. No guarda nada por producto (pisaría
+  // una medición anterior buena) ni manda las fotos crudas de la cámara: solo el
+  // color y, si ya lo eligió en la revisión, para quién son.
+  function skipToRx() {
+    if (mAbort.current) { mAbort.current.abort(); mAbort.current = null; }
+    const chosenWho = Boolean(frontImg && sideImg);
+    onAddPrescription({
+      productId: product?.id, productSku: product?.sku, productName: product?.name,
+      colorName: color?.name, colorIndex: ci,
+      forWhom: chosenWho ? forWhom : null,
+      otherName: chosenWho && forWhom === "other" ? (otherName || "").trim() : "",
+    });
+  }
+
+  // Salida a la receta / solo marco mientras no hay resultado. Sin callback (no
+  // debería pasar: los tres sitios que abren el probador lo pasan) no se pinta.
+  function skipActions() {
+    if (typeof onAddPrescription !== "function") return null;
+    return (
+      <div className="vm-skip">
+        <p className="vm-skip-hint">{t("vm.skip.hint")}</p>
+        <div className="vm-addrx-row">
+          <button type="button" className="vm-buyframe vm-skip-rx" onClick={skipToRx}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h4" /></svg>
+            {t("vm.skip.rx")}
+          </button>
+          {typeof onBuyFrameOnly === "function" && (
+            <button type="button" className="vm-buyframe" onClick={buyFrameOnly} title={t("vm.buyFrame")}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
+              {t("vm.buyFrame")}
+            </button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   // "Comprar solo el marco": lleva directo al RESUMEN del pedido (solo montura, sin
@@ -1504,7 +1544,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     return (
       <div className="vm-result vm-review-2col ts2-cap2col">
         <div className="vm-review-cols">
-          <div className="vm-review-c1">{captureStage()}</div>
+          <div className="vm-review-c1">{captureStage()}{skipActions()}</div>
           <div className="vm-review-c2">
             {factsStrip()}
             {colorsStrip()}
@@ -1681,7 +1721,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       /* ts2-cap2col: comparte las reglas móviles de "una sola vista" (ETAPAs 120/121). */
       <div className="vm-result vm-review-2col ts2-cap2col ts2-rvlayout">
         <div className="vm-review-cols">
-          <div className="vm-review-c1">{captureReview()}</div>
+          <div className="vm-review-c1">{captureReview()}{skipActions()}</div>
           <div className="vm-review-c2">
             {factsStrip()}
             {colorsStrip()}
@@ -1694,7 +1734,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
 
   // Ficha del espejuelo seleccionado (foto + medidas + pie con fecha/logo). Se usa
   // en captura/revisión (ancho completo, debajo) y en el RESULTADO (columna derecha,
-  // bajo las medidas calculadas). El pie (fecha/hora + logo RUBI LENS) va SIEMPRE.
+  // bajo las medidas calculadas). El pie (fecha/hora + logo de la óptica) va SIEMPRE.
   function frameAside() {
     return (
       <aside className="fs-card ts2-frame">
@@ -1778,7 +1818,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           </div>
         </div>
 
-        {/* Pie profesional: fecha, hora y logo RUBI LENS */}
+        {/* Pie profesional: fecha, hora y logo de la óptica */}
         <div className="fs-foot">
           <div className="fs-foot-meta">
             <span className="fs-foot-date">
@@ -1790,7 +1830,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               {timeStr}
             </span>
           </div>
-          <img src="/logo-oficial.png" alt="RUBI LENS" className="fs-foot-logo" />
+          <img src={TENANT.logo} alt={TENANT.name} className="fs-foot-logo" />
         </div>
       </aside>
     );

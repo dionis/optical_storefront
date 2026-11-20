@@ -4,7 +4,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { shareLinks } from "./adminSellers.js";
 
-export const SOURCE_ICON = { instagram: "instagram", facebook: "facebook", tiktok: "tiktok", whatsapp: "whatsapp", telegram: "message", x: "share", email: "mail", link: "link", other: "globe" };
+export const SOURCE_ICON = { instagram: "instagram", facebook: "facebook", tiktok: "tiktok", whatsapp: "whatsapp", telegram: "message", x: "share", email: "mail", link: "link", other: "globe", counter: "store" };
 
 /**
  * Un enlace por red social (`?ref=CODIGO&src=instagram`…): al compartirlo desde

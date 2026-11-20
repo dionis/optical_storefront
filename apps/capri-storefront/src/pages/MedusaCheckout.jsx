@@ -14,6 +14,8 @@ import { attachAddressAutocomplete, hasGooglePlaces } from "../data/addressAutoc
 import { resolveImage } from "../data/imageUrl.js";
 import { shipping as shippingConfig } from "../admin/priceStore.js";
 import { materialById, PHOTO, AR_OPTIONS, L as LBL } from "../data/lensPricing.js";
+import FieldError from "../components/FieldError.jsx";
+import { checkoutProblems, LIMITS, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
 
 const PK = (import.meta.env && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) || "";
 
@@ -44,13 +46,31 @@ export default function MedusaCheckout() {
   const navigate = useNavigate();
   const L = (k) => t(`checkout.${k}`);
   const money = (n) => "$" + Number(n || 0).toFixed(2);
+  // Error del servidor → texto en el idioma del cliente. El SDK de Medusa lanza el
+  // `message` crudo del backend ("An unknown error occurred.", "The store has no
+  // shipping option configured."…) y antes salía tal cual, en inglés, en la
+  // pantalla en español (QA 5-nov-2026: Stripe sin configurar → texto crudo).
+  // El SDK no conserva el `reason`, así que se reconoce por estado/mensaje y, si
+  // no es ninguno conocido, se muestra el aviso genérico del paso (`fallbackKey`).
+  // El detalle crudo queda en la consola para diagnosticar.
+  const describeError = (e, fallbackKey) => {
+    const msg = String((e && e.message) || e || "");
+    try { console.warn("[checkout]", e); } catch { /* noop */ }
+    if ((e && e.reason === "us_only") || /only ship to united states/i.test(msg)) return t("ship.usOnly");
+    if (/no shipping option/i.test(msg)) return L("shipUnavailable");
+    if (/already completed/i.test(msg)) return L("failed");
+    // Sin red (fetch falla antes de llegar al servidor): aviso de conexión.
+    if (e && e.name === "TypeError" && /fetch|network/i.test(msg)) return L("offline");
+    return L(fallbackKey);
+  };
   // Días hábiles de laboratorio (configurables por el dueño). No es tiempo de
   // transporte: es lo que tarda el pedido en estar listo para recoger o salir.
   const labDays = Number(shippingConfig().labDays) || 0;
-  // Tarifa FIJA de FedEx (pedido del dueño): $28 siempre, 4 días — lo que el
-  // cliente ve. El servidor cobra lo mismo (SHIPPING_FEDEX_RATE en Coolify).
-  const FEDEX_RATE = Number(shippingConfig().fedexRate) || 28;
-  const FEDEX_ETA = Number(shippingConfig().fedexEtaDays) || 4;
+  // Entrega a PRECIO FIJO (dueño, 13-nov-2026): $30 a todo EE. UU. El número
+  // es el que cotiza el SERVIDOR (lib/shipping-rates.ts); el de aquí solo se
+  // enseña mientras la cotización no ha llegado.
+  const FLAT_RATE = 30;
+  const FLAT_ETA = Number(shippingConfig().fedexEtaDays) || 4;
 
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -84,6 +104,10 @@ export default function MedusaCheckout() {
   // ruta (se usa el flujo clásico de opciones Medusa como respaldo).
   const [carriers, setCarriers] = useState(null);
   const [carrierSel, setCarrierSel] = useState("");
+  // Lo que el servidor cobra por la entrega (y en cuántos días): lo que se muestra.
+  const quoted = (carriers || []).find((c) => c.carrier === carrierSel) || null;
+  const FEDEX_RATE = quoted && Number.isFinite(Number(quoted.amount)) ? Number(quoted.amount) : FLAT_RATE;
+  const FEDEX_ETA = quoted && Number(quoted.eta_max_days) > 0 ? Number(quoted.eta_max_days) : FLAT_ETA;
   const [freeThreshold, setFreeThreshold] = useState(100);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -106,6 +130,7 @@ export default function MedusaCheckout() {
   const payMountRef = useRef(null); // instancia montada del Payment Element
   const paySecRef = useRef(null); // sección de pago (para traerla a la vista)
   const addrRef = useRef(null);
+  const zipRef = useRef(null);
 
   // Requirement 15: Google-Maps-style address autocomplete. When a Maps key is
   // configured we attach Places autocomplete to the street input and, on pick,
@@ -122,7 +147,7 @@ export default function MedusaCheckout() {
     const cleanup = attachAddressAutocomplete(addrRef.current, (parts) => {
       setF((p) => ({
         ...p,
-        address_1: parts.address_1 || p.address_1,
+        address_1: parts.area ? "" : parts.address_1 || p.address_1,
         postal_code: parts.postal_code || p.postal_code,
         city: parts.city || p.city,
         state: parts.state || p.state,
@@ -133,6 +158,20 @@ export default function MedusaCheckout() {
       }));
     });
     return cleanup;
+  }, [step, loading]);
+
+  // The ZIP fills city and state and leaves the street alone.
+  useEffect(() => {
+    if (step !== "contact" || loading || !zipRef.current) return;
+    return attachAddressAutocomplete(zipRef.current, (parts) => {
+      setF((p) => ({
+        ...p,
+        postal_code: parts.postal_code || p.postal_code,
+        city: parts.city || p.city,
+        state: parts.state || p.state,
+        country_code: parts.country_code || p.country_code || "us",
+      }));
+    }, { mode: "zip" });
   }, [step, loading]);
 
   useEffect(() => {
@@ -184,7 +223,29 @@ export default function MedusaCheckout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const set = (k, typed = (v) => v) => (e) => setF((p) => ({ ...p, [k]: typed(e.target.value) }));
+  const [touched, setTouched] = useState({});
+  const [showErrors, setShowErrors] = useState(false);
+  const problems = checkoutProblems(f, { smsRequested: notify.sms });
+  const hasProblems = Object.keys(problems).length > 0;
+  // Un error se enseña al salir del campo, o de golpe al intentar pagar.
+  // The fields are labelled by placeholder only (design decision: a compact
+  // form); `aria-label` gives screen readers and password managers the same
+  // text, since a placeholder disappears as soon as the person types. The
+  // e-mail placeholder is an example address, so its label is the real word.
+  const ARIA_LABEL = { email: "auth.email", first_name: "checkout.first", last_name: "checkout.last", phone: "checkout.phone", address_1: "checkout.address", city: "checkout.city", state: "checkout.state", postal_code: "checkout.zip" };
+  const fieldOf = (k) => {
+    const problem = showErrors || touched[k] ? problems[k] : null;
+    return { problem, props: { name: k, "aria-label": ARIA_LABEL[k] ? t(ARIA_LABEL[k]) : undefined, "aria-invalid": problem ? true : undefined, onBlur: () => setTouched((x) => ({ ...x, [k]: true })) } };
+  };
+  const tryPay = () => {
+    if (hasProblems) {
+      setShowErrors(true);
+      requestAnimationFrame(() => document.querySelector('.co-form [aria-invalid="true"]')?.focus());
+      return;
+    }
+    goToPay();
+  };
   const shippingAddress = () => ({
     first_name: f.first_name, last_name: f.last_name, address_1: f.address_1,
     city: f.city, province: f.state, postal_code: f.postal_code,
@@ -221,8 +282,8 @@ export default function MedusaCheckout() {
   const quoteSigRef = useRef("");
   useEffect(() => {
     if (step !== "contact" || loading || !cart) return undefined;
-    const emailOk = /\S+@\S+\.\S+/.test(f.email);
-    const ready = emailOk && f.address_1.trim().length >= 5 && f.city.trim().length >= 2 && f.state.trim().length >= 2 && f.postal_code.trim().length >= 5;
+    const { email, address_1, city, state, postal_code } = problems;
+    const ready = !email && !address_1 && !city && !state && !postal_code;
     const sig = [f.email, f.address_1, f.city, f.state, f.postal_code].join("|");
     if (!ready) { quoteSigRef.current = ""; setShip([]); setCarriers(null); setCarrierSel(""); return undefined; }
     if (sig === quoteSigRef.current) return undefined;
@@ -259,8 +320,7 @@ export default function MedusaCheckout() {
         if (opts[0]) setShipId(opts[0].id);
       }
     } catch (e) {
-      if (e && e.reason === "us_only") setErr(t("ship.usOnly"));
-      else setErr(e.message || String(e));
+      setErr(describeError(e, "shipUnavailable"));
     }
     setBusy(false);
   };
@@ -275,7 +335,7 @@ export default function MedusaCheckout() {
       const c = await removeItem(lineId);
       if (c) setCart(c);
       setShip([]); setShipId(""); setCarriers(null); setCarrierSel("");
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(describeError(e, "failed")); }
     setBusy(false);
   };
 
@@ -296,9 +356,11 @@ export default function MedusaCheckout() {
         try { clearCart(); } catch {}
         setStep("done");
       } else {
-        setErr(r.error?.message || L("failed"));
+        // Detalle crudo a la consola; al cliente, el aviso traducido.
+        try { console.warn("[checkout] complete (manual)", r.error); } catch { /* noop */ }
+        setErr(L("failed"));
       }
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(describeError(e, "payStartFailed")); }
     setBusy(false);
   };
 
@@ -341,7 +403,7 @@ export default function MedusaCheckout() {
       });
       elementsRef.current = elements;
       setStep("pay"); // el Payment Element se monta en el useEffect de abajo
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(describeError(e, "payStartFailed")); }
     setBusy(false);
   };
 
@@ -461,7 +523,7 @@ export default function MedusaCheckout() {
       } else {
         setErr(L("failed"));
       }
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(describeError(e, "failed")); }
     setBusy(false);
   };
 
@@ -581,7 +643,7 @@ export default function MedusaCheckout() {
               {cart.item_total != null && <div><span>{L("subtotal")}</span><b>{money(cart.item_total)}</b></div>}
               {(() => {
                 // Tarifa FIJA: en cuanto hay método de envío (cotizado solo al
-                // completar la dirección), la línea dice FedEx · $28 — siempre.
+                // completar la dirección), la línea dice FedEx · $30 — el precio fijo.
                 const ready = (carriers && carrierSel) || shipId || cart.shipping_total > 0;
                 return (
                   <div>
@@ -600,7 +662,7 @@ export default function MedusaCheckout() {
             </div>
             {(() => {
               // Total con la tarifa fija: lo que Medusa aún no haya sumado del
-              // envío se completa hasta los $28 fijos para que el cliente vea
+              // envío se completa hasta el precio fijo para que el cliente vea
               // el número final real desde el principio.
               const ready = (carriers && carrierSel) || shipId || cart.shipping_total > 0;
               const pend = ready ? Math.max(0, FEDEX_RATE - Number(cart.shipping_total || 0)) : 0;
@@ -614,17 +676,17 @@ export default function MedusaCheckout() {
             <div className="co-form">
               <div className="co-h">👤 {L("contact")}</div>
               <div className="co-fields">
-                <input type="email" placeholder={L("email")} value={f.email} onChange={set("email")} autoComplete="email" />
+                <div className="co-f"><input type="email" maxLength={LIMITS.email} placeholder={L("email")} value={f.email} onChange={set("email", typedEmail)} autoComplete="email" {...fieldOf("email").props} /><FieldError error={fieldOf("email").problem} /></div>
                 <div className="co-two">
-                  <input placeholder={L("first")} value={f.first_name} onChange={set("first_name")} />
-                  <input placeholder={L("last")} value={f.last_name} onChange={set("last_name")} />
+                  <div className="co-f"><input maxLength={LIMITS.name} placeholder={L("first")} value={f.first_name} onChange={set("first_name")} {...fieldOf("first_name").props} /><FieldError error={fieldOf("first_name").problem} /></div>
+                  <div className="co-f"><input maxLength={LIMITS.name} placeholder={L("last")} value={f.last_name} onChange={set("last_name")} {...fieldOf("last_name").props} /><FieldError error={fieldOf("last_name").problem} /></div>
                 </div>
                 {/* Celular del paciente: se toma de forma orgánica junto al resto
                     del contacto; sirve para SMS de confirmación y contacto. Va en
                     pareja con el país (fijo EE. UU.) para ahorrar una fila y que
                     todo el paso quepa en una vista en el móvil. */}
                 <div className="co-two">
-                  <input type="tel" placeholder={L("phone")} value={f.phone} onChange={set("phone")} autoComplete="tel" />
+                  <div className="co-f"><input type="tel" maxLength={LIMITS.phone} placeholder={L("phone")} value={f.phone} onChange={set("phone", typedPhone)} autoComplete="tel" {...fieldOf("phone").props} /><FieldError error={fieldOf("phone").problem} /></div>
                   <input value={t("ship.usOnlyVal")} disabled aria-label={L("country")} title={t("ship.usOnlyNote")} />
                 </div>
               </div>
@@ -638,13 +700,14 @@ export default function MedusaCheckout() {
               </div>
               <div className="co-fields">
                 <div className="co-addr-wrap">
-                  <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
+                  <input ref={addrRef} maxLength={LIMITS.street} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" {...fieldOf("address_1").props} />
+                  <FieldError error={fieldOf("address_1").problem} />
                 </div>
                 <small className="co-hint">📍 {L("addrHint")}</small>
                 <div className="co-three">
-                  <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
-                  <input placeholder={L("state")} value={f.state} onChange={set("state")} autoComplete="address-level1" />
-                  <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" />
+                  <div className="co-f"><input maxLength={LIMITS.city} placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" {...fieldOf("city").props} /><FieldError error={fieldOf("city").problem} /></div>
+                  <div className="co-f"><input maxLength={LIMITS.state} placeholder={L("state")} value={f.state} onChange={set("state")} autoComplete="address-level1" {...fieldOf("state").props} /><FieldError error={fieldOf("state").problem} /></div>
+                  <div className="co-f"><span className="addr-host"><input ref={zipRef} inputMode="numeric" maxLength={LIMITS.zip} placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code", typedZip)} autoComplete="postal-code" {...fieldOf("postal_code").props} /></span><FieldError error={fieldOf("postal_code").problem} /></div>
                 </div>
                 {/* Solo USA por ahora (el campo fijo vive junto al celular); el
                     backend lo verifica igualmente (422 us_only). */}
@@ -688,7 +751,7 @@ export default function MedusaCheckout() {
                   </div>
                 );
               })()}
-              <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
+              <button className="btn btn-primary big" disabled={busy || (!hasProblems && (carriers ? !carrierSel : !shipId))} onClick={tryPay}>
                 {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : (PK ? L("pay") : L("payNow"))}
               </button>
             </div>

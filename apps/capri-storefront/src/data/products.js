@@ -4,6 +4,7 @@
 import { EXTRA } from "./frames-extra.js";
 import { applyFrame } from "../admin/priceStore.js";
 import { FRAME_MARKUP } from "../config/features.js";
+import { capriPrice } from "./capriPrices.js";
 const RAW = [
   {"sku":"DC406","name":"DC406","brand":"Di Caprio","brand_slug":"di-caprio","colors":[{"name":"Black","image":"https://caprioptics.com/wp-content/uploads/DC406%20Black.jpg"},{"name":"Grey","image":"https://caprioptics.com/wp-content/uploads/DC406%20Grey.jpg"},{"name":"Tortoise","image":"https://caprioptics.com/wp-content/uploads/DC406%20TORTOISE.jpg"}],"attributes":{"eye_size":"54-56 mm","bridge_size":"18-19 mm","temple_length":"145-150 mm","material":["Acetato","Plástica"],"gender":"Hombres","age":"Adulto","shape":"Cuadrado"}},
   {"sku":"DC407","name":"DC407","brand":"Di Caprio","brand_slug":"di-caprio","colors":[{"name":"Black","image":"https://caprioptics.com/wp-content/uploads/DC407%20Black.jpg"},{"name":"Light Blue","image":"https://caprioptics.com/wp-content/uploads/DC407%20Light%20Blue.jpg"},{"name":"Light Pink","image":"https://caprioptics.com/wp-content/uploads/DC407%20Light%20Pink.jpg"}],"attributes":{"eye_size":"51-53 mm","bridge_size":"16-17 mm","temple_length":"135-140 mm","material":["Acetato","Plástica"],"gender":"Señoras","age":"Adulto","shape":"Ojo de gato"}},
@@ -81,8 +82,27 @@ function hash(str) {
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffffffff;
   return Math.abs(h);
 }
-// Precio base del proveedor (costo antes del markup).
-function supplierPriceFor(sku) {
+// Precio base del proveedor (costo antes del markup) para el CATÁLOGO SEMILLA
+// de la tienda: este módulo se evalúa al cargar el bundle, sin sesión de admin
+// y sin poder esperar al servidor, así que no puede leer el costo real.
+//
+// AVISO, por si se vuelve a confundir: `supplierPrice` de aquí NO es el costo de
+// la contabilidad. El costo bueno vive en el servidor
+// (GET /admin/pricing/frames/costs) y es lo único que lee el panel desde el
+// 1-nov-2026 (admin/pricing/api.js → `loadFrameCosts`/`costOf`). Lo de aquí solo
+// sirve para que la tienda tenga un precio de venta coherente antes de que
+// Medusa conteste; si una pantalla de /admin vuelve a leerlo, la contabilidad se
+// queda a merced de lo que cada navegador tenga al día.
+//
+// Usa el listado REAL de Capri Optics (capriPrices.js); si el SKU no está en la
+// tabla, cae al hash determinístico anterior como último respaldo.
+// Exported for the owner's pricing panel only (the "supplier × 3 = base" note
+// in AdminDashboard.jsx); the public product objects no longer carry the
+// supplier cost (see enrichProducts and docs/SEGURIDAD-PRECIOS.md).
+export function supplierPriceFor(sku) {
+  const real = capriPrice(sku);
+  if (real != null) return real;
+  // Respaldo para SKUs no listados en la hoja de Capri
   const base = 15.95 + (hash(sku) % 30);
   return Math.round(base * 100) / 100;
 }
@@ -116,8 +136,11 @@ export function enrichProducts(list) {
       slug: String(p.sku).toLowerCase().replace(/[^a-z0-9]+/g, ""),
       price: applyFrame(p.sku, priceFor(p.sku)),
       basePrice: priceFor(p.sku),
-      supplierPrice: supplierPriceFor(p.sku),
-      markup: FRAME_MARKUP,
+      // No `supplierPrice`/`markup` here: these objects feed the public catalog
+      // (and `window`-level state any visitor can read). The owner's pricing
+      // panel asks supplierPriceFor() itself. The retail rule (cost × markup)
+      // is still a storefront convention until prices come only from Medusa
+      // (VITE_USE_MEDUSA); see docs/SEGURIDAD-PRECIOS.md.
       rating: ratingFor(p.sku),
       reviews: reviewsFor(p.sku),
       colors: p.colors.map((c) => ({ ...c, hex: c.hex || hexFor(c.name) })),

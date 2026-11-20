@@ -4,6 +4,7 @@ import { brandByName } from "../data/brands.js";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import Header from "../components/Header.jsx";
+import { TENANT } from "../config/tenant.js";
 import Footer from "../components/Footer.jsx";
 import { useCatalog, matchProduct } from "../data/catalogStore.js";
 import { loadCache, saveCache } from "../lib/appCache.js";
@@ -444,7 +445,7 @@ export default function LensProcess() {
   const { t, tv, lang } = useLang();
   useFrameMediaVersion();
   const { toast } = useFeedback();
-  const { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT } = useLensCatalog();
+  const { DESIGNS, MATERIALS, BASE, BASE_MATERIALS, PHOTO, AR, TREAT } = useLensCatalog();
   const NON_PROG_DESIGNS = DESIGNS.filter((d) => d.cat !== "prog");
   const PROG_GAMAS = DESIGNS.filter((d) => d.cat === "prog");
   const { productBySlug, products, loading } = useCatalog();
@@ -742,9 +743,18 @@ export default function LensProcess() {
     if (product?.attributes?.age === "Niños") return MATERIALS.find((m) => m.id === "poly");
     return MATERIALS.find((m) => maxAbs <= m.maxAbs) || MATERIALS[MATERIALS.length - 1];
   }, [maxAbs, product?.attributes?.age, MATERIALS]);
-  // Mostramos TODOS los materiales para que el cliente pueda elegir cualquiera;
-  // el recomendado según su graduación se resalta con ★ (y el banner de arriba).
-  const suitableMats = useMemo(() => MATERIALS, [MATERIALS]);
+  // Solo los materiales con precio ACTIVO para el diseño elegido: así el panel
+  // admin manda — una casilla (diseño × material) apagada en opticaelrancho.com/admin
+  // deja de aparecer aquí, en lugar de ofrecerse a "$0". Si todavía no hay
+  // diseño elegido, se muestran los materiales que tengan al menos una casilla
+  // activa en cualquier diseño (la lista ya viene filtrada así desde el matrix).
+  // El recomendado según su graduación se resalta con ★ (y el banner de arriba).
+  const suitableMats = useMemo(() => {
+    if (!designId || !BASE_MATERIALS) return MATERIALS;
+    const allowed = new Set(BASE_MATERIALS[designId] || []);
+    if (allowed.size === 0) return MATERIALS;
+    return MATERIALS.filter((m) => allowed.has(m.id));
+  }, [MATERIALS, BASE_MATERIALS, designId]);
   // Si la graduación sube y el material elegido deja de ser apto, se deselecciona
   // (evita quedar con un material que ya no aparece en la lista).
   useEffect(() => {
@@ -1003,8 +1013,11 @@ export default function LensProcess() {
   const showRail = hasViews || !!videoSrc;
   const showingVideo = view === "video" && !!videoSrc;
 
-  const frameMats = product.attributes?.material || [];
+  const frameMats = (product.attributes?.material || []).flat().filter((m) => typeof m === "string" && m);
   const frameEduName = frameMats.find((m) => frameMatEdu(m, lang));
+  // Nombres de material en el idioma elegido (el catálogo los guarda en español
+  // canónico; en inglés salía «Acero inoxidable» junto a «Frame material»).
+  const frameMatsText = frameMats.map(tv).join(" · ");
   const frameEdu = frameEduName ? frameMatEdu(frameEduName, lang) : null;
 
   // ¿Hay receta que mostrar? Mirar SOLO la esfera dejaba invisible una receta
@@ -1166,10 +1179,14 @@ export default function LensProcess() {
   const fsLocale = lang === "en" ? "en-US" : "es-ES";
   const fsDate = fsNow.toLocaleDateString(fsLocale, { day: "2-digit", month: "short", year: "numeric" });
   const fsTime = fsNow.toLocaleTimeString(fsLocale, { hour: "2-digit", minute: "2-digit" });
+  // Intervalo del catálogo ("51-53") o, si el catálogo de Medusa solo trae el
+  // valor exacto en mm (como ya usa la línea «Medidas» de la izquierda), ese
+  // valor; antes la tarjeta mostraba «—» en las tres celdas con datos de Medusa.
+  const fsMm = (bucket, exact) => (bucket != null && bucket !== "" ? bucket : (typeof exact === "number" && exact > 0 ? `${exact} mm` : bucket));
   const fsCells = [
-    { k: t("fs.lensWidth"), v: fsA.eye_size, Icon: IconLensWidth },
-    { k: t("fs.bridge"), v: fsA.bridge_size, Icon: IconBridge },
-    { k: t("fs.temple"), v: fsA.temple_length, Icon: IconTemple },
+    { k: t("fs.lensWidth"), v: fsMm(fsA.eye_size, fsA.eye), Icon: IconLensWidth },
+    { k: t("fs.bridge"), v: fsMm(fsA.bridge_size, fsA.bridge), Icon: IconBridge },
+    { k: t("fs.temple"), v: fsMm(fsA.temple_length, fsA.temple), Icon: IconTemple },
   ];
   const frameSide = (
     <aside className="fs-card ts2-frame zlx-frameside">
@@ -1236,7 +1253,7 @@ export default function LensProcess() {
             {fsTime}
           </span>
         </div>
-        <img src="/logo-oficial.png" alt="RUBI LENS" className="fs-foot-logo" />
+        <img src={TENANT.logo} alt={TENANT.name} className="fs-foot-logo" />
       </div>
     </aside>
   );
@@ -1405,7 +1422,7 @@ export default function LensProcess() {
                       onClick={() => setPop(pop === "frame" ? null : "frame")}
                       aria-label={t("lens.frameInfo")}>
                 <span className="zlx-k">{t("lens.frameMaterial")}:</span>{" "}
-                {frameMats.length ? frameMats.join(" · ") : "—"}
+                {frameMats.length ? frameMatsText : "—"}
                 <Ic name="info" className="zlx-help-dot" />
               </button>
             </div>
@@ -1416,7 +1433,7 @@ export default function LensProcess() {
               {frameMats.length > 0 && (
                 <div className="zlx-spec">
                   <span className="zlx-spec-ic" aria-hidden="true"><SpecMaterial /></span>
-                  <span className="zlx-spec-tx"><small>{t("pdp.spec.material")}</small><b>{frameMats.join(" · ")}</b></span>
+                  <span className="zlx-spec-tx"><small>{t("pdp.spec.material")}</small><b>{frameMatsText}</b></span>
                 </div>
               )}
               {(() => {
@@ -1927,7 +1944,7 @@ export default function LensProcess() {
           <div className="zlx-frameinfo-grid open">
             <div><span className="zlx-k">{t("lens.model")}</span><span className="zlx-v">{product.sku}</span></div>
             <div><span className="zlx-k">{t("lens.collection")}</span><span className="zlx-v">{product.brand}</span></div>
-            <div><span className="zlx-k">{t("lens.frameMaterial")}</span><span className="zlx-v">{frameMats.length ? frameMats.join(" · ") : "—"}</span></div>
+            <div><span className="zlx-k">{t("lens.frameMaterial")}</span><span className="zlx-v">{frameMats.length ? frameMatsText : "—"}</span></div>
           </div>
           {frameEdu && (
             <div className="zlx-edu">

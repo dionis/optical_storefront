@@ -10,7 +10,9 @@ import { adminFetch } from "./adminApi.js";
 import { fetchTeam } from "./adminTeam.js";
 import { posContext } from "./posApi.js";
 
-const EVENTS = ["sale.created", "discount.applied", "discount.requested", "sale.below_min", "sale.voided", "cash.diff", "store.idle", "digest"];
+const EVENTS = ["sale.created", "discount.applied", "discount.requested", "sale.below_min", "sale.voided", "sale.void_requested", "cash.diff", "store.idle", "digest"];
+// Events that expect an answer: the server keeps them immediate whatever the author picks.
+const IMMEDIATE_ONLY = ["discount.requested", "sale.void_requested"];
 const MODES = ["immediate", "every_n_hours", "daily", "weekly"];
 const EMPTY = { name: "", event: "sale.created", recipients: "", establishment_ids: [], conditions: {}, mode: "immediate", schedule: {}, locale: "es", is_active: true };
 const errKey = (e) => (e?.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic");
@@ -61,7 +63,7 @@ function RuleForm({ initial, stores, canSchedule, suggestions, onSave, onCancel 
           <label><input type="checkbox" checked={Boolean(f.conditions.include_web)} onChange={(e) => cond("include_web", e.target.checked)} /> {t("adm.alerts.includeWeb")}</label>
         )}
       </fieldset>
-      {canSchedule && f.event !== "discount.requested" && (
+      {canSchedule && !IMMEDIATE_ONLY.includes(f.event) && (
         <div className="pos-form">
           <label>{t("adm.alerts.mode")}
             <select value={f.mode} onChange={(e) => set("mode", e.target.value)}>
@@ -89,7 +91,7 @@ function RuleForm({ initial, stores, canSchedule, suggestions, onSave, onCancel 
   );
 }
 
-export default function AlertRules() {
+export default function AlertRules({ me = null }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
   const [rules, setRules] = useState([]);
@@ -110,9 +112,12 @@ export default function AlertRules() {
     load();
     posContext().then((c) => setStores(c.stores || [])).catch(() => {});
     // Sugerencias: el email de avisos de cada persona del equipo (o su login); se guarda la dirección, no la persona.
-    fetchTeam()
+    // Solo para quien administra: /admin/team responde 403 a un supervisor (y la pantalla no debe pedir lo que no puede leer).
+    if (me && me.is_admin === false) setSuggestions([]);
+    else fetchTeam()
       .then((r) => setSuggestions((r.team || []).map((m) => ({ email: m.email, label: m.seller_code || [m.first_name, m.last_name].filter(Boolean).join(" ") || m.email }))))
       .catch(() => setSuggestions([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const save = async (rule) => {

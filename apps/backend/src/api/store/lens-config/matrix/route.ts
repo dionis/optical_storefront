@@ -1,6 +1,10 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
+import { loadLensMatrix, loadLensMatrixForStore } from "../../../../lib/lens-matrix";
+import { onlineStore } from "../../../../lib/online-store";
+import { applyLensMatrixDiscounts, indexItemDiscounts } from "../../../../lib/price-matrix";
+import { loadItemDiscountsPg } from "../../../../lib/price-matrix-data";
 
 /**
  * GET /store/lens-config/matrix
@@ -8,27 +12,21 @@ import type { Knex } from "@mikro-orm/knex";
  * + AR options) that drives the storefront lens wizard. Read-only; the total is
  * always recomputed server-side via /store/lens-config/quote.
  *
- * Reads via the shared Postgres connection (Knex) rather than the module service,
- * which keeps this independent of the lens-config module's ORM manager lifecycle.
+ * The ONLINE STORE's list when the owner has one (lib/online-store.ts): its own
+ * cells, its % over the master and its promotions, exactly as its till reads
+ * them from GET /admin/pos/lens-matrix?store=…. Without one, the master list.
+ * Both are built by lib/lens-matrix.ts, which never lets `cost_cents` through.
  */
 export async function GET(
   req: MedusaRequest,
   res: MedusaResponse
 ): Promise<void> {
   const pg = req.scope.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
-
-  // lens_treatment_price puede no existir todavía (antes de su migración); si la
-  // consulta falla, devolvemos [] para que el storefront use su tabla de respaldo.
-  const treatmentPrices = pg("lens_treatment_price").whereNull("deleted_at").catch(() => []);
-
-  const [designs, materials, base_prices, photos, ars, treatment_prices] = await Promise.all([
-    pg("lens_design").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
-    pg("lens_material").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
-    pg("lens_base_price").whereNull("deleted_at"),
-    pg("lens_photo_option").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
-    pg("lens_ar_option").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
-    treatmentPrices,
-  ]);
-
-  res.json({ designs, materials, base_prices, photos, ars, treatment_prices });
+  const store = await onlineStore(req.scope);
+  if (!store) {
+    res.json(await loadLensMatrix(pg));
+    return;
+  }
+  const [base, discounts] = await Promise.all([loadLensMatrixForStore(pg, store.id), loadItemDiscountsPg(pg, store.id)]);
+  res.json(applyLensMatrixDiscounts(base, indexItemDiscounts(discounts), store.id));
 }

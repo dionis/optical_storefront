@@ -6,8 +6,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
-import { useLensCatalog } from "../data/lensCatalog.js";
+import { defaultFinishFor, useAdminLensCatalog } from "../data/lensCatalog.js";
 import { FRAME_ONLY, PHOTO_COLORS, arGroupFor } from "../data/lensPricing.js";
+import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { money } from "./adminOrders.js";
 import {
@@ -22,63 +23,143 @@ import {
   quote as fetchQuote,
   requestApproval,
   searchCustomers,
-  searchProducts,
+  setWearingPhoto,
+  fetchSale,
 } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
+import PosFrameSearch from "./PosFrameSearch.jsx";
+import PosFramePhoto from "./PosFramePhoto.jsx";
+import { WearingCaptureCard } from "./WearingPhoto.jsx";
+import "./pos-frame-modes.css";
+import PosCapture from "./PosCapture.jsx";
+import PosFrameCard, { frameLineFields } from "./PosFrameCard.jsx";
+import { setActiveStore } from "./useStoreTheme.js";
+import AdminFrameCard from "./AdminFrameCard.jsx";
+import { useCatalog } from "../data/catalogStore.js";
+import FieldError from "../components/FieldError.jsx";
+import PosSaleSummary, { PosRunningTotal } from "./PosSaleSummary.jsx";
+import { birthMax, customerProblems, emailProblem, LIMITS, paymentProblem, phoneProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
+import { useSalePanel } from "./SaleDetailPanel.jsx";
+import MissingData from "./MissingData.jsx";
+import VisualAcuityCard from "./VisualAcuityCard.jsx";
+import { clinicalBody, clinicalProblem, EMPTY_CLINICAL } from "./visualAcuity.js";
+import SaleDateCard, { EMPTY_SOLD_ON, soldOnBody, soldOnDeliveredProblem, soldOnProblem, todayIn } from "./SaleDateCard.jsx";
+import "./pos.css";
+import "./pos-tablet.css";
+import RxForm from "./PosRx.jsx";
+import HelpTip from "./HelpTip.jsx";
+import { EMPTY_RX, fromRx, hasRxErrors, inferType, toRx, validateRx } from "./rxRules.js";
+import { promoOf } from "./pricing/promo.js";
+import "./pricing/promo.css";
+import { hoursStatus } from "./storeHours.js";
+import { promoEffect } from "./adminPromotions.js";
+import "./promotions.css";
 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
-const EYE_FIELDS = ["sph", "cyl", "axis", "add", "prism"];
-const EMPTY_EYE = { sph: "", cyl: "", axis: "", add: "", prism: "", base: "" };
-const EMPTY_RX = { od: { ...EMPTY_EYE }, os: { ...EMPTY_EYE }, pd: "", seg_height: "", rx_date: "" };
+// Tema de ayuda (HelpTip) de cada paso; la receta tiene los suyos en la cuadrícula.
+const STEP_HELP = { customer: "pos.step.customer", frame: "pos.step.frame", rx: "pos.rx.howToRead", lenses: "pos.step.lenses", price: "pos.step.price", payment: "pos.step.payment" };
+/**
+ * Edad cumplida a partir de la fecha de nacimiento ("YYYY-MM-DD"), o null si
+ * falta, no se entiende o es futura. Se pinta al lado del campo porque quien
+ * atiende razona en años, no en fechas: la edad decide si una graduación es
+ * verosímil (presbicia a partir de los 40) y si la montura es de niño.
+ */
+export function ageFrom(birth, today = new Date()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(birth || ""))) return null;
+  const d = new Date(`${birth}T00:00:00`);
+  if (Number.isNaN(d.getTime()) || d > today) return null;
+  let age = today.getFullYear() - d.getFullYear();
+  const beforeBirthday = today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate());
+  if (beforeBirthday) age -= 1;
+  return age >= 0 && age < 130 ? age : null;
+}
+
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
+const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
+const EMPTY_OWN = { brand: "", model: "", color: "", eye_size: "", bridge: "", temple: "", description: "", photo: null, price: "" };
+/**
+ * De dónde sale la montura (decisión del dueño, 9-nov-2026):
+ *  - `catalog`: del catálogo (se busca) → se cobra al precio de la lista;
+ *  - `store`:   de la tienda pero fuera del catálogo → se describe y se cobra al precio que se escribe;
+ *  - `own`:     la trae el paciente → se describe y NO se cobra.
+ */
+const FRAME_MODES = [
+  { key: "catalog", icon: "barcode" },
+  { key: "store", icon: "store" },
+  { key: "own", icon: "user" },
+];
+/** Mismos límites de precio que el servidor (STORE_FRAME_PRICE en lib/pos.ts). */
+const STORE_PRICE_MAX = 5000;
+const storePriceBad = (v) => { const s = String(v ?? "").trim(); if (!s) return false; const n = Number(s.replace(/[$,\s]/g, "")); return !Number.isFinite(n) || n <= 0 || n > STORE_PRICE_MAX; };
+/** Medidas impresas en la varilla (mm): ancho del lente – puente – largo de la varilla. Mismos límites que el servidor (OWN_FRAME_RANGES). */
+const OWN_SIZE = { eye_size: [30, 75, "52"], bridge: [10, 30, "18"], temple: [100, 165, "140"] };
+const ownSizeBad = (k, v) => { if (String(v ?? "").trim() === "") return false; const n = Number(String(v).replace(",", ".")); return !Number.isFinite(n) || n < OWN_SIZE[k][0] || n > OWN_SIZE[k][1]; };
+/** «Ray-Ban RB5154 · Negro · 51-21-145 — nota», como lo resume el servidor (ownFrameSummary). */
+const ownTitle = (o) => {
+  const size = String(o.eye_size || "").trim() ? [o.eye_size, o.bridge, o.temple].map((v) => String(v || "").trim()).filter(Boolean).join("-") : "";
+  const auto = [[o.brand, o.model].map((v) => v.trim()).filter(Boolean).join(" "), o.color.trim(), size].filter(Boolean).join(" · ");
+  const note = o.description.trim();
+  return auto && note ? `${auto} — ${note}` : auto || note;
+};
+/**
+ * Teclado en pantalla (tablet): mide cuánto tapa el teclado con visualViewport
+ * y lo publica como `--pos-kb` en la raíz del POS, más la clase `kb-open`. La
+ * barra Atrás/Siguiente, pegada abajo, sube por encima del teclado (iOS Safari
+ * y Android Chrome no encogen el viewport de diseño al abrirlo) y la cabecera
+ * pegajosa se compacta para dejar sitio a la cuadrícula de la receta.
+ */
+function useKeyboardInset(ref) {
+  useEffect(() => {
+    const el = ref.current;
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!el || !vv) return undefined;
+    let raf = 0;
+    const apply = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+        el.style.setProperty("--pos-kb", `${kb}px`);
+        el.classList.toggle("kb-open", kb > 120);
+      });
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => { cancelAnimationFrame(raf); vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply); };
+  }, [ref]);
+}
+const EMPTY_PAYMENT = { method_code: "", amount: null, details: {} };
+const toCents = (v) => Math.round((Number(v) || 0) * 100);
+const centsText = (c) => (c > 0 ? (c / 100).toFixed(2) : "");
+
+/**
+ * `amount: null` = nadie lo ha tocado: la primera fila así propone lo que falta
+ * por cobrar del total del servidor. Lo que se escribe a mano se respeta.
+ */
+function withSuggestedAmounts(payments, total) {
+  let rest = toCents(total) - payments.reduce((sum, p) => sum + (p.amount === null ? 0 : toCents(p.amount)), 0);
+  return payments.map((p) => {
+    if (p.amount !== null) return { ...p, suggested: false };
+    const amount = centsText(rest);
+    rest = 0;
+    return { ...p, amount, suggested: true };
+  });
+}
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* noop */ } };
 const num = (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+/** Solo los dígitos de un teléfono; los últimos 10 identifican el número con o sin «+1» (misma regla que el servidor). */
+const phoneKey = (v) => String(v ?? "").replace(/\D/g, "").slice(-10);
+const emailKey = (v) => String(v ?? "").trim().toLowerCase();
+/** Un teléfono se busca cuando ya tiene forma de número completo: 10 dígitos o más y pasa la validación del campo. */
+const phoneComplete = (v) => phoneProblem(v) === null && String(v ?? "").replace(/\D/g, "").length >= 10;
+/** La cotización se vuelve a pedir desde el paso Montura; la receta se manda desde Lentes, cuando ya está cerrada. */
+const QUOTE_FROM = STEPS.indexOf("frame");
+const RX_FROM = STEPS.indexOf("lenses");
 
-/** Receta del formulario → forma que espera el servidor (números o null). */
-function toRx(form, source = "manual") {
-  const eye = (e) => ({ sph: num(e.sph), cyl: num(e.cyl), axis: num(e.axis), add: num(e.add), prism: num(e.prism), base: e.base || null });
-  return { od: eye(form.od), os: eye(form.os), pd: num(form.pd), seg_height: num(form.seg_height), source, verified_by_user: true, file_url: form.file_url || null };
-}
-const fromRx = (rx) => {
-  const eye = (e) => Object.fromEntries(EYE_FIELDS.map((k) => [k, e?.[k] == null ? "" : String(e[k])]).concat([["base", e?.base || ""]]));
-  return { od: eye(rx?.od), os: eye(rx?.os), pd: rx?.pd == null ? "" : String(rx.pd), seg_height: rx?.seg_height == null ? "" : String(rx.seg_height), rx_date: "", file_url: rx?.file_url || "" };
-};
 const rxFilled = (f) => num(f.od.sph) !== null && num(f.os.sph) !== null;
 const maxPower = (f) => Math.max(...["od", "os"].flatMap((e) => [Math.abs(num(f[e].sph) || 0), Math.abs(num(f[e].cyl) || 0)]));
-const hasAdd = (f) => (num(f.od.add) || 0) > 0 || (num(f.os.add) || 0) > 0;
-
-/** Tabla OD/OI de una receta: la del cristal nuevo o la que el paciente usa. */
-function RxGrid({ value, onChange, disabled, idp, measures = true }) {
-  const { t } = useLang();
-  const set = (eye, k) => (e) => onChange({ ...value, [eye]: { ...value[eye], [k]: e.target.value } });
-  return (
-    <div className="pos-rx">
-      <table className="pos-rx-grid">
-        <thead>
-          <tr><th />{EYE_FIELDS.map((k) => <th key={k}>{t(`adm.pos.rx.${k}`)}</th>)}</tr>
-        </thead>
-        <tbody>
-          {["od", "os"].map((eye) => (
-            <tr key={eye}>
-              <th scope="row">{t(`adm.pos.rx.${eye}`)}</th>
-              {EYE_FIELDS.map((k) => (
-                <td key={k}>
-                  <input inputMode="decimal" disabled={disabled} value={value[eye][k]} onChange={set(eye, k)}
-                    aria-label={`${t(`adm.pos.rx.${eye}`)} ${t(`adm.pos.rx.${k}`)}`} id={`${idp}-${eye}-${k}`} />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {measures && <div className="pos-row">
-        <label>{t("adm.pos.rx.pd")}<input inputMode="decimal" disabled={disabled} value={value.pd} onChange={(e) => onChange({ ...value, pd: e.target.value })} /></label>
-        <label>{t("adm.pos.rx.seg")}<input inputMode="decimal" disabled={disabled} value={value.seg_height} onChange={(e) => onChange({ ...value, seg_height: e.target.value })} /></label>
-      </div>}
-    </div>
-  );
-}
+const isMulti = (f) => (f.type || inferType(f)) === "multifocal";
 
 /** Cambio por ojo (solo pantalla: nunca va en recibos, correos ni la hoja). */
 function OpticalChange({ change }) {
@@ -109,10 +190,65 @@ function OpticalChange({ change }) {
   );
 }
 
+/** Acabado con el que arranca una línea: stock salvo en progresivos, que son siempre digitales (lib/lens-finish.ts en el servidor). */
+const finishFor = (catalog, designId) => (designId === "frame-only" ? null : defaultFinishFor(catalog.DESIGNS.find((d) => d.id === designId)?.cat));
+
+/**
+ * Combinaciones de un toque para la montura que trae el cliente (línea
+ * `own_frame`): se derivan del catálogo cargado y solo se ofrecen las que
+ * encajan con el tipo de receta (misma regla que el selector: monofocal →
+ * visión sencilla; multifocal → bifocal o progresivo) y tienen precio en su
+ * acabado por defecto. Rellenan `selection`; el selector de abajo sigue
+ * editable. No calculan importes: el total lo da el servidor.
+ */
+export function lensPresets(catalog, rxForm) {
+  const { DESIGNS, MATERIALS, PHOTO, AR, FINISHES } = catalog;
+  const multi = isMulti(rxForm);
+  const power = maxPower(rxForm);
+  const recommended = MATERIALS.find((m) => power <= m.maxAbs) || MATERIALS[MATERIALS.length - 1];
+  const firstOf = (cat) => DESIGNS.find((d) => d.cat === cat) || null;
+  const priced = (design, material) => Boolean(design && material && FINISHES?.[design.id]?.[material.id]?.[defaultFinishFor(design.cat)] != null);
+  // El material recomendado; si ese diseño no lo tiene con precio, el primero que sí (de más fino a más grueso no: en orden de lista).
+  const materialFor = (design) => (priced(design, recommended) ? recommended : MATERIALS.find((m) => priced(design, m)) || null);
+  const build = (id, design, extra = {}) => {
+    const material = materialFor(design);
+    if (!design || !material) return null;
+    return { id, selection: { design_code: design.id, material_code: material.id, photo_code: null, ar_code: null, finish: defaultFinishFor(design.cat), ...extra } };
+  };
+  const sv = firstOf("sv"); const bif = firstOf("bifocal"); const prog = firstOf("prog");
+  const arSv = (AR[arGroupFor(sv)] || [])[0]; const arProg = (AR[arGroupFor(prog)] || [])[0];
+  const photoSv = PHOTO.find((p) => p.price && p.price.sv != null);
+  const list = multi
+    ? [build("bifocal", bif), build("prog", prog), arProg && build("prog_ar", prog, { ar_code: arProg.id })]
+    : [build("sv_basic", sv), arSv && build("sv_ar", sv, { ar_code: arSv.id }), photoSv && build("sv_photo", sv, { photo_code: photoSv.id })];
+  return list.filter(Boolean);
+}
+
+function LensPresets({ line, onChange, catalog, rxForm }) {
+  const { t } = useLang();
+  const presets = lensPresets(catalog, rxForm);
+  if (!presets.length) return null;
+  const sel = line.selection;
+  const active = (p) => ["design_code", "material_code", "photo_code", "ar_code"].every((k) => (sel[k] || null) === (p.selection[k] || null)) && (sel.finish || finishFor(catalog, sel.design_code)) === p.selection.finish;
+  return (
+    <div className="pos-presets" role="group" aria-label={t("adm.pos.preset.title")}>
+      <span className="pos-presets-ttl"><Icon name="sparkles" size={14} /> {t("adm.pos.preset.title")}</span>
+      <div className="pos-presets-row">
+        {presets.map((p) => (
+          <button key={p.id} type="button" className={active(p) ? "on" : ""} aria-pressed={active(p)} onClick={() => onChange({ ...line, touched: true, selection: { ...sel, ...p.selection } })}>
+            {t(`adm.pos.preset.${p.id}`)}
+          </button>
+        ))}
+      </div>
+      <small className="muted">{t("adm.pos.preset.hint")}</small>
+    </div>
+  );
+}
+
 /** Diseño, material y tratamientos de una línea, con las mismas reglas que el asistente web. */
-function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
+function LensPicker({ line, onChange, catalog, rxForm, noRx, rxPending = false }) {
   const { t, lang } = useLang();
-  const { DESIGNS, MATERIALS, PHOTO, AR } = catalog;
+  const { DESIGNS, MATERIALS, PHOTO, AR, FINISHES } = catalog;
   const L = (o) => (o ? o[lang] ?? o.es : "");
   const sel = line.selection;
   const design = sel.design_code === "frame-only" ? FRAME_ONLY : DESIGNS.find((d) => d.id === sel.design_code) || null;
@@ -122,34 +258,78 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
   const photos = PHOTO.filter((p) => cat && p.price && p.price[cat] != null);
   const ars = design && sel.design_code !== "frame-only" ? AR[arGroupFor(design)] || [] : [];
   const set = (patch) => onChange({ ...line, selection: { ...sel, ...patch } });
-  const designs = noRx ? [] : DESIGNS.filter((d) => (hasAdd(rxForm) ? d.cat !== "sv" : d.cat === "sv"));
+  // Filtro por tipo de receta: monofocal → solo visión sencilla; multifocal → bifocal o progresivo.
+  // Con la graduación pendiente todavía no se sabe si es monofocal o multifocal: se ofrecen todos.
+  const designs = noRx ? [] : rxPending ? DESIGNS : DESIGNS.filter((d) => (isMulti(rxForm) ? d.cat !== "sv" : d.cat === "sv"));
+  // Stock o tallado digital: solo donde el diseño admite los dos (visión
+  // sencilla y bifocal). Un acabado sin precio en la lista se ve pero no se
+  // elige: el servidor lo rechazaría con `finish_unavailable`.
+  const priced = (sel.material_code && FINISHES?.[sel.design_code]?.[sel.material_code]) || { stock: null, digital: null };
+  const finishOptions = cat && cat !== "prog" ? ["stock", "digital"] : [];
+  const finish = sel.finish || finishFor(catalog, sel.design_code);
   return (
     <div className="pos-lens">
       <label>
-        {t("adm.pos.lens.design")}
-        <select value={sel.design_code} onChange={(e) => set({ design_code: e.target.value, material_code: e.target.value === "frame-only" ? null : sel.material_code || recommended?.id, photo_code: null, ar_code: null })}>
-          {line.kind === "frame" && <option value="frame-only">{t("adm.pos.lens.frameOnly")}</option>}
+        <span>{t("adm.pos.lens.design")}<HelpTip topic="pos.step.lenses" /></span>
+        <select value={sel.design_code} onChange={(e) => set({ design_code: e.target.value, material_code: e.target.value === "frame-only" ? null : sel.material_code || recommended?.id, photo_code: null, ar_code: null, finish: finishFor(catalog, e.target.value) })}>
+          {line.kind !== "own_frame" && <option value="frame-only">{t("adm.pos.lens.frameOnly")}</option>}
           {designs.map((d) => <option key={d.id} value={d.id}>{L(d.label)}</option>)}
         </select>
       </label>
       {sel.design_code !== "frame-only" && (
         <>
           <label>
-            {t("adm.pos.lens.material")}
-            <select value={sel.material_code || ""} onChange={(e) => set({ material_code: e.target.value || null })}>
+            <span>{t("adm.pos.lens.material")}<HelpTip topic="pos.step.lenses" /></span>
+            <select
+              value={sel.material_code || ""}
+              onChange={(e) => {
+                const material_code = e.target.value || null;
+                // Un material sin precio para el acabado elegido vuelve a stock, que es lo que la lista siempre tiene.
+                const cell = material_code && FINISHES?.[sel.design_code]?.[material_code];
+                const keep = !cell || finishOptions.length === 0 || cell[finish] != null;
+                set({ material_code, ...(keep ? {} : { finish: "stock" }) });
+              }}
+            >
               <option value="">—</option>
               {MATERIALS.map((m) => <option key={m.id} value={m.id}>{L(m.label)}{m.id === recommended?.id ? " ★" : ""}</option>)}
             </select>
           </label>
           <label>
-            {t("adm.pos.lens.photo")}
+            <span>{t("adm.pos.lens.finish")}<HelpTip topic="pos.step.lenses" /></span>
+            {finishOptions.length ? (
+              <div className="pos-rx-type" role="radiogroup" aria-label={t("adm.pos.lens.finish")}>
+                {finishOptions.map((f) => {
+                  const unpriced = sel.material_code ? priced[f] == null : false;
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      role="radio"
+                      aria-checked={finish === f}
+                      className={finish === f ? "on" : ""}
+                      disabled={unpriced}
+                      title={unpriced ? t("adm.pos.lens.finishUnpriced") : undefined}
+                      onClick={() => set({ finish: f })}
+                    >
+                      {t(`adm.pos.lens.finish.${f}`)}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <span className="pos-picked" title={t("adm.pos.lens.finishProg")}>{t("adm.pos.lens.finish.digital")}</span>
+            )}
+          </label>
+          {/* Fotocromático elegido = recuadro con color (dueño, 15-nov-2026: «se me olvida si tiene foto»). */}
+          <label className={`pos-lens-photo ${sel.photo_code ? "on" : ""}`}>
+            <span>{t("adm.pos.lens.photo")}<HelpTip topic="pos.step.lenses" />{sel.photo_code && <b className="pos-photo-flag">{t("adm.pos.lens.photoOn")}</b>}</span>
             <select value={sel.photo_code || ""} onChange={(e) => set({ photo_code: e.target.value || null })}>
               <option value="">{t("adm.pos.lens.none")}</option>
               {photos.map((p) => <option key={p.id} value={p.id}>{L(p.label)} · {p.colors.map((c) => PHOTO_COLORS[c]?.[lang] || c).join("/")}</option>)}
             </select>
           </label>
           <label>
-            {t("adm.pos.lens.ar")}
+            <span>{t("adm.pos.lens.ar")}<HelpTip topic="pos.step.lenses" /></span>
             <select value={sel.ar_code || ""} onChange={(e) => set({ ar_code: e.target.value || null })}>
               <option value="">{t("adm.pos.lens.none")}</option>
               {ars.map((a) => <option key={a.id} value={a.id}>{L(a.label)}</option>)}
@@ -164,42 +344,97 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
 
 export default function PosSale({ me }) {
   const { t, lang } = useLang();
-  const { toast } = useFeedback();
-  const catalog = useLensCatalog();
+  const { toast, dialog, confirm } = useFeedback();
   const [ctx, setCtx] = useState(null);
   const [ctxError, setCtxError] = useState(null);
   const [storeId, setStoreId] = useState("");
+  // The lens list of the store being sold in (GET /admin/pos/lens-matrix): the
+  // owner's cells and finishes, at that store's prices. Until it arrives, or
+  // if it fails, the bundled list — and the lens step says so (`catalog.live`).
+  // Solo con la tienda ya decidida: antes se pedía la lista maestra y luego la de la tienda, una detrás de otra.
+  const catalog = useAdminLensCatalog(storeId, { enabled: Boolean(storeId) });
   const [terminalId, setTerminalId] = useState("");
   const [step, setStep] = useState(0);
+  // El paso más lejano al que se llegó en esta venta: hasta ahí se puede saltar con los botones de pasos.
+  const [maxStep, setMaxStep] = useState(0);
+  useEffect(() => { if (STEPS[step] !== "done") setMaxStep((m) => Math.max(m, step)); }, [step]);
+  const rootRef = useRef(null);
+  useKeyboardInset(rootRef);
+  // Cada paso empieza arriba: en la tablet el botón Siguiente queda al final de un formulario largo.
+  const firstStep = useRef(true);
+  useEffect(() => {
+    if (firstStep.current) { firstStep.current = false; return; }
+    const top = rootRef.current?.getBoundingClientRect().top;
+    if (top != null && top < 0) window.scrollBy({ top: top - 8, behavior: "smooth" });
+  }, [step]);
   const [busy, setBusy] = useState(false);
 
   // 1 · cliente
   const [custQ, setCustQ] = useState("");
   const [custHits, setCustHits] = useState([]);
   const [customer, setCustomer] = useState(EMPTY_CUSTOMER);
+  const [touched, setTouched] = useState({});
+  const [showCustErrors, setShowCustErrors] = useState(false);
+  const addressRef = useRef(null);
   const [customerId, setCustomerId] = useState(null);
   const [custInfo, setCustInfo] = useState(null);
   const [wears, setWears] = useState(null);
+  // HU-18: cliente ya registrado con ese teléfono o correo, y lo que se descartó («es otra persona») por valor.
+  const [dup, setDup] = useState({ phone: null, email: null });
+  const dupDismissed = useRef({ phone: new Set(), email: new Set() });
+  const dupSeq = useRef({ phone: 0, email: 0 });
   // 2 · monturas
-  const [prodQ, setProdQ] = useState("");
-  const [prodHits, setProdHits] = useState([]);
   const [lines, setLines] = useState([]);
-  const [own, setOwn] = useState({ open: false, description: "", photo: null });
+  const [frameListOpen, setFrameListOpen] = useState(false);
+  const [own, setOwn] = useState(EMPTY_OWN);
+  const [frameMode, setFrameMode] = useState("catalog");
+  // Se intentó añadir (o avanzar) con la montura escrita a mano incompleta: lo que falta se marca en rojo.
+  const [ownTried, setOwnTried] = useState(false);
+  const [cardProduct, setCardProduct] = useState(null);
+  const { products: catProducts = [], cases: catCases = [] } = useCatalog();
+  // Ficha completa de una montura (AdminFrameCard) desde el buscador, o null si el catálogo local no la tiene.
+  const frameCardOf = (productId) => catProducts.find((x) => x.medusaId === productId) || catCases.find((x) => x.medusaId === productId) || null;
+  const viewFrame = (p) => { const full = frameCardOf(p.product_id); if (full) setCardProduct(full); };
   // 3 · receta
   const [noRx, setNoRx] = useState(false);
+  // «Graduación pendiente» (dueño, 15-nov-2026): el paciente paga, va al examen y la receta llega horas después;
+  // la venta se termina igual y la receta se agrega desde la venta (backend lib/rx-pending.ts).
+  const [rxPending, setRxPending] = useState(false);
   const [rxNew, setRxNew] = useState(EMPTY_RX);
+  // Agudeza visual sin/con lentes y ojo dominante de la receta nueva (VisualAcuityCard.jsx).
+  const [clinical, setClinical] = useState(EMPTY_CLINICAL);
+  // Sin receta escrita y sin marcar nada: la venta sigue como «graduación pendiente» (dueño, 17-nov-2026:
+  // «se debe poder registrar la venta aunque falten datos»). Se avisa al pasar de paso y al registrar.
+  const pendingRx = rxPending || (!noRx && !rxFilled(rxNew));
   const [ocr, setOcr] = useState({ status: "idle", confirmed: true });
   const [rxWorn, setRxWorn] = useState(EMPTY_RX);
   const [worn, setWorn] = useState({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
+  const [wornFrame, setWornFrame] = useState(EMPTY_WORN_FRAME);
   // 5 · precio
   const [discount, setDiscount] = useState("");
+  // Promoción de la tienda elegida para esta venta (backend lib/promotions.ts): no se suma al descuento, gana la mayor.
+  const [promoId, setPromoId] = useState("");
+  const [promoRef, setPromoRef] = useState("");
   const [q, setQ] = useState(null);
+  // "idle" | "loading" | "ok" | "error": estado de la última cotización; en error se conserva `q` para la franja.
+  const [qStatus, setQStatus] = useState("idle");
+  const quoteSeq = useRef(0);
+  const quoteErr = useRef(null);
   const [approval, setApproval] = useState(null);
   const [reason, setReason] = useState("");
   // 6 · pago
-  const [payments, setPayments] = useState([{ method_code: "", amount: "", details: {} }]);
+  const [payments, setPayments] = useState([EMPTY_PAYMENT]);
   const [delivery, setDelivery] = useState("pickup");
   const [notifyEmail, setNotifyEmail] = useState(true);
+  // Foto y receta en el correo: se decide en cada venta, nunca se recuerda.
+  const [receiptDetail, setReceiptDetail] = useState(false);
+  // Avisos al paciente por SMS (etapas del pedido): apagado salvo que lo pida.
+  const [notifySms, setNotifySms] = useState(false);
+  // Foto del paciente con la montura puesta (opcional, se queda en la tienda; WearingPhoto.jsx).
+  const [wear, setWear] = useState({ consent: false, photo: null });
+  const [wearSaved, setWearSaved] = useState(null);
+  // Fecha de la venta: hoy, o un día anterior (SaleDateCard.jsx, lib/sale-date.ts).
+  const [soldOn, setSoldOn] = useState(EMPTY_SOLD_ON);
   const [result, setResult] = useState(null);
   const idem = useRef(null);
 
@@ -207,20 +442,51 @@ export default function PosSale({ me }) {
     posContext()
       .then((c) => {
         setCtx(c);
+        // The store picked in the panel's global filter wins over the last one
+        // sold in: opening the POS must not move the global picker back.
+        const picked = read("adm_active_store");
         const saved = read("pos_store");
-        const s = c.stores.find((x) => x.id === saved) || c.stores[0];
+        const s = c.stores.find((x) => x.id === picked) || c.stores.find((x) => x.id === saved) || c.stores[0];
         if (s) setStoreId(s.id);
       })
       .catch((e) => setCtxError(e.message));
   }, []);
   const store = ctx?.stores.find((s) => s.id === storeId) || null;
+  // ¿Cerrada según su horario? Se vuelve a mirar cada minuto (la caja se queda abierta horas).
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => { const h = setInterval(() => setClock(Date.now()), 60_000); return () => clearInterval(h); }, []);
+  const afterHours = useMemo(() => {
+    const st = hoursStatus(store?.hours, new Date(clock), ctx?.timezone);
+    return st.known && !st.open ? st : null;
+  }, [store?.hours, clock, ctx?.timezone]);
   useEffect(() => {
     if (!store) return;
     write("pos_store", store.id);
+    setActiveStore(store.id); // el panel toma los colores de la tienda en la que se vende
     const saved = read(`pos_terminal:${store.id}`);
     setTerminalId((store.terminals.find((x) => x.id === saved) || store.terminals[0])?.id || "");
   }, [store]);
   useEffect(() => { if (store && terminalId) write(`pos_terminal:${store.id}`, terminalId); }, [store, terminalId]);
+  // The global store filter drives the POS too. Mid-sale the store is locked
+  // (prices and stock are that store's): the filter snaps back, with a word why.
+  const liveRef = useRef({ ctx: null, storeId: "", step: 0 });
+  liveRef.current = { ctx, storeId, step };
+  useEffect(() => {
+    const onPick = (e) => {
+      const { ctx: c, storeId: cur, step: st } = liveRef.current;
+      if (!c || !cur) return;
+      const id = e?.detail || null;
+      if (id === cur) return;
+      const target = id ? c.stores.find((x) => x.id === id) : null;
+      const midSale = st > 0 && STEPS[st] !== "done";
+      if (target && !midSale) { setStoreId(target.id); return; }
+      const here = c.stores.find((x) => x.id === cur);
+      toast({ tone: "info", title: t(midSale ? "adm.pos.storeLocked" : "adm.pos.storeNeeded", { store: here ? here.code : "" }) });
+      setTimeout(() => setActiveStore(cur), 0);
+    };
+    window.addEventListener("adm:active-store", onPick);
+    return () => window.removeEventListener("adm:active-store", onPick);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const terminal = store?.terminals.find((x) => x.id === terminalId) || null;
   const methods = useMemo(() => (ctx?.payment_methods || []).filter((m) => store?.payment_methods.includes(m.code)), [ctx, store]);
 
@@ -230,13 +496,36 @@ export default function PosSale({ me }) {
     const h = setTimeout(() => searchCustomers(custQ).then((r) => setCustHits(r.customers || [])).catch(() => setCustHits([])), 300);
     return () => clearTimeout(h);
   }, [custQ]);
-  useEffect(() => {
-    if (!store || prodQ.trim().length < 2) { setProdHits([]); return undefined; }
-    const h = setTimeout(() => searchProducts(store.id, prodQ).then((r) => setProdHits(r.products || [])).catch(() => setProdHits([])), 300);
+
+  // HU-18: al escribir un teléfono completo (o un correo válido) de un cliente
+  // NUEVO se consulta la misma búsqueda del buscador; si hay un registrado con
+  // ese número (últimos 10 dígitos) o ese correo, se avisa sin bloquear.
+  const lookupDup = (kind, value, key, matches) => {
+    const seq = ++dupSeq.current[kind];
+    if (customerId || !key || dupDismissed.current[kind].has(key)) { setDup((d) => (d[kind] ? { ...d, [kind]: null } : d)); return undefined; }
+    const h = setTimeout(() => {
+      searchCustomers(value)
+        .then((r) => {
+          if (seq !== dupSeq.current[kind]) return; // llegó tarde: ya se escribió otra cosa
+          const hit = (r.customers || []).find(matches) || null;
+          setDup((d) => ({ ...d, [kind]: hit ? { key, hit } : null }));
+        })
+        .catch(() => { if (seq === dupSeq.current[kind]) setDup((d) => ({ ...d, [kind]: null })); });
+    }, 400);
     return () => clearTimeout(h);
-  }, [prodQ, store]);
+  };
+  useEffect(() => lookupDup("phone", customer.phone.trim(), phoneComplete(customer.phone) ? phoneKey(customer.phone) : "", (c) => phoneKey(c.phone) === phoneKey(customer.phone)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customer.phone, customerId]);
+  useEffect(() => lookupDup("email", customer.email.trim(), emailProblem(customer.email, true) === null ? emailKey(customer.email) : "", (c) => emailKey(c.email) === emailKey(customer.email)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customer.email, customerId]);
+  const dismissDup = (kind) => { if (dup[kind]) dupDismissed.current[kind].add(dup[kind].key); setDup((d) => ({ ...d, [kind]: null })); };
+  // Un mismo cliente que coincide por teléfono y por correo se avisa una vez.
+  const dupNotices = ["phone", "email"].filter((k, i, all) => dup[k] && !(i > 0 && dup[all[0]]?.hit?.id === dup[k].hit.id));
 
   const pickCustomer = async (c) => {
+    setDup({ phone: null, email: null });
     setCustomerId(c.id);
     setCustomer({ ...EMPTY_CUSTOMER, first_name: c.first_name || "", last_name: c.last_name || "", email: c.email || "", phone: c.phone || "", birth_date: c.birth_date || "" });
     setCustHits([]); setCustQ("");
@@ -250,28 +539,52 @@ export default function PosSale({ me }) {
       }
     } catch { setCustInfo(null); }
   };
-  const newCustomer = () => { setCustomerId(null); setCustInfo(null); setCustomer(EMPTY_CUSTOMER); };
+  const newCustomer = () => { setCustomerId(null); setCustInfo(null); setCustomer(EMPTY_CUSTOMER); setTouched({}); setShowCustErrors(false); };
 
   const addFrame = (p, v) => {
-    setLines((ls) => [...ls, { key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, title: p.title, variant_title: v.title, price: p.price, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } }]);
-    setProdQ(""); setProdHits([]);
+    setLines([{ key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, ...frameLineFields(p, v), selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } }]);
+    setOwn(EMPTY_OWN);
   };
+  // Qué le falta a la montura escrita a mano (obligatorio: marca o modelo —o una nota, la del paciente—; y el precio, la de la tienda).
+  const ownProblems = {
+    name: frameMode === "store" ? !own.brand.trim() && !own.model.trim() : !own.brand.trim() && !own.model.trim() && !own.description.trim(),
+    size: Object.keys(OWN_SIZE).some((k) => ownSizeBad(k, own[k])),
+    price: frameMode === "store" && (!String(own.price).trim() || storePriceBad(own.price)),
+  };
+  const nameBad = ownTried && ownProblems.name;
+  const priceBad = (ownTried && ownProblems.price) || storePriceBad(own.price);
+  // La montura escrita a mano: la del paciente (no se cobra) o una de la tienda fuera del catálogo (se cobra).
   const addOwn = () => {
-    if (!own.description.trim()) { toast({ tone: "error", title: t("adm.pos.own.needDescription") }); return; }
-    setLines((ls) => [...ls, { key: `own-${Date.now()}`, kind: "own_frame", variant_id: null, title: own.description, description: own.description, photo: own.photo, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null } }]);
-    setOwn({ open: false, description: "", photo: null });
+    const store = frameMode === "store";
+    const title = ownTitle(own);
+    const p = ownProblems;
+    if (p.name || p.size || p.price) {
+      // En rojo lo que falta, y el foco en el primer campo a corregir.
+      setOwnTried(true);
+      toast({ tone: "error", title: t(p.name ? (store ? "adm.err.pos.store_frame_needs_name" : "adm.pos.own.needDescription") : p.price ? "adm.err.pos.bad_store_frame_price" : "adm.err.pos.bad_own_frame") });
+      requestAnimationFrame(() => { const el = document.querySelector('.pos-own [aria-invalid="true"]'); el?.scrollIntoView({ block: "center" }); el?.focus(); });
+      return false;
+    }
+    const specs = { brand: own.brand.trim(), model: own.model.trim(), color: own.color.trim(), eye_size: own.eye_size.trim(), bridge: own.bridge.trim(), temple: own.temple.trim() };
+    const base = { variant_id: null, title, description: own.description.trim(), own_frame: specs, photo: own.photo };
+    setLines([store
+      ? { key: `store-${Date.now()}`, kind: "store_frame", ...base, store_price: Number(String(own.price).replace(/[$,\s]/g, "")), selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } }
+      : { key: `own-${Date.now()}`, kind: "own_frame", ...base, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null, finish: "stock" } }]);
+    setOwn(EMPTY_OWN);
+    setOwnTried(false);
+    return true;
   };
-  const onOwnPhoto = async (e) => {
-    const f = e.target.files?.[0];
+  // Reciben el archivo ya elegido (PosCapture vacía el input para que repetir la misma foto dispare otra vez).
+  const onOwnPhoto = async (f) => {
     if (!f) return;
     try { setOwn((o) => ({ ...o, photo: null })); const url = await photoDataUrl(f); setOwn((o) => ({ ...o, photo: url })); } catch (err) { toast({ tone: "error", title: t(err.message) }); }
   };
-  const onOcr = async (e) => {
-    const f = e.target.files?.[0];
+  const onOcr = async (f) => {
     if (!f) return;
     setOcr({ status: "loading", confirmed: false });
     try {
       const r = await ocrPrescription(f);
+      // El tipo sale de lo leído: con adición es multifocal.
       setRxNew({ ...fromRx(r.prescription), rx_date: rxNew.rx_date });
       setOcr({ status: "done", confirmed: false });
     } catch (err) {
@@ -284,42 +597,77 @@ export default function PosSale({ me }) {
   useEffect(() => {
     if (STEPS[step] !== "lenses") return;
     setLines((ls) => ls.map((l) => {
-      if (noRx) return { ...l, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } };
-      const multi = hasAdd(rxNew);
+      if (noRx) return { ...l, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } };
+      const multi = isMulti(rxNew);
       const d = l.selection.design_code;
-      const fits = d === "frame-only" ? l.kind === "frame" : catalog.DESIGNS.some((x) => x.id === d && (multi ? x.cat !== "sv" : x.cat === "sv"));
-      if (fits && !(l.kind === "frame" && d === "frame-only" && l.touched !== true && !noRx)) return l;
+      // Sin graduación todavía, cualquier diseño vale (lo decide lo que el paciente compra).
+      const fits = d === "frame-only" ? l.kind !== "own_frame" : catalog.DESIGNS.some((x) => x.id === d && (pendingRx || (multi ? x.cat !== "sv" : x.cat === "sv")));
+      if (fits && !(l.kind !== "own_frame" && d === "frame-only" && l.touched !== true && !noRx)) return l;
       const first = catalog.DESIGNS.find((x) => (multi ? x.cat === "prog" : x.cat === "sv"));
       const power = maxPower(rxNew);
       const mat = catalog.MATERIALS.find((m) => power <= m.maxAbs) || catalog.MATERIALS[catalog.MATERIALS.length - 1];
-      return { ...l, touched: true, selection: { design_code: first?.id || "sv", material_code: mat?.id || null, photo_code: null, ar_code: null } };
+      return { ...l, touched: true, selection: { design_code: first?.id || "sv", material_code: mat?.id || null, photo_code: null, ar_code: null, finish: finishFor(catalog, first?.id || "sv") } };
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const apiLines = () => lines.map((l) => ({ kind: l.kind, variant_id: l.variant_id, selection: l.selection, description: l.description || null, photo: l.photo || null }));
+  const apiLines = () => lines.map((l) => ({ kind: l.kind, variant_id: l.variant_id, selection: l.selection, description: l.description || null, photo: l.photo || null, ...(l.kind === "own_frame" ? { own_frame: l.own_frame || null } : {}), ...(l.kind === "store_frame" ? { store_frame: { ...(l.own_frame || {}), price: l.store_price } } : {}) }));
   const wornBody = () => (wears && !noRx ? {
     rx: toRx(rxWorn),
     worn_source: worn.source,
     ...(worn.dateMode === "approx" ? { approx_months_ago: Number(worn.months) || 0 } : { rx_date: worn.date || null }),
+    frame_measures: Object.values(wornFrame).some((v) => v && v !== "good") ? {
+      lens_width: num(wornFrame.lens_width), bridge: num(wornFrame.bridge),
+      temple: num(wornFrame.temple), lens_height: num(wornFrame.lens_height),
+      total_width: num(wornFrame.total_width), condition: wornFrame.condition,
+    } : null,
   } : null);
-  const newBody = () => (noRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual"), rx_date: rxNew.rx_date || null });
+  // Leída de la foto → `ocr` y verificada solo si el vendedor confirmó la lectura.
+  const newBody = () => (noRx || pendingRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual", ocr.status !== "done" || ocr.confirmed === true), rx_date: rxNew.rx_date || null, clinical: clinicalBody(clinical) });
 
-  const refreshQuote = async () => {
-    if (!store || !lines.length) return;
-    try {
-      const r = await fetchQuote({ store: store.id, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, prescription: newBody(), worn: wornBody() });
-      setQ(r);
-    } catch (err) { setQ(null); toast({ tone: "error", title: t(err.message) }); }
-  };
+  // Cotización en curso: se pide al servidor desde que hay montura (paso
+  // Montura) y cada vez que cambia algo que afecta al precio, con una espera
+  // corta. La receta viaja desde Lentes (ya cerrada), que es lo que decide
+  // `rx_check` y el cambio óptico en Precio. El cuerpo serializado es la
+  // dependencia: dos renders con la misma venta no vuelven a preguntar.
+  // Lo más lejos que se llegó: al volver a un paso anterior (saltos entre pasos) la cotización sigue viva.
+  const reached = Math.max(step, maxStep);
+  // La promoción elegida, si sigue entre las de hoy de esta tienda. Un «compre N, lleve M» espera el número de la venta pagada.
+  const promo = (store?.promotions || []).find((p) => p.id === promoId) || null;
+  const promoWaitsRef = Boolean(promo && promo.kind === "bogo" && !promoRef.trim());
+  const promoParams = () => (promo && !promoWaitsRef ? { promotion_id: promo.id, promotion_ref: promo.kind === "bogo" ? promoRef.trim() : null } : {});
+  const withRx = reached >= RX_FROM && !noRx && !rxPending && rxFilled(rxNew);
+  // Una línea con lente pero sin material (la montura del cliente antes de
+  // Lentes, o el material quitado) no tiene precio posible: no se pregunta.
+  const quotable = lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code);
+  const quoteBody = useMemo(() => (store && lines.length && quotable && reached >= QUOTE_FROM && STEPS[step] !== "done"
+    ? JSON.stringify({ store: store.id, customer_id: customerId || null, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, ...promoParams(), prescription: withRx ? newBody() : null, worn: withRx ? wornBody() : null })
+    : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store?.id, customerId, lines, discount, promoId, promoRef, quotable && reached >= QUOTE_FROM && STEPS[step] !== "done", withRx, withRx && rxNew, withRx && rxWorn, withRx && worn, withRx && wornFrame, withRx && wears, withRx && ocr.status]);
   useEffect(() => {
-    if (!["price", "payment"].includes(STEPS[step])) return undefined;
-    const h = setTimeout(refreshQuote, 350);
+    if (!quoteBody) { quoteSeq.current += 1; setQ(null); setQStatus("idle"); return undefined; }
+    const seq = ++quoteSeq.current;
+    setQStatus("loading");
+    const h = setTimeout(() => {
+      fetchQuote(JSON.parse(quoteBody))
+        .then((r) => { if (seq !== quoteSeq.current) return; setQ(r); setQStatus("ok"); quoteErr.current = null; })
+        .catch((err) => {
+          if (seq !== quoteSeq.current) return; // respuesta vieja: ya hay otra en camino
+          setQStatus("error");
+          // Se avisa donde el precio es lo que se mira (Lentes en adelante) y una sola vez por motivo:
+          // en Montura una línea a medio elegir todavía no es un error de nadie.
+          if (step >= RX_FROM && quoteErr.current !== err.message) toast({ tone: "error", title: t(err.message) });
+          quoteErr.current = err.message;
+        });
+    }, 400);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, discount, lines]);
+  }, [quoteBody]);
   // Un descuento distinto invalida la aprobación pedida para el anterior.
-  useEffect(() => { setApproval(null); }, [discount, lines]);
+  useEffect(() => { setApproval(null); }, [discount, lines, promoId]);
+  // Otra tienda, otras promociones.
+  useEffect(() => { setPromoId(""); setPromoRef(""); }, [storeId]);
 
   // La caja espera la decisión del dueño o un superadmin consultando cada pocos segundos.
   useEffect(() => {
@@ -345,33 +693,228 @@ export default function PosSale({ me }) {
   };
 
   const total = q?.quote?.total ?? 0;
+  const payRows = useMemo(() => withSuggestedAmounts(payments, total), [payments, total]);
+  // Una fila sugerida sin forma de pago aún no es un error: no se ha empezado a rellenar.
+  const rowProblem = (p) => (p.suggested && !p.method_code ? null : paymentProblem(p, methods.find((x) => x.code === p.method_code)));
   const payState = useMemo(() => {
     const byCode = new Map(methods.map((m) => [m.code, m]));
     let paid = 0; let ins = 0;
-    for (const p of payments) {
+    for (const p of payRows) {
       const m = byCode.get(p.method_code);
       const a = Number(p.amount) || 0;
       if (!m || a <= 0) continue;
       if (m.kind === "insurance" || m.receivable) ins += a; else paid += a;
     }
     return { paid: Math.round(paid * 100) / 100, ins: Math.round(ins * 100) / 100, balance: Math.round((total - paid - ins) * 100) / 100 };
-  }, [payments, methods, total]);
+  }, [payRows, methods, total]);
 
-  const canNext = () => {
-    switch (STEPS[step]) {
-      case "customer": return customer.first_name && customer.last_name && customer.email && customer.phone && customer.birth_date && wears !== null;
-      case "frame": return lines.length > 0;
+  // Lo que usa hoy: graduación de ambos ojos, dentro de rango, y cuándo se la hicieron.
+  const wornCheck = validateRx(rxWorn, rxWorn.type, { mode: "worn" });
+  const wornReady = rxFilled(rxWorn) && wornCheck.ok && (worn.dateMode === "approx" ? worn.months !== "" : Boolean(worn.date));
+  // Receta nueva: el servidor es la última palabra, pero lo que el laboratorio no corta no sale de aquí.
+  const rxCheck = validateRx(rxNew, rxNew.type, { mode: "new" });
+  const fmtEye = (e) => [e.sph, e.cyl && `${e.cyl}×${e.axis || "—"}`, e.add && `ADD ${e.add}`].filter(Boolean).join(" ");
+  // Formato de moneda del panel. Va ANTES de `frameCards`: ese `.map` se evalúa
+  // en cada render en cuanto la venta tiene una montura, así que declararlo
+  // más abajo dejaba `m` en zona muerta temporal y la pantalla entera
+  // reventaba (ReferenceError) justo al elegir el color de la montura.
+  const m = (v) => money(v, "usd", lang);
+  // La montura que se está vendiendo, siempre a la vista en los pasos siguientes.
+  const frameCards = lines.filter((l) => l.kind === "frame").map((l) => <PosFrameCard key={l.key} frame={l} money={m} compact />);
+  const wornSummary = wornReady ? `${t("adm.pos.rx.od")} ${fmtEye(rxWorn.od)} · ${t("adm.pos.rx.os")} ${fmtEye(rxWorn.os)}` : t("adm.pos.worn.missing");
+  // El correo solo es obligatorio en la tienda online; en el mostrador es opcional.
+  const requireEmail = store?.kind === "online";
+  const hasEmail = Boolean(customer.email.trim());
+  // Lo que está MAL escrito (o el correo de la tienda online): eso sí hay que corregirlo. Lo que está
+  // VACÍO (nombre, apellido, teléfono, dirección de envío) se avisa y la venta se registra igual.
+  const custProblems = customerProblems(customer, { requireEmail, lenient: true });
+  const needsLensRx = lines.some((l) => l.selection.design_code !== "frame-only");
+  const multiSold = lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; });
+  // Solo falta la altura de montaje (progresivo/bifocal): se avisa; el resto de errores de la receta se corrige.
+  const rxSegOnly = !rxCheck.ok && rxCheck.errors.seg_height === "adm.pos.rx.err.segRequired" && !hasRxErrors({ ...rxCheck.errors, seg_height: null });
+  const W = (key, extra) => ({ key, label: t(`adm.pos.warn.${key}`, extra), how: t(`adm.pos.warn.how.${key}`, extra) });
+
+  /**
+   * Lo que impide pasar de un paso (`hard`: se explica en una ventana y se lleva
+   * al campo) y lo que solo se avisa (`soft`: la persona elige seguir y lo
+   * completa después desde la venta → Editar). Una sola fuente para Siguiente,
+   * los botones de pasos y «Registrar venta».
+   */
+  function stepIssues(name) {
+    const soft = [];
+    let hard = null;
+    switch (name) {
+      case "customer": {
+        if (Object.keys(custProblems).length) hard = { key: "custBad", focus: true };
+        else if (!customer.first_name.trim() && !customer.phone.trim()) hard = { key: "identity", focus: true };
+        for (const k of ["first_name", "last_name", "phone"]) if (!String(customer[k] || "").trim()) soft.push(W(`miss.${k}`));
+        if (wears === null) soft.push(W("worn.unanswered"));
+        else if (wears && !wornReady) soft.push(W("worn.incomplete"));
+        break;
+      }
+      case "frame": if (!lines.length) hard = { key: "noFrame" }; break;
       case "rx":
-        if (noRx) return !lines.some((l) => l.kind === "own_frame");
-        if (!rxFilled(rxNew) || (ocr.status === "done" && !ocr.confirmed)) return false;
-        if (wears) return rxFilled(rxWorn) && (worn.dateMode === "approx" ? worn.months !== "" : Boolean(worn.date));
-        return true;
-      case "lenses": return lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code)
-        && (!lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; }) || num(rxNew.seg_height) !== null);
-      case "price": return Boolean(q) && (!q.needs_approval || approval?.status === "approved") && q.rx_check?.fulfillable !== false;
-      case "payment": return payState.balance >= 0 && (delivery === "pickup" || (customer.address_1 && customer.city && customer.postal_code));
-      default: return false;
+        if (noRx) { if (lines.some((l) => l.kind === "own_frame")) hard = { key: "ownFrameNoRx" }; break; }
+        if (pendingRx) { if (!rxPending) soft.push(W("rx.missing")); break; }
+        if (ocr.status === "done" && !ocr.confirmed) { hard = { key: "rxOcr" }; break; }
+        if (rxSegOnly) soft.push(W("rx.seg"));
+        else if (!rxCheck.ok) hard = { key: "rxInvalid", choice: "pending" };
+        break;
+      case "lenses":
+        if (!lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code)) hard = { key: "noMaterial" };
+        else if (!pendingRx && !noRx && multiSold && num(rxNew.seg_height) === null) soft.push(W("rx.seg"));
+        break;
+      case "price":
+        if (!q || qStatus === "error") hard = { key: "noQuote" };
+        else if (q.rx_check?.fulfillable === false) hard = { key: "rxUnfulfillable", choice: "pending" };
+        else if (q.needs_approval && approval?.status !== "approved") hard = { key: "approval" };
+        break;
+      case "payment":
+        if (payState.balance < 0) hard = { key: "overpaid" };
+        else if (payRows.some(rowProblem)) hard = { key: "payRow" };
+        else {
+          if (total > 0 && payState.paid + payState.ins <= 0) soft.push(W("deposit", { total: m(total) }));
+          if (delivery === "ship" && !customer.address_1.trim()) soft.push(W("address"));
+        }
+        break;
+      default: break;
     }
+    return { hard, soft };
+  }
+  const canNext = () => canPass(STEPS[step]);
+  function canPass(name) { return !stepIssues(name).hard; }
+  // Avisos ya aceptados («Seguir sin estos datos»), por clave: no se vuelven a preguntar al pasar de paso.
+  const acked = useRef(new Set());
+  // La ficha de la venta recién registrada, para completar lo que faltó sin salir de la caja.
+  const salePanel = useSalePanel({ me, ctx, onChanged: () => {
+    if (!result?.id) return;
+    fetchSale(result.id).then((r) => setResult((cur) => (cur ? { ...cur, missing: r.sale?.missing || [] } : cur))).catch(() => {});
+  } });
+  const issueList = (items) => (
+    <ul className="pos-warn-list">
+      {items.map((i) => <li key={i.key}><b>{i.label}</b><span>{i.how}</span></li>)}
+    </ul>
+  );
+  /** Explica en una ventana por qué no se puede seguir. Con `choice: "pending"` ofrece dejar la receta pendiente. Devuelve true si se resolvió así. */
+  const explainHard = async (h) => {
+    if (h.choice === "pending") {
+      const yes = await confirm({ tone: "warning", title: t(`adm.pos.block.${h.key}.title`), message: t(`adm.pos.block.${h.key}.msg`), detail: <p className="pos-warn-how">{t("adm.pos.block.pendingChoice")}</p>, confirmLabel: t("adm.pos.block.makePending"), cancelLabel: t("adm.pos.block.fix") });
+      if (yes) { setRxPending(true); setNoRx(false); toast({ tone: "warning", title: t("adm.pos.warn.madePending") }); return true; }
+      return false;
+    }
+    await dialog({ tone: "warning", title: t(`adm.pos.block.${h.key}.title`), message: t(`adm.pos.block.${h.key}.msg`), confirmLabel: t("adm.pos.block.ok") });
+    return false;
+  };
+  /** Avisa lo que falta en un paso y deja elegir: seguir (se completa luego) o completarlo ahora. */
+  const askSoft = async (name, soft) => {
+    const fresh = soft.filter((i) => !acked.current.has(i.key));
+    if (!fresh.length) return true;
+    const yes = await confirm({
+      tone: "warning",
+      title: t("adm.pos.warn.stepTitle", { step: t(`adm.pos.step.${name}`) }),
+      message: t("adm.pos.warn.stepMsg"),
+      detail: issueList(fresh),
+      confirmLabel: t("adm.pos.warn.continue"),
+      cancelLabel: t("adm.pos.warn.completeNow"),
+    });
+    if (yes) fresh.forEach((i) => acked.current.add(i.key));
+    return yes;
+  };
+
+  // Saltar entre pasos ya visitados (dueño, 15-nov-2026: «que tú puedas saltarte de ventana en ventana»):
+  // hacia atrás siempre; hacia delante hasta el más lejano al que se llegó, y si algo de en medio
+  // dejó de estar completo, se para ahí para que no se pierda.
+  const jumpTo = (i) => {
+    if (i <= step) { setStep(i); return; }
+    for (let k = step; k < i; k += 1) {
+      if (!canPass(STEPS[k])) { setStep(k); if (k !== step) toast({ tone: "warning", title: t("adm.pos.steps.incomplete", { step: t(`adm.pos.step.${STEPS[k]}`) }) }); return; }
+    }
+    setStep(i);
+  };
+
+  // Siguiente: lo que impide seguir se explica en una ventana; lo que falta se avisa y se elige.
+  const next = async () => {
+    // Montura escrita a mano sin «Añadir»: Siguiente la añade si está completa, o marca en rojo lo que falta.
+    if (stepName === "frame" && !lines.length && frameMode !== "catalog") { if (addOwn()) setStep((s) => s + 1); return; }
+    const { hard, soft } = stepIssues(stepName);
+    if (hard) {
+      if (stepName === "frame") setOwnTried(true);
+      if (hard.focus) {
+        setShowCustErrors(true);
+        const fields = Object.keys(custProblems);
+        if (fields.some((k) => ["address_1", "city", "state", "postal_code"].includes(k)) && addressRef.current) addressRef.current.open = true;
+      }
+      const solved = await explainHard(hard);
+      if (!solved) {
+        if (hard.focus) requestAnimationFrame(() => document.querySelector('.pos-card [aria-invalid="true"], .pos-card input[name="first_name"]')?.focus());
+        return;
+      }
+    }
+    if (!(await askSoft(stepName, soft))) {
+      setShowCustErrors(true);
+      return;
+    }
+    // «Sin receta» aceptado: se marca de verdad como pendiente (los lentes ofrecen todos los diseños).
+    if (stepName === "rx" && soft.some((i) => i.key === "rx.missing")) setRxPending(true);
+    setShowCustErrors(false);
+    setStep((s) => s + 1);
+  };
+
+  /** Todo lo que la venta lleva pendiente, de todos los pasos (para el aviso final). */
+  const allSoft = () => {
+    const seen = new Set();
+    // La graduación pendiente marcada a mano también se recuerda al registrar.
+    const rxItem = pendingRx && !noRx && needsLensRx ? [W("rx.missing")] : [];
+    return [...["customer", "rx", "lenses", "payment"].flatMap((n) => stepIssues(n).soft), ...rxItem]
+      .filter((i) => (seen.has(i.key) ? false : (seen.add(i.key), true)))
+      .filter((i) => i.key !== "rx.missing" || needsLensRx);
+  };
+
+  /** Registrar: primero lo que lo impide (y en qué paso), luego el resumen de lo pendiente. */
+  const tryConfirm = async () => {
+    if (busy) return;
+    if (!noRx && !pendingRx && clinicalProblem(clinical)) {
+      setStep(STEPS.indexOf("rx"));
+      await dialog({ tone: "warning", title: t("adm.va.title"), message: t("adm.va.badLong"), confirmLabel: t("adm.sdt.fix") });
+      return;
+    }
+    const dateProblem = soldOnProblem(soldOn, todayIn(ctx?.timezone), ctx?.backdate_max_days ?? 366) || soldOnDeliveredProblem(soldOn, todayIn(ctx?.timezone), payState.balance);
+    if (dateProblem) {
+      await dialog({ tone: "warning", title: t("adm.sdt.title"), message: t(dateProblem, { max: ctx?.backdate_max_days ?? 366, min: "" }), confirmLabel: t("adm.sdt.fix") });
+      return;
+    }
+    for (const n of STEPS.slice(0, -1)) {
+      const { hard } = stepIssues(n);
+      if (!hard) continue;
+      if (n !== stepName) setStep(STEPS.indexOf(n));
+      const solved = await explainHard(hard);
+      if (!solved) return;
+    }
+    const pending = allSoft();
+    if (pending.length) {
+      const yes = await confirm({
+        tone: "warning",
+        title: t("adm.pos.warn.finalTitle", { n: pending.length }),
+        message: t("adm.pos.warn.finalMsg"),
+        detail: issueList(pending),
+        confirmLabel: t("adm.pos.warn.finalYes"),
+        cancelLabel: t("adm.pos.warn.finalNo"),
+      });
+      if (!yes) return;
+    }
+    // Con otra fecha, se confirma a la vista (el día cuenta en informes y recibo; el cobro, hoy).
+    const back = soldOnBody(soldOn, todayIn(ctx?.timezone));
+    if (back) {
+      const ok = await confirm({
+        tone: "warning",
+        title: t("adm.sdt.confirmTitle"),
+        message: t(back.money_on === "today" ? "adm.sdt.confirmMsgToday" : "adm.sdt.confirmMsgSale", { date: back.date, time: back.time || "12:00" }) + (back.delivered ? ` ${t("adm.sdt.confirmDelivered")}` : ""),
+        confirmLabel: t("adm.sdt.confirmYes"),
+        cancelLabel: t("adm.sdt.confirmNo"),
+      });
+      if (!ok) return;
+    }
+    confirmSale();
   };
 
   const confirmSale = async () => {
@@ -389,15 +932,29 @@ export default function PosSale({ me }) {
         },
         lines: apiLines(),
         discount_pct: discount || 0,
+        ...promoParams(),
         approval_id: approval?.status === "approved" ? approval.id : null,
-        payments: payments.filter((p) => p.method_code && Number(p.amount) > 0),
+        payments: payRows.filter((p) => p.method_code && Number(p.amount) > 0).map(({ method_code, amount, details }) => ({ method_code, amount, details })),
         prescriptions: { new: newBody(), worn: wornBody() },
         delivery,
-        notify_email: notifyEmail,
+        notify_email: notifyEmail && hasEmail,
+        notify_sms: notifySms,
+        receipt_detail: notifyEmail && hasEmail && receiptDetail,
         idempotency_key: idem.current,
+        rx_pending: pendingRx && !noRx,
+        sold_on: soldOnBody(soldOn, todayIn(ctx?.timezone)),
       });
-      setResult({ ...r.sale, optical_change: r.sale.optical_change || q?.optical_change || null });
+      // Las fotos de la montura escrita a mano se quedan en esta pantalla: si el
+      // servidor no pudo guardarlas, el recibo de ahora las imprime igual.
+      setResult({ ...r.sale, optical_change: r.sale.optical_change || q?.optical_change || null, frame_photos: lines.map((l) => (l.kind !== "frame" ? l.photo || null : null)) });
       setStep(STEPS.indexOf("done"));
+      // La foto con la montura va aparte, una vez registrada la venta: si falla, la venta queda y se añade desde su ficha.
+      if (wear.consent && wear.photo && r.sale?.id) {
+        setWearSaved("saving");
+        setWearingPhoto(r.sale.id, wear.photo)
+          .then(() => setWearSaved("saved"))
+          .catch(() => { setWearSaved("failed"); toast({ tone: "error", title: t("adm.wear.saleNoPhoto") }); });
+      }
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -405,52 +962,83 @@ export default function PosSale({ me }) {
 
   const reset = () => {
     idem.current = null;
-    setStep(0); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
-    setLines([]); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
+    acked.current.clear();
+    setStep(0); setMaxStep(0); setTouched({}); setShowCustErrors(false); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
+    setLines([]); setOwn(EMPTY_OWN); setFrameMode("catalog"); setOwnTried(false); setNoRx(false); setRxPending(false); setRxNew(EMPTY_RX); setClinical(EMPTY_CLINICAL); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
-    setDiscount(""); setQ(null); setApproval(null); setReason("");
-    setPayments([{ method_code: "", amount: "", details: {} }]); setDelivery("pickup"); setNotifyEmail(true); setResult(null);
+    setDiscount(""); setQ(null); setQStatus("idle"); setApproval(null); setReason("");
+    setDup({ phone: null, email: null }); dupDismissed.current = { phone: new Set(), email: new Set() };
+    setPayments([EMPTY_PAYMENT]); setDelivery("pickup"); setNotifyEmail(true); setReceiptDetail(false); setResult(null);
+    setWear({ consent: false, photo: null }); setWearSaved(null); setSoldOn(EMPTY_SOLD_ON);
   };
 
   if (ctxError) return <div className="adm-section"><div className="adm-demo-banner">{t(ctxError)}</div></div>;
   if (!ctx) return <div className="adm-section"><div className="adm-src-note loading">{t("adm.ord.loading")}</div></div>;
+  if (ctx.seller_block) return <div className="adm-section"><div className="adm-empty"><Icon name="lock" size={36} /><b>{t(`adm.err.pos.${ctx.seller_block}`)}</b><p>{t("adm.pos.sellerBlockHint")}</p></div></div>;
   if (!ctx.stores.length) return <div className="adm-section"><div className="adm-empty"><Icon name="store" size={36} /><b>{t("adm.pos.noStores")}</b></div></div>;
 
-  const setC = (k) => (e) => setCustomer((c) => ({ ...c, [k]: e.target.value }));
+  const setC = (k, typed = (v) => v) => (e) => setCustomer((c) => ({ ...c, [k]: typed(e.target.value) }));
+  // Un error se enseña al salir del campo, o de golpe al intentar avanzar: no mientras se escribe.
+  const custField = (k) => {
+    const problem = (showCustErrors || touched[k]) ? custProblems[k] || (k === "province" ? custProblems.state : null) : null;
+    return { problem, props: { name: k, "aria-invalid": problem ? true : undefined, onBlur: () => setTouched((x) => ({ ...x, [k]: true })) } };
+  };
   const stepName = STEPS[step];
-  const m = (v) => money(v, "usd", lang);
 
   return (
-    <div className="adm-section pos">
+    <div className="adm-section pos" ref={rootRef}>
       <div className="adm-head-row pos-head">
         <h2>{t("adm.tab.pos")}</h2>
         <div className="pos-where">
-          <select value={storeId} onChange={(e) => setStoreId(e.target.value)} disabled={step > 0 && stepName !== "done"} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
-            {ctx.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-          </select>
-          <select value={terminalId} onChange={(e) => setTerminalId(e.target.value)} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
-            {store?.terminals.map((x) => <option key={x.id} value={x.id}>{x.code}{x.name ? ` · ${x.name}` : ""}</option>)}
-          </select>
+          {/* Un vendedor tiene tienda y punto de venta fijos: se muestran, no se eligen. */}
+          {ctx.stores.length > 1 ? (
+            <select value={storeId} onChange={(e) => setStoreId(e.target.value)} disabled={step > 0 && stepName !== "done"} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
+              {ctx.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
+            </select>
+          ) : store && <span className="adm-team-tag" title={t("adm.pos.store")}><Icon name="store" size={12} /> {store.code} · {store.name}</span>}
+          {(store?.terminals.length || 0) > 1 ? (
+            <select value={terminalId} onChange={(e) => setTerminalId(e.target.value)} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
+              {store?.terminals.map((x) => <option key={x.id} value={x.id}>{x.code}{x.name ? ` · ${x.name}` : ""}</option>)}
+            </select>
+          ) : terminal && <span className="adm-team-tag" title={t("adm.pos.terminal")}><Icon name="receipt" size={12} /> {terminal.code}{terminal.name ? ` · ${terminal.name}` : ""}</span>}
           {ctx.seller_code && <span className="adm-team-tag code" title={t("adm.profile.f.seller_code")}>{ctx.seller_code}</span>}
         </div>
       </div>
 
-      {stepName !== "done" && (
-        <ol className="pos-steps">
-          {STEPS.slice(0, -1).map((s, i) => (
-            <li key={s} className={i === step ? "on" : i < step ? "ok" : ""}>
-              <button type="button" disabled={i > step} onClick={() => setStep(i)}>{i + 1}. {t(`adm.pos.step.${s}`)}</button>
-            </li>
-          ))}
-        </ol>
+      {/* Fuera del horario de la tienda (Tiendas → Horario): se avisa, nunca se bloquea la venta. */}
+      {afterHours && stepName !== "done" && (
+        <div className="pos-hours-warn" role="status"><Icon name="clock" size={14} />{afterHours.next_open ? t(afterHours.next_open.today ? "adm.hours.pos.closedToday" : "adm.hours.pos.closed", { time: afterHours.next_open.time, date: new Date(`${afterHours.next_open.date}T12:00:00`).toLocaleDateString(lang === "en" ? "en-US" : "es-ES", { weekday: "long", day: "numeric", month: "short" }) }) : t("adm.hours.pos.closedNoNext")}</div>
       )}
 
-      <div className="adm-card pos-card">
+      {/* Cabecera pegajosa: pasos + total en curso, siempre a la vista (también con el teclado abierto, compactada). */}
+      {stepName !== "done" && (
+        <div className="pos-sticky">
+          <ol className="pos-steps" aria-label={t("adm.pos.steps.label")} style={{ "--pos-steps": STEPS.length - 1 }}>
+            {STEPS.slice(0, -1).map((s, i) => (
+              <li key={s} className={i === step ? "on" : i < step || (i <= maxStep && canPass(s)) ? "ok" : i <= maxStep ? "todo" : ""}>
+                <button type="button" className="pos-step-btn" disabled={i > maxStep || busy} onClick={() => jumpTo(i)} aria-current={i === step ? "step" : undefined}
+                  aria-label={`${t("adm.pos.steps.of", { n: i + 1, total: STEPS.length - 1 })}: ${t(`adm.pos.step.${s}`)}`}>
+                  <span className="pos-step-n" aria-hidden="true">{i < step ? <Icon name="check" size={13} /> : i + 1}</span>
+                  <span className="pos-step-txt">{t(`adm.pos.step.${s}`)}</span>
+                </button>
+                {i === step && STEP_HELP[s] && <HelpTip topic={STEP_HELP[s]} size={16} />}
+              </li>
+            ))}
+          </ol>
+          {step >= QUOTE_FROM && (
+            <PosRunningTotal quote={q?.quote || null} status={qStatus} lines={lines} catalog={catalog} money={m} beforeLenses={step < RX_FROM} />
+          )}
+        </div>
+      )}
+
+      <div className={`adm-card pos-card ${frameListOpen ? "ac-open" : ""}`}>
         {stepName === "customer" && (
           <>
+            <div className="pos-cust-grid">
+            <div className="pos-cust-main">
             <label className="pos-search">
               <Icon name="search" size={16} />
-              <input value={custQ} onChange={(e) => setCustQ(e.target.value)} placeholder={t("adm.pos.cust.search")} aria-label={t("adm.pos.cust.search")} />
+              <input type="search" enterKeyHint="search" autoComplete="off" autoCorrect="off" spellCheck={false} maxLength={80} value={custQ} onChange={(e) => setCustQ(e.target.value)} placeholder={t("adm.pos.cust.search")} aria-label={t("adm.pos.cust.search")} />
             </label>
             {custHits.length > 0 && (
               <ul className="pos-hits">
@@ -462,83 +1050,157 @@ export default function PosSale({ me }) {
                 ))}
               </ul>
             )}
-            {customerId && (
-              <div className="pos-picked">
-                <Icon name="user" size={14} /> {t("adm.pos.cust.existing")}
-                {custInfo?.sales?.length ? ` · ${t("adm.pos.cust.purchases", { n: custInfo.sales.length })}` : ""}
-                <button type="button" className="btn-xs" onClick={newCustomer}>{t("adm.pos.cust.new")}</button>
-              </div>
-            )}
+            {!customerId && dupNotices.map((k) => {
+              const c = dup[k].hit;
+              const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || c.email || c.phone || "";
+              return (
+                <div key={k} className="pos-dup" role="status">
+                  <Icon name="info" size={15} />
+                  <span>{t(`adm.pos.dup.${k}`, { name })}<small className="muted">{[k === "phone" ? c.email : c.phone].filter(Boolean).join("")}</small></span>
+                  <span className="pos-dup-actions">
+                    <button type="button" className="btn-xs primary" onClick={() => pickCustomer(c)}><Icon name="user" size={12} /> {t("adm.pos.dup.use")}</button>
+                    <button type="button" className="btn-xs" onClick={() => dismissDup(k)}>{t("adm.pos.dup.other")}</button>
+                  </span>
+                </div>
+              );
+            })}
             <div className="pos-form">
-              <label>{t("adm.pos.cust.first")}<input value={customer.first_name} onChange={setC("first_name")} autoComplete="off" /></label>
-              <label>{t("adm.pos.cust.last")}<input value={customer.last_name} onChange={setC("last_name")} autoComplete="off" /></label>
-              <label>{t("adm.pos.cust.email")}<input type="email" value={customer.email} onChange={setC("email")} autoComplete="off" /></label>
-              <label>{t("adm.pos.cust.phone")}<input type="tel" value={customer.phone} onChange={setC("phone")} autoComplete="off" /></label>
-              <label>{t("adm.pos.cust.birth")}<input type="date" value={customer.birth_date} onChange={setC("birth_date")} /></label>
+              <label>{t("adm.pos.cust.first")}<input maxLength={LIMITS.name} value={customer.first_name} onChange={setC("first_name")} autoComplete="off" autoCapitalize="words" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("first_name").props} /><FieldError error={custField("first_name").problem} /></label>
+              <label>{t("adm.pos.cust.last")}<input maxLength={LIMITS.name} value={customer.last_name} onChange={setC("last_name")} autoComplete="off" autoCapitalize="words" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("last_name").props} /><FieldError error={custField("last_name").problem} /></label>
+              <label><span>{t("adm.pos.cust.email")}{!requireEmail && <small className="pos-opt"> · {t("adm.pos.cust.optional")}</small>}</span><input type="email" inputMode="email" maxLength={LIMITS.email} value={customer.email} onChange={setC("email", typedEmail)} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("email").props} /><FieldError error={custField("email").problem} /></label>
+              <label>{t("adm.pos.cust.phone")}<input type="tel" inputMode="tel" maxLength={LIMITS.phone} value={customer.phone} onChange={setC("phone", typedPhone)} autoComplete="off" enterKeyHint="next" {...custField("phone").props} /><FieldError error={custField("phone").problem} /></label>
+              <label>
+                <span className="pos-birth-lbl">
+                  {t("adm.pos.cust.birth")}
+                  {/* La edad ya calculada, al lado: el dato con el que de verdad se trabaja. */}
+                  {ageFrom(customer.birth_date) !== null && <b className="pos-age">{t("adm.pos.cust.age", { n: ageFrom(customer.birth_date) })}</b>}
+                </span>
+                <input type="date" autoComplete="off" max={birthMax()} value={customer.birth_date} onChange={setC("birth_date")} {...custField("birth_date").props} />
+                <FieldError error={custField("birth_date").problem} />
+              </label>
             </div>
-            <details className="pos-address">
+            </div>
+            <div className="pos-cust-side">
+              {customerId && (
+                <div className="pos-picked">
+                  <Icon name="user" size={14} /> {t("adm.pos.cust.existing")}
+                  {/* Historial de compras (backend lib/patient-purchases.ts): todas las tiendas y la web. */}
+                  {custInfo?.purchase_summary?.purchases ? (
+                    <span className={`pos-repeat tier-${custInfo.purchase_summary.tier}`} title={t("adm.pos.repeat.hint")}>
+                      {t(`adm.pos.repeat.tier.${custInfo.purchase_summary.tier}`)} · {t("adm.pos.repeat.count", { n: custInfo.purchase_summary.purchases })}
+                      {custInfo.purchase_summary.last_at ? ` · ${t("adm.pos.repeat.last", { date: String(custInfo.purchase_summary.last_at).slice(0, 10) })}` : ""}
+                      {` · ${t("adm.pos.repeat.total", { v: m(custInfo.purchase_summary.total) })}`}
+                    </span>
+                  ) : custInfo?.sales?.length ? ` · ${t("adm.pos.cust.purchases", { n: custInfo.sales.length })}` : ` · ${t("adm.pos.repeat.first")}`}
+                  <button type="button" className="btn-xs" onClick={newCustomer}>{t("adm.pos.cust.new")}</button>
+                </div>
+              )}
+            <details className="pos-address" ref={addressRef}>
               <summary>{t("adm.pos.cust.address")}</summary>
               <div className="pos-form">
-                <label>{t("adm.pos.cust.address1")}<input value={customer.address_1} onChange={setC("address_1")} /></label>
-                <label>{t("adm.pos.cust.city")}<input value={customer.city} onChange={setC("city")} /></label>
-                <label>{t("adm.pos.cust.state")}<input value={customer.province} onChange={setC("province")} /></label>
-                <label>{t("adm.pos.cust.zip")}<input value={customer.postal_code} onChange={setC("postal_code")} /></label>
+                <label>{t("adm.pos.cust.address1")}<AddressInput maxLength={LIMITS.street} value={customer.address_1} onChange={setC("address_1")} {...custField("address_1").props} onPick={(p) => setCustomer((c) => ({ ...c, address_1: p.area ? "" : p.address_1 || c.address_1, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /><FieldError error={custField("address_1").problem} /></label>
+                <label>{t("adm.pos.cust.city")}<input maxLength={LIMITS.city} value={customer.city} onChange={setC("city")} autoComplete="off" autoCapitalize="words" enterKeyHint="next" {...custField("city").props} /><FieldError error={custField("city").problem} /></label>
+                <label>{t("adm.pos.cust.state")}<input maxLength={LIMITS.state} value={customer.province} onChange={setC("province")} autoComplete="off" autoCapitalize="characters" enterKeyHint="next" {...custField("province").props} /><FieldError error={custField("province").problem} /></label>
+                <label>{t("adm.pos.cust.zip")}<AddressInput mode="zip" inputMode="numeric" maxLength={LIMITS.zip} value={customer.postal_code} onChange={setC("postal_code", typedZip)} {...custField("postal_code").props} onPick={(p) => setCustomer((c) => ({ ...c, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /><FieldError error={custField("postal_code").problem} /></label>
               </div>
             </details>
             <fieldset className="pos-wears">
               <legend>{t("adm.pos.cust.wears")}</legend>
               <label><input type="radio" checked={wears === true} onChange={() => setWears(true)} /> {t("adm.pos.yes")}</label>
               <label><input type="radio" checked={wears === false} onChange={() => setWears(false)} /> {t("adm.pos.no")}</label>
+              <FieldError error={showCustErrors && wears === null ? "val.wears" : null} />
             </fieldset>
+            </div>
+            </div>
+            {/* Usa espejuelos: se mide lo que usa hoy aquí mismo, para compararlo con la receta nueva
+                y ver si la vista ha empeorado (aviso de cambio óptico en Precio y en el recibo). */}
+            {wears && (
+              <div className="pos-worn-now">
+                <p className="adm-sub">{t("adm.pos.worn.hint")}</p>
+                <h3>{t("adm.pos.rx.worn")}<HelpTip topic="pos.rx.worn" /></h3>
+                {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
+                {/* Misma cuadrícula que la receta nueva; aquí la altura no es obligatoria (el lensómetro no la da). */}
+                <RxForm mode="worn" idp="worn" value={rxWorn} onChange={setRxWorn} type={rxWorn.type} errors={wornCheck.errors} warnings={wornCheck.warnings}
+                  showErrors={showCustErrors || rxFilled(rxWorn)} showMissingDate={showCustErrors} worn={worn} onWornChange={setWorn} wornFrame={wornFrame} onWornFrameChange={setWornFrame} history={custInfo?.history || []} />
+              </div>
+            )}
           </>
         )}
 
         {stepName === "frame" && (
           <>
-            <label className="pos-search">
-              <Icon name="barcode" size={16} />
-              <input value={prodQ} onChange={(e) => setProdQ(e.target.value)} placeholder={t("adm.pos.frame.search")} aria-label={t("adm.pos.frame.search")} autoFocus />
-            </label>
-            {prodHits.length > 0 && (
-              <ul className="pos-hits">
-                {prodHits.map((p) => (
-                  <li key={p.product_id} className="pos-prod">
-                    {p.thumbnail ? <img src={p.thumbnail} alt="" /> : <span className="pos-noimg"><Icon name="glasses" /></span>}
-                    <span className="pos-prod-main">
-                      <b>{p.title}</b>
-                      <small>{p.price == null ? t("adm.pos.frame.noPrice") : m(p.price)}</small>
-                      <span className="pos-variants">
-                        {p.variants.map((v) => (
-                          <button key={v.id} type="button" className="btn-xs" disabled={p.price == null} onClick={() => addFrame(p, v)}>
-                            <Icon name="plus" size={12} /> {v.title || v.sku || t("adm.pos.frame.add")}
-                          </button>
-                        ))}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
-              <Icon name="camera" size={14} /> {t("adm.pos.own.add")}
-            </button>
-            {own.open && (
-              <div className="pos-own">
-                <label>{t("adm.pos.own.description")}<input value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} /></label>
-                <label className="pos-file">
-                  <Icon name="camera" size={16} /> {own.photo ? t("adm.pos.own.retake") : t("adm.pos.own.photo")}
-                  <input type="file" accept="image/*" capture="environment" onChange={onOwnPhoto} />
-                </label>
-                {own.photo && <img className="pos-own-img" src={own.photo} alt={t("adm.pos.own.photo")} />}
-                <small className="muted">{t("adm.pos.own.hint")}</small>
-                <button type="button" className="btn-sm primary" onClick={addOwn}>{t("adm.pos.own.save")}</button>
-              </div>
-            )}
+            {/* Una sola montura por venta: del inventario o la del cliente. Elegida una, las dos vías se cierran hasta quitarla. */}
+            {lines.length === 0 ? (
+              <>
+                {/* ¿De dónde sale la montura? Tres formas, una sola montura por venta. */}
+                <p className="pos-frame-mode-title">{t("adm.pos.fm.label")}<HelpTip topic="pos.ownFrame" /></p>
+                <div className="pos-frame-mode" role="radiogroup" aria-label={t("adm.pos.fm.label")}>
+                  {FRAME_MODES.map((fm) => (
+                    <button key={fm.key} type="button" role="radio" aria-checked={frameMode === fm.key} className={frameMode === fm.key ? "on" : ""} onClick={() => { setFrameMode(fm.key); setOwnTried(false); }}>
+                      <Icon name={fm.icon} size={18} />
+                      <span><b>{t(`adm.pos.fm.${fm.key}`)}</b><small>{t(`adm.pos.fm.${fm.key}.hint`)}</small></span>
+                    </button>
+                  ))}
+                </div>
+                {frameMode === "catalog" && ownTried && <div className="pos-frame-missing" role="alert"><Icon name="alert" size={15} /> {t("adm.pos.fm.pickFirst")}</div>}
+                {frameMode === "catalog" && <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} onView={viewFrame} />}
+                {frameMode !== "catalog" && (
+                  <div className={`pos-own ${frameMode === "store" ? "is-store" : ""}`}>
+                    {/* Marca, modelo, color y las 3 medidas de la varilla (ancho del lente – puente – varilla) para el laboratorio. */}
+                    <div className="pos-own-grid">
+                      <label className={nameBad ? "err" : ""}><span>{t("adm.pos.own.brand")}{frameMode === "store" && <i className="pos-req"> *</i>}</span><input maxLength={60} aria-invalid={nameBad || undefined} value={own.brand} onChange={(e) => setOwn((o) => ({ ...o, brand: e.target.value }))} placeholder={t("adm.pos.own.brandPh")} autoCapitalize="words" enterKeyHint="next" /></label>
+                      <label className={nameBad ? "err" : ""}>{t("adm.pos.own.model")}<input maxLength={60} aria-invalid={nameBad || undefined} value={own.model} onChange={(e) => setOwn((o) => ({ ...o, model: e.target.value }))} placeholder={t("adm.pos.own.modelPh")} autoCapitalize="characters" enterKeyHint="next" /></label>
+                      <label>{t("adm.pos.own.color")}<input maxLength={40} value={own.color} onChange={(e) => setOwn((o) => ({ ...o, color: e.target.value }))} placeholder={t("adm.pos.own.colorPh")} autoCapitalize="sentences" enterKeyHint="next" /></label>
+                    </div>
+                    {nameBad && <small className="field-err pos-own-err" role="alert">{t(frameMode === "store" ? "adm.err.pos.store_frame_needs_name" : "adm.pos.own.needDescription")}</small>}
+                    <fieldset className="pos-own-size">
+                      <legend>{t("adm.pos.own.size")} <small className="muted">{t("adm.pos.own.sizeHint")}</small></legend>
+                      {Object.keys(OWN_SIZE).map((k) => (
+                        <label key={k} className={ownSizeBad(k, own[k]) ? "err" : ""}>
+                          {t(`adm.pos.own.${k}`)}
+                          <span className="pos-own-mm">
+                            <input inputMode="decimal" maxLength={5} value={own[k]} placeholder={OWN_SIZE[k][2]} aria-invalid={ownSizeBad(k, own[k]) || undefined}
+                              onChange={(e) => setOwn((o) => ({ ...o, [k]: e.target.value.replace(/[^\d.,]/g, "") }))} enterKeyHint="next" />
+                            <small>mm</small>
+                          </span>
+                          {ownSizeBad(k, own[k]) && <small className="field-err" role="alert">{t("adm.pos.own.range", { min: OWN_SIZE[k][0], max: OWN_SIZE[k][1] })}</small>}
+                        </label>
+                      ))}
+                    </fieldset>
+                    {frameMode === "store" && (
+                      <label className={`pos-store-price ${priceBad ? "err" : ""}`}>
+                        <span>{t("adm.pos.store.price")}<i className="pos-req"> *</i></span>
+                        <span className="pos-money-in"><b>$</b>
+                          <input inputMode="decimal" maxLength={9} value={own.price} placeholder="0.00" aria-invalid={priceBad || undefined}
+                            onChange={(e) => setOwn((o) => ({ ...o, price: e.target.value.replace(/[^\d.]/g, "") }))} enterKeyHint="done" />
+                        </span>
+                        {storePriceBad(own.price) ? <small className="field-err" role="alert">{t("adm.pos.store.priceRange", { max: STORE_PRICE_MAX })}</small> : priceBad ? <small className="field-err" role="alert">{t("adm.pos.store.priceMissing")}</small> : <small className="muted">{t("adm.pos.store.priceHint")}</small>}
+                      </label>
+                    )}
+                    <label>{t("adm.pos.own.notes")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t(frameMode === "store" ? "adm.pos.store.notesPh" : "adm.pos.own.placeholder")} autoCapitalize="sentences" enterKeyHint="done" /></label>
+                    {/* Cámara trasera o galería; vista previa con «Repetir foto». La foto se reduce en photoDataUrl (imagePrep). */}
+                    {frameMode === "store" && <span className="pos-store-photo-title">{t("adm.pos.store.photoTitle")}</span>}
+                    <PosCapture onFile={onOwnPhoto} preview={own.photo} cameraLabel={t("adm.pos.own.photo")} fileLabel={t("adm.pos.own.file")}
+                      onClear={() => setOwn((o) => ({ ...o, photo: null }))} previewAlt={t("adm.pos.own.tag")} />
+                    <small className="muted">{t(frameMode === "store" ? "adm.pos.store.hint" : "adm.pos.own.hint")}</small>
+                    <button type="button" className="btn-sm primary" onClick={addOwn}>{t(frameMode === "store" ? "adm.pos.store.save" : "adm.pos.own.save")}</button>
+                  </div>
+                )}
+              </>
+            ) : <small className="muted">{t("adm.pos.frame.onlyOne")}</small>}
             <ul className="pos-lines">
-              {lines.map((l) => (
-                <li key={l.key}>
-                  <Icon name={l.kind === "own_frame" ? "camera" : "glasses"} size={16} />
-                  <span><b>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}</b> <small className="muted">{l.kind === "own_frame" ? l.description : l.variant_title}</small></span>
+              {lines.map((l) => l.kind === "frame" ? (
+                <li key={l.key} className="pos-line-card">
+                  <PosFrameCard frame={l} money={m} onRemove={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
+                    onChangeColor={(v) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, variant_id: v.id, variant_title: v.title, color: v.color ?? v.title, sku: v.sku ?? null, barcode: v.barcode ?? null, image: v.image || x.images?.[0] || null } : x)))} />
+                </li>
+              ) : (
+                <li key={l.key} className={l.kind === "store_frame" ? "is-store" : ""}>
+                  <PosFramePhoto line={l} />
+                  <span>
+                    <b>{t(l.kind === "store_frame" ? "adm.pos.store.tag" : "adm.pos.own.tag")}</b> <small className="muted">{l.title || l.description}</small>
+                    <small className={`pos-frame-charge ${l.kind === "store_frame" ? "paid" : "free"}`}>{l.kind === "store_frame" ? t("adm.pos.store.charged", { v: m(l.store_price) }) : t("adm.pos.own.notCharged")}</small>
+                  </span>
                   <button type="button" className="btn-xs warn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>
                 </li>
               ))}
@@ -548,83 +1210,79 @@ export default function PosSale({ me }) {
 
         {stepName === "rx" && (
           <>
-            <label className="pos-check">
-              <input type="checkbox" checked={noRx} onChange={(e) => setNoRx(e.target.checked)} /> {t("adm.pos.rx.none")}
-            </label>
+            {frameCards}
+            <div className="pos-rx-choices">
+              <label className={`pos-check pos-rx-pending ${rxPending ? "on" : ""}`}>
+                <input type="checkbox" checked={rxPending} onChange={(e) => { setRxPending(e.target.checked); if (e.target.checked) setNoRx(false); }} />
+                <span><b>{t("adm.pos.rx.pending")}</b><small>{t("adm.pos.rx.pendingHint")}</small></span>
+              </label>
+              <label className="pos-check">
+                <input type="checkbox" checked={noRx} onChange={(e) => { setNoRx(e.target.checked); if (e.target.checked) setRxPending(false); }} /> {t("adm.pos.rx.none")}
+              </label>
+            </div>
             {noRx && lines.some((l) => l.kind === "own_frame") && <div className="adm-demo-banner">{t("adm.err.pos.own_frame_needs_lenses")}</div>}
-            {!noRx && (
-              <>
-                <div className="pos-rx-head">
-                  <h3>{t("adm.pos.rx.new")}</h3>
-                  <label className="pos-file">
-                    <Icon name="camera" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.photo")}
-                    <input type="file" accept="image/*,application/pdf" onChange={onOcr} disabled={ocr.status === "loading"} />
-                  </label>
-                </div>
-                {ocr.status === "done" && !ocr.confirmed && (
-                  <div className="pos-ocr">
-                    {t("adm.pos.rx.review")}
-                    <button type="button" className="btn-xs primary" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>{t("adm.pos.rx.confirm")}</button>
+            {rxPending && <p className="pos-rx-pending-note" role="note"><Icon name="clock" size={14} /> {t("adm.pos.rx.pendingNote")}</p>}
+            {!noRx && !rxPending && (
+              <div className="pos-rx-layout">
+                {/* Apaisada: la receta a la izquierda y la foto (con su vista previa) a la derecha; vertical: la foto primero. */}
+                <aside className="pos-rx-aside">
+                  <div className="pos-rx-ocr">
+                    {/* Dos entradas: la cámara de la tablet o una foto/PDF ya guardado (galería o archivos). */}
+                    <PosCapture onFile={onOcr} accept="image/*,application/pdf" busy={ocr.status === "loading"} busyLabel={t("adm.pos.rx.reading")}
+                      cameraLabel={t("adm.pos.rx.takePhoto")} fileLabel={t("adm.pos.rx.upload")} previewAlt={t("adm.pos.cap.preview")} />
+                    <HelpTip topic="pos.rx.ocr" size={16} />
                   </div>
-                )}
-                <RxGrid value={rxNew} onChange={setRxNew} idp="new" />
-                <label className="pos-inline">{t("adm.pos.rx.date")}<input type="date" value={rxNew.rx_date} onChange={(e) => setRxNew((r) => ({ ...r, rx_date: e.target.value }))} /></label>
-                {wears && (
-                  <>
-                    <h3>{t("adm.pos.rx.worn")}</h3>
-                    {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
-                    <RxGrid value={rxWorn} onChange={setRxWorn} idp="worn" measures={false} />
-                    <div className="pos-form">
-                      <label>{t("adm.pos.rx.source")}
-                        <select value={worn.source} onChange={(e) => setWorn((w) => ({ ...w, source: e.target.value }))}>
-                          {["previous_rx", "lensometer", "prior_sale"].map((s) => <option key={s} value={s}>{t(`adm.pos.rx.src.${s}`)}</option>)}
-                        </select>
-                      </label>
-                      <label>{t("adm.pos.rx.when")}
-                        <select value={worn.dateMode} onChange={(e) => setWorn((w) => ({ ...w, dateMode: e.target.value }))}>
-                          <option value="exact">{t("adm.pos.rx.exact")}</option>
-                          <option value="approx">{t("adm.pos.rx.approx")}</option>
-                        </select>
-                      </label>
-                      {worn.dateMode === "exact"
-                        ? <label>{t("adm.pos.rx.date")}<input type="date" value={worn.date} onChange={(e) => setWorn((w) => ({ ...w, date: e.target.value }))} /></label>
-                        : <label>{t("adm.pos.rx.monthsAgo")}<input inputMode="numeric" value={worn.months} onChange={(e) => setWorn((w) => ({ ...w, months: e.target.value.replace(/\D/g, "") }))} /></label>}
+                  {wears && (
+                    <div className="pos-worn-summary">
+                      <span><b>{t("adm.pos.rx.worn")}</b> · {t("adm.pos.worn.takenInStep1")}</span>
+                      <small className="muted">{wornSummary}</small>
+                      <button type="button" className="btn-xs" onClick={() => setStep(0)}><Icon name="edit" size={12} /> {t("adm.pos.worn.edit")}</button>
                     </div>
-                    {custInfo?.history?.length > 1 && (
-                      <details className="pos-history">
-                        <summary>{t("adm.pos.rx.history", { n: custInfo.history.length })}</summary>
-                        <ul>
-                          {custInfo.history.map((h) => (
-                            <li key={h.id}>
-                              <b>{h.rx_number || h.kind || "—"}</b> · {h.rx_date || h.created_at.slice(0, 10)}
-                              {h.change && <> · {t("adm.pos.change.se")} {h.change.max_se == null ? "—" : h.change.max_se.toFixed(2)} {h.change.significant ? "⚠" : ""}</>}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    )}
-                  </>
-                )}
-              </>
+                  )}
+                </aside>
+                <div className="pos-rx-main">
+                  <div className="pos-rx-head">
+                    <h3>{t("adm.pos.rx.new")}</h3>
+                  </div>
+                  {ocr.status === "done" && !ocr.confirmed && (
+                    <div className="pos-ocr">
+                      {t("adm.pos.rx.review")}
+                      <button type="button" className="btn-xs primary" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>{t("adm.pos.rx.confirm")}</button>
+                    </div>
+                  )}
+                  <RxForm mode="new" idp="new" value={rxNew} onChange={setRxNew} type={rxNew.type} errors={rxCheck.errors} warnings={rxCheck.warnings}
+                    showErrors={rxFilled(rxNew)} source={ocr.status === "done" ? "ocr" : "manual"} disabled={ocr.status === "loading"} />
+                  <VisualAcuityCard value={clinical} onChange={setClinical} disabled={ocr.status === "loading"} idp="new-va" />
+                </div>
+              </div>
             )}
           </>
         )}
 
         {stepName === "lenses" && (
+          <>
           <ul className="pos-lens-lines">
             {lines.map((l) => (
               <li key={l.key}>
-                <b>{l.kind === "own_frame" ? `${t("adm.pos.own.tag")} · ${l.description}` : `${l.title} · ${l.variant_title || ""}`}</b>
-                <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
+                <div className="pos-lens-head">
+                  <PosFramePhoto line={l} size="md" />
+                  <b>{l.kind === "frame" ? `${l.title} · ${l.variant_title || ""}` : `${t(l.kind === "store_frame" ? "adm.pos.store.tag" : "adm.pos.own.tag")} · ${l.title || l.description}`}</b>
+                </div>
+                {l.kind === "own_frame" && !noRx && <LensPresets line={l} catalog={catalog} rxForm={rxNew} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />}
+                <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} rxPending={pendingRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
               </li>
             ))}
-            {!noRx && hasAdd(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
+            {!noRx && !pendingRx && isMulti(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
           </ul>
+          {!catalog.live && <small className="muted pos-lens-offline" title={t("adm.pos.lens.offlineListHint")}>{t("adm.pos.lens.offlineList")}</small>}
+          </>
         )}
 
         {stepName === "price" && (
           <>
-            {!q && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
+            {frameCards}
+            {!q && <div className={`adm-src-note ${qStatus === "error" ? "" : "loading"}`}>{t(qStatus === "error" ? "adm.pos.flow.pending" : "adm.ord.loading")}</div>}
+            {q && qStatus === "error" && <div className="adm-demo-banner"><Icon name="alert" size={14} /> {t("adm.pos.flow.stale")}</div>}
             {q && (
               <>
                 <table className="adm-table responsive pos-quote">
@@ -632,7 +1290,7 @@ export default function PosSale({ me }) {
                   <tbody>
                     {q.quote.lines.map((l, i) => (
                       <tr key={i} className={l.below_minimum ? "warn" : ""}>
-                        <td data-label={t("adm.pos.price.item")}>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}{l.variant_title ? ` · ${l.variant_title}` : ""}{l.below_minimum && <small className="pos-flag"> {t("adm.pos.price.belowMin")}</small>}</td>
+                        <td data-label={t("adm.pos.price.item")}>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.kind === "store_frame" ? `${t("adm.pos.store.tag")} · ${l.title}` : l.title}{l.variant_title ? ` · ${l.variant_title}` : ""}{l.below_minimum && <small className="pos-flag"> {t("adm.pos.price.belowMin")}</small>}{promoOf(l) && <small className="pos-sum-promo pos-promo-line">{t("adm.pm.promoBefore")} <s>{m(promoOf(l).before)}</s> · {t("adm.pm.promoTag", { pct: promoOf(l).pct })}</small>}</td>
                         <td data-label={t("adm.pos.price.list")}>{m(l.list)}</td>
                         <td data-label={t("adm.pos.price.tax")}>{l.tax_amount ? m(l.tax_amount) : "—"}</td>
                         <td data-label={t("adm.pos.price.total")}><b>{m(l.unit_price)}</b></td>
@@ -640,13 +1298,37 @@ export default function PosSale({ me }) {
                     ))}
                   </tbody>
                 </table>
+                {(store?.promotions || []).length > 0 && (
+                  <div className="pos-promo">
+                    <label><span><Icon name="tag" size={12} /> {t("adm.promo.pos.label")}</span>
+                      <select value={promoId} onChange={(e) => { setPromoId(e.target.value); setPromoRef(""); }}>
+                        <option value="">{t("adm.promo.pos.none")}</option>
+                        {store.promotions.map((p) => {
+                          // «Desde la N.ª compra»: esta venta sería la compra n.º (compras previas + 1).
+                          const nth = (custInfo?.purchase_summary?.purchases || 0) + 1;
+                          const short = p.min_purchases && nth < p.min_purchases;
+                          return <option key={p.id} value={p.id} disabled={short}>{p.name}{p.min_purchases ? ` (${t("adm.promo.fromNth", { n: p.min_purchases })})` : ""}{short ? ` — ${t("adm.promo.pos.notYet")}` : ""}</option>;
+                        })}
+                      </select>
+                    </label>
+                    {promo && <span className="pos-promo-note"><Icon name="info" size={12} />{promoEffect(promo, t, m)}{promo.min_total ? ` · ${t("adm.promo.minShort", { value: m(promo.min_total) })}` : ""}{promo.description ? ` — ${promo.description}` : ""}</span>}
+                    {promo?.kind === "bogo" && (
+                      <label><span>{t("adm.promo.pos.ref", { n: promo.buy_qty })}</span>
+                        <input maxLength={120} value={promoRef} onChange={(e) => setPromoRef(e.target.value)} placeholder={t("adm.promo.pos.refPh")} autoComplete="off" />
+                      </label>
+                    )}
+                    {promoWaitsRef && <span className="pos-promo-note warn"><Icon name="alert" size={12} />{t("adm.promo.pos.refNeeded")}</span>}
+                    {promo && q?.promotion && !q.promotion.priced && q.promotion.pct ? <span className="pos-promo-note warn"><Icon name="alert" size={12} />{t("adm.promo.pos.discountWins", { d: q.quote.discount_pct, p: q.promotion.pct })}</span> : null}
+                  </div>
+                )}
                 <div className="pos-discount">
-                  <label>{t("adm.pos.price.discount")}<input inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
+                  <label><span>{t("adm.pos.price.discount")}<HelpTip topic="pos.step.price" /></span><input inputMode="decimal" enterKeyHint="done" autoComplete="off" maxLength={5} value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
                   <small className="muted">{ctx.discount_limit_pct == null ? t("adm.pos.price.noLimit") : t("adm.pos.price.limit", { n: ctx.discount_limit_pct })}</small>
                 </div>
                 <dl className="pos-totals">
                   <dt>{t("adm.pos.price.listTotal")}</dt><dd>{m(q.quote.list_cents / 100)}</dd>
-                  {q.quote.discount_cents > 0 && <><dt>{t("adm.pos.price.discountAmt", { n: q.quote.discount_pct })}</dt><dd>−{m(q.quote.discount_cents / 100)}</dd></>}
+                  {q.quote.discount_cents > 0 && <><dt>{q.discount_source === "promotion" && q.promotion ? t("adm.promo.pos.line", { name: q.promotion.name, n: q.quote.discount_pct }) : t("adm.pos.price.discountAmt", { n: q.quote.discount_pct })}</dt><dd>−{m(q.quote.discount_cents / 100)}</dd></>}
+                  {q.promotion && !q.promotion.pct && <><dt>{t("adm.promo.pos.included", { name: q.promotion.name })}</dt><dd>{q.promotion.value_cents ? m(q.promotion.value_cents / 100) : "✓"}</dd></>}
                   {q.quote.tax_cents > 0 && <><dt>{t("adm.pos.price.tax")}</dt><dd>{m(q.quote.tax_cents / 100)}</dd></>}
                   <dt className="big">{t("adm.pos.price.total")}</dt><dd className="big">{m(q.quote.total)}</dd>
                 </dl>
@@ -657,7 +1339,7 @@ export default function PosSale({ me }) {
                     <b><Icon name="lock" size={14} /> {q.quote.below_minimum ? t("adm.pos.approval.belowMin") : t("adm.pos.approval.needed")}</b>
                     {!approval && (
                       <>
-                        <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("adm.pos.approval.reason")} aria-label={t("adm.pos.approval.reason")} />
+                        <input maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("adm.pos.approval.reason")} aria-label={t("adm.pos.approval.reason")} autoCapitalize="sentences" enterKeyHint="send" />
                         <button type="button" className="btn-sm primary" disabled={busy} onClick={askApproval}>{t("adm.pos.approval.ask")}</button>
                       </>
                     )}
@@ -671,11 +1353,13 @@ export default function PosSale({ me }) {
 
         {stepName === "payment" && q && (
           <>
+            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} rxPending={pendingRx} approval={approval} delivery={delivery} notifyEmail={notifyEmail && hasEmail} notifySms={notifySms} receiptDetail={receiptDetail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
             <dl className="pos-totals">
               <dt className="big">{t("adm.pos.price.total")}</dt><dd className="big">{m(total)}</dd>
             </dl>
-            {payments.map((p, i) => {
+            {payRows.map((p, i) => {
               const meth = methods.find((x) => x.code === p.method_code);
+              const othersCents = payRows.reduce((sum, x, j) => sum + (j === i || x.suggested ? 0 : toCents(x.amount)), 0);
               const set = (patch) => setPayments((ps) => ps.map((x, j) => (j === i ? { ...x, ...patch } : x)));
               const tendered = Number(p.details.tendered) || 0;
               return (
@@ -684,28 +1368,30 @@ export default function PosSale({ me }) {
                     <option value="">{t("adm.pos.pay.method")}</option>
                     {methods.map((x) => <option key={x.code} value={x.code}>{methodName(x, t, lang)}</option>)}
                   </select>
-                  <input inputMode="decimal" value={p.amount} onChange={(e) => set({ amount: e.target.value.replace(/[^\d.]/g, "") })} placeholder={t("adm.pos.pay.amount")} aria-label={t("adm.pos.pay.amount")} />
-                  <button type="button" className="btn-xs" onClick={() => set({ amount: String(Math.max(0, Math.round((payState.balance + (Number(p.amount) || 0)) * 100) / 100)) })}>{t("adm.pos.pay.rest")}</button>
+                  <input inputMode="decimal" autoComplete="off" enterKeyHint="done" maxLength={LIMITS.amount} value={p.amount} onChange={(e) => set({ amount: e.target.value.replace(/[^\d.]/g, "") })} placeholder={t("adm.pos.pay.amount")} aria-label={t("adm.pos.pay.amount")} />
+                  <button type="button" className="btn-xs" onClick={() => set({ amount: centsText(toCents(total) - othersCents) })}>{t("adm.pos.pay.rest")}</button>
                   {meth?.reference_fields?.map((f) => (
-                    <input key={f.key} value={p.details[f.key] || ""} onChange={(e) => set({ details: { ...p.details, [f.key]: e.target.value } })}
+                    <input key={f.key} maxLength={f.key === "last4" ? 4 : 80} inputMode={f.key === "last4" ? "numeric" : undefined} autoComplete="off" autoCorrect="off" spellCheck={false} value={p.details[f.key] || ""} onChange={(e) => set({ details: { ...p.details, [f.key]: f.key === "last4" ? e.target.value.replace(/\D/g, "") : e.target.value } })}
                       placeholder={`${meth.builtin ? t(`adm.pos.ref.${f.key}`) : (lang === "en" && f.label_en) || f.label || f.key}${f.required ? " *" : ""}`}
                       aria-label={meth.builtin ? t(`adm.pos.ref.${f.key}`) : f.label || f.key} />
                   ))}
                   {meth?.counts_as_cash && (
                     <>
-                      <input inputMode="decimal" value={p.details.tendered || ""} onChange={(e) => set({ details: { ...p.details, tendered: e.target.value.replace(/[^\d.]/g, "") } })} placeholder={t("adm.pos.pay.tendered")} aria-label={t("adm.pos.pay.tendered")} />
+                      <input inputMode="decimal" autoComplete="off" enterKeyHint="done" maxLength={LIMITS.amount} value={p.details.tendered || ""} onChange={(e) => set({ details: { ...p.details, tendered: e.target.value.replace(/[^\d.]/g, "") } })} placeholder={t("adm.pos.pay.tendered")} aria-label={t("adm.pos.pay.tendered")} />
                       {tendered > 0 && <small className="pos-change-due">{t("adm.pos.pay.change", { v: m(Math.max(0, tendered - (Number(p.amount) || 0))) })}</small>}
                     </>
                   )}
+                  <FieldError error={rowProblem(p)} />
+                  {p.suggested && p.amount && <small className="muted pos-pay-note">{t("adm.pos.pay.suggested")}</small>}
                   {payments.length > 1 && <button type="button" className="btn-xs warn" onClick={() => setPayments((ps) => ps.filter((_, j) => j !== i))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>}
                 </div>
               );
             })}
-            {payments.length < 6 && <button type="button" className="btn-sm" onClick={() => setPayments((ps) => [...ps, { method_code: "", amount: "", details: {} }])}><Icon name="plus" size={14} /> {t("adm.pos.pay.another")}</button>}
+            {payments.length < 6 && <button type="button" className="btn-sm" onClick={() => setPayments((ps) => [...ps, EMPTY_PAYMENT])}><Icon name="plus" size={14} /> {t("adm.pos.pay.another")}</button>}
             <dl className="pos-totals">
               <dt>{t("adm.pos.pay.paid")}</dt><dd>{m(payState.paid)}</dd>
               {payState.ins > 0 && <><dt>{t("adm.pos.pay.insurance")}</dt><dd>{m(payState.ins)}</dd></>}
-              <dt className="big">{t("adm.pos.pay.balance")}</dt><dd className={`big ${payState.balance < 0 ? "neg" : ""}`}>{m(payState.balance)}</dd>
+              <dt className="big">{t("adm.pos.pay.balance")}<HelpTip topic="pos.step.payment" /></dt><dd className={`big ${payState.balance < 0 ? "neg" : ""}`}>{m(payState.balance)}</dd>
             </dl>
             {payState.balance < 0 && <div className="adm-demo-banner">{t("adm.err.pos.overpaid")}</div>}
             <fieldset className="pos-wears">
@@ -714,7 +1400,26 @@ export default function PosSale({ me }) {
               <label><input type="radio" checked={delivery === "ship"} onChange={() => setDelivery("ship")} /> {t("adm.pos.pay.ship")}</label>
             </fieldset>
             {delivery === "ship" && !(customer.address_1 && customer.city && customer.postal_code) && <div className="adm-demo-banner">{t("adm.err.pos.address_required_to_ship")}</div>}
-            <label className="pos-check"><input type="checkbox" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} /> {t("adm.pos.pay.notify")}</label>
+            <SaleDateCard value={soldOn} onChange={setSoldOn} timeZone={ctx?.timezone} maxDays={ctx?.backdate_max_days ?? 366} disabled={busy} balance={payState.balance} />
+            <WearingCaptureCard value={wear} onChange={setWear} busy={busy} />
+            {/* Avisos al paciente: un interruptor por canal, para no saturar su correo ni su teléfono. */}
+            <fieldset className="pos-notify">
+              <legend>{t("adm.pos.pay.notifyTitle")}</legend>
+              <label className={`pos-switch ${hasEmail ? "" : "is-off"}`}>
+                <input type="checkbox" role="switch" checked={notifyEmail && hasEmail} disabled={!hasEmail} onChange={(e) => setNotifyEmail(e.target.checked)} />
+                <span className="pos-switch-t"><b><Icon name="mail" size={15} /> {t("adm.pos.pay.notify")}</b><small>{hasEmail ? customer.email.trim() : t("adm.pos.pay.notifyNoEmail")}</small></span>
+              </label>
+              {notifyEmail && hasEmail && (
+                <div className="pos-receipt-detail">
+                  <label className="pos-check"><input type="checkbox" checked={receiptDetail} onChange={(e) => setReceiptDetail(e.target.checked)} /> {t("adm.pos.pay.notifyDetail")}</label>
+                  <small className="muted">{t(receiptDetail ? "adm.pos.pay.notifyDetailOn" : "adm.pos.pay.notifySimple")}</small>
+                </div>
+              )}
+              <label className="pos-switch">
+                <input type="checkbox" role="switch" checked={notifySms} onChange={(e) => setNotifySms(e.target.checked)} />
+                <span className="pos-switch-t"><b><Icon name="phone" size={15} /> {t("adm.pos.pay.notifySms")}</b><small>{customer.phone.trim() || "—"} · {t("adm.pos.pay.notifySmsHint")}</small></span>
+              </label>
+            </fieldset>
           </>
         )}
 
@@ -722,6 +1427,7 @@ export default function PosSale({ me }) {
           <div className="pos-done">
             <Icon name="checkCircle" size={40} />
             <h3>{t("adm.pos.done.title", { n: result.number })}</h3>
+            {result.sold_on && <p className="pos-wear-status"><Icon name="calendar" size={14} /> {t("adm.sdt.doneAs", { date: result.sold_on })}{result.delivered_at ? ` · ${t("adm.sdt.doneDelivered")}` : ""}</p>}
             <dl className="pos-totals">
               <dt>{t("adm.pos.price.total")}</dt><dd>{m(result.total)}</dd>
               <dt>{t("adm.pos.pay.paid")}</dt><dd>{m(result.paid)}</dd>
@@ -731,26 +1437,41 @@ export default function PosSale({ me }) {
               {result.rx_number && <><dt>{t("adm.pos.done.rx")}</dt><dd>{result.rx_number}</dd></>}
               {result.promised_on && <><dt>{t("adm.pos.done.promised")}</dt><dd>{result.promised_on}</dd></>}
             </dl>
+            {wearSaved && (
+              <p className={`pos-wear-status ${wearSaved}`}>
+                <Icon name={wearSaved === "failed" ? "alert" : wearSaved === "saved" ? "camera" : "clock"} size={14} />{" "}
+                {t(wearSaved === "failed" ? "adm.wear.saleNoPhoto" : wearSaved === "saved" ? "adm.wear.saved" : "adm.wear.saving")}
+              </p>
+            )}
+            {result.frame_photo_failed && (
+              <p className="pos-wear-status failed">
+                <Icon name="alert" size={14} /> {t("adm.pos.own.photoNotSaved")}
+              </p>
+            )}
+            {/* Registrada con datos pendientes: qué falta, cómo completarlo, y el botón para hacerlo ya. */}
+            <MissingData missing={result.missing} onComplete={() => salePanel.open(result.id)} />
             <OpticalChange change={result.optical_change} />
-            <SaleDocuments saleId={result.id} />
+            <SaleDocuments saleId={result.id} printer={terminal?.printer} localPhotos={result.frame_photos} rxPending={result.rx_pending === true} />
             <button type="button" className="btn-sm primary" onClick={reset}><Icon name="plus" size={14} /> {t("adm.pos.done.new")}</button>
           </div>
         )}
       </div>
 
       {stepName !== "done" && (
-        <div className="pos-nav">
+        <div className="pos-nav pos-nav-sticky">
           <button type="button" className="btn-sm" disabled={step === 0 || busy} onClick={() => setStep((s) => s - 1)}><Icon name="chevronLeft" size={14} /> {t("adm.pos.back")}</button>
           {stepName === "payment" ? (
-            <button type="button" className="btn-sm primary big" disabled={!canNext() || busy} onClick={confirmSale}>
-              {busy ? "…" : t("adm.pos.confirm", { total: m(total) })}
+            <button type="button" className={`btn-sm primary big ${canNext() ? "" : "is-blocked"}`} disabled={busy} onClick={tryConfirm}>
+              {busy ? t("adm.pos.confirming") : t("adm.pos.confirm", { total: m(total) })}
             </button>
           ) : (
-            <button type="button" className="btn-sm primary" disabled={!canNext()} onClick={() => setStep((s) => s + 1)}>{t("adm.pos.next")} <Icon name="chevronRight" size={14} /></button>
+            <button type="button" className={`btn-sm primary ${canNext() ? "" : "is-blocked"}`} disabled={busy} onClick={next}>{t("adm.pos.next")} <Icon name="chevronRight" size={14} /></button>
           )}
         </div>
       )}
       {terminal && <p className="muted pos-foot">{terminal.code} · {me?.email || ""}</p>}
+      {cardProduct && <AdminFrameCard product={cardProduct} onClose={() => setCardProduct(null)} />}
+      {salePanel.panel}
     </div>
   );
 }

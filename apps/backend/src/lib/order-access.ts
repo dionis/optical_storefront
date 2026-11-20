@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { storefrontOrigin } from "./storefront-origin";
 
 /**
  * Signed, stateless tokens that let a guest see their own orders.
@@ -169,13 +170,9 @@ export function buildMagicLink(token: string): string {
   return `${base}/my-orders?token=${encodeURIComponent(token)}`;
 }
 
-/** Public origin of the storefront, shared by every outbound link we build. */
-export function storefrontOrigin(): string {
-  return (
-    process.env.STOREFRONT_URL ||
-    process.env.STORE_CORS?.split(",")[0] ||
-    "http://localhost:5198"
-  )
-    .trim()
-    .replace(/\/+$/, "");
-}
+/**
+ * Public origin of the storefront for the link being built: the domain of the
+ * current request or order when it is one of ours, else STOREFRONT_URL. See
+ * lib/storefront-origin.ts (several storefronts on one backend).
+ */
+export { storefrontOrigin };

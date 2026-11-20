@@ -1,0 +1,5 @@
+/* Login card extras for password recovery (HU-03). Same tokens as admin.css. */
+.adm-login-ok { background: var(--adm-green-soft, #e6f4ea); color: var(--adm-green-dark, #1b5e20); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+.adm-login-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin-top: 6px; }
+.adm-login-links .adm-back { margin-top: 0; }
+.adm-login-card .adm-login-sent { font-size: 15px; line-height: 1.6; color: var(--adm-ink, #1e2733); margin: 0; }

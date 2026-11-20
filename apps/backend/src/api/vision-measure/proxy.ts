@@ -19,6 +19,8 @@ const VISION_MEASURE_URL =
 // anónimo por script) y pasa por una cuota por IP real: ráfaga por hora y tope
 // diario. Los GET baratos (health, providers, estado de un job) quedan libres.
 import { clientIp } from "../../lib/client-ip"
+import { visionUsageEvents } from "../../lib/ai-usage"
+import { recordAiUsage } from "../../lib/ai-usage-data"
 
 const HOUR_LIMIT = Math.max(1, parseInt(process.env.VISION_PROXY_HOURLY_LIMIT || "10", 10) || 10)
 const DAY_LIMIT = Math.max(1, parseInt(process.env.VISION_PROXY_DAILY_LIMIT || "30", 10) || 30)
@@ -85,6 +87,17 @@ export async function proxyToVisionMeasure(
   }
 
   const text = await upstream.text()
+
+  // «Consumo IA»: the measurement answer (or a finished job) says which
+  // provider and model ran and what it cost. Best-effort, after the fact —
+  // never delays or changes what the client receives.
+  if (upstream.ok && targetPath.startsWith("/api/vision-measure") && text.includes("requestId")) {
+    try {
+      for (const ev of visionUsageEvents(JSON.parse(text))) void recordAiUsage(req.scope, ev)
+    } catch {
+      /* not JSON — nothing to record */
+    }
+  }
   res
     .status(upstream.status)
     .setHeader("Content-Type", upstream.headers.get("content-type") || "application/json")

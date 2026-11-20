@@ -1,3 +1,7 @@
+import type { Clinical } from "./visual-acuity";
+import { backdateRecord, type Backdate, type BackdateRecord } from "./sale-date";
+import { saleMissing, type MissingKey } from "./pos";
+import type { AppliedPromotion } from "./promotions";
 import type { ICustomerModuleService, IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import {
@@ -13,15 +17,21 @@ import type PosModuleService from "../modules/pos/service";
 import { PRESCRIPTION_MODULE } from "../modules/prescription/index";
 import type PrescriptionModuleService from "../modules/prescription/service";
 import { recordAudit } from "./audit";
+import { ensureStoreSession, recordSalePayments } from "./cash";
 import type { EstablishmentRow } from "./establishments";
-import { loadProductMetadata } from "./frame-specs";
-import { computeLensBreakdown } from "./lens-quote";
+import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } from "./frame-specs";
+import { LensFinishError, type LensFinish } from "./lens-finish";
+import { computeLensBreakdown, LensOptionError } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
-import { addBusinessDays, LAB_BUSINESS_DAYS } from "./order-status";
+import { fetchBoardOrder } from "./order-board";
+import { StageError, transitionOrderStage } from "./order-stage-transition";
+import { LAB_BUSINESS_DAYS } from "./order-status";
 import {
   discountLine,
+  localYear,
   lowestFreeTray,
   nextTerminalCode,
+  promisedDate,
   rxNumber,
   saleNumber,
   type CleanedPayments,
@@ -30,13 +40,27 @@ import {
   type PosLine,
   type PosPayment,
   type WornSource,
+  EMPTY_TERMINAL_USAGE,
+  rankCodeMatches,
+  type TerminalUsage,
+  type VariantCodes,
 } from "./pos";
+import { lensRxProblems, rxConfirmationProblem, storedVerifiedByUser, type LensRxDesign } from "./pos-lens-rules";
+import { EMPTY_SALE_DETAIL, loadSaleDetails, type LensCodes } from "./pos-sale-detail";
 import { prescriptionColumns } from "./prescription-write";
 import { projectOrder, voidFacts } from "./sale-facts";
 import { belowMinimum, lineMinimum, storeLinePrice } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
+import { applyPct, linePromoPcts, metadataSaysCase, NO_PROMO, productDiscountOf, promoStoreLine, type LinePromo } from "./price-matrix";
+import { storeDiscountIndex } from "./price-matrix-data";
+import { brandOf, isExposed } from "./store-assortment";
+import { absoluteImageUrl, absoluteImageUrls } from "./image-url";
+import { effectiveAssortmentRules } from "./store-assortment-data";
 import { resolveStoreSettings } from "./store-settings";
+import { tenant } from "./tenant";
 import { uploadPrivateImage } from "./tryon-image";
+import { storageConfigured } from "./s3";
+import { uploadStoreFramePhoto } from "./store-frame-photo";
 
 /**
  * The point-of-sale sale, end to end. A sale is a regular Medusa order:
@@ -122,8 +146,18 @@ export interface TerminalRow {
   name: string | null;
   receipt_locale: string;
   ticket_locale: string;
+  /** Printer as configured, free text ("thermal 80mm", "HP LaserJet"); null when unknown. Decides the default receipt layout. */
+  printer: string | null;
   is_active: boolean;
 }
+
+const printerText = (p: unknown): string | null => {
+  if (!p) return null;
+  if (typeof p === "string") return p;
+  const o = p as Record<string, unknown>;
+  const text = [o.type, o.kind, o.model, o.name, o.paper].filter((v) => typeof v === "string" && v).join(" ");
+  return text || null;
+};
 
 const toTerminal = (r: Record<string, unknown>): TerminalRow => ({
   id: String(r.id),
@@ -132,6 +166,7 @@ const toTerminal = (r: Record<string, unknown>): TerminalRow => ({
   name: (r.name as string | null) ?? null,
   receipt_locale: String(r.receipt_locale ?? "es"),
   ticket_locale: String(r.ticket_locale ?? "en"),
+  printer: printerText(r.printer),
   is_active: Boolean(r.is_active),
 });
 
@@ -162,6 +197,39 @@ export async function createTerminal(
   return toTerminal(created as unknown as Record<string, unknown>);
 }
 
+/** Usage of each till (sales, registers, approvals, sellers), for the Stores tab and the delete rule. */
+export async function terminalUsage(container: MedusaContainer, ids: string[]): Promise<Map<string, TerminalUsage>> {
+  const out = new Map<string, TerminalUsage>(ids.map((id) => [id, { ...EMPTY_TERMINAL_USAGE }]));
+  if (!ids.length) return out;
+  const pg = pgOf(container);
+  const count = async (table: string, extra?: (q: Knex.QueryBuilder) => void) => {
+    const q = pg(table).select("terminal_id").count({ n: "*" }).whereIn("terminal_id", ids).whereNull("deleted_at").groupBy("terminal_id");
+    extra?.(q);
+    return (await q) as Array<{ terminal_id: string; n: string | number }>;
+  };
+  const [sales, cash, open, approvals, sellers, activeSellers] = await Promise.all([
+    count("pos_sale"),
+    count("cash_session"),
+    count("cash_session", (q) => q.whereNull("closed_at")),
+    count("discount_approval"),
+    count("seller"),
+    count("seller", (q) => q.where("active", true)),
+  ]);
+  const add = (rows: Array<{ terminal_id: string; n: string | number }>, key: keyof TerminalUsage) => {
+    for (const r of rows) {
+      const u = out.get(r.terminal_id);
+      if (u) u[key] = Number(r.n) || 0;
+    }
+  };
+  add(sales, "sales");
+  add(cash, "cash_sessions");
+  add(open, "open_cash");
+  add(approvals, "approvals");
+  add(sellers, "sellers");
+  add(activeSellers, "active_sellers");
+  return out;
+}
+
 /** Every store sells from at least one till: the first one is made on demand. */
 export async function ensureTerminal(container: MedusaContainer, store: EstablishmentRow, actorId: string | null): Promise<TerminalRow[]> {
   const list = await listTerminals(container, [store.id]);
@@ -170,7 +238,7 @@ export async function ensureTerminal(container: MedusaContainer, store: Establis
 }
 
 /** Takes the lowest free tray of the store for a sale (race-safe via the partial unique index). */
-async function takeTray(container: MedusaContainer, establishmentId: string, saleId: string): Promise<number> {
+export async function takeTray(container: MedusaContainer, establishmentId: string, saleId: string): Promise<number> {
   const svc = pos(container);
   for (let attempt = 0; attempt < 5; attempt++) {
     const inUse = await svc.listPosTrays({ establishment_id: establishmentId, released_at: null } as never, { take: 5000 });
@@ -262,28 +330,31 @@ async function upsertCustomer(container: MedusaContainer, c: PosCustomer, custom
   const svc = container.resolve<ICustomerModuleService>(Modules.CUSTOMER);
   let existing = customerId ? (await svc.listCustomers({ id: customerId }, { take: 1 }))[0] : undefined;
   if (customerId && !existing) throw new PosError("customer_not_found", 404);
-  if (!existing) existing = (await svc.listCustomers({ email: c.email }, { take: 1, order: { created_at: "ASC" } }))[0];
-  if (!existing) {
+  // No email given: only the phone can match (an empty email must never "find" someone).
+  if (!existing && c.email) existing = (await svc.listCustomers({ email: c.email }, { take: 1, order: { created_at: "ASC" } }))[0];
+  if (!existing && c.phone) {
     const ids = await customerIdsByPhone(container, c.phone);
     if (ids.length) existing = (await svc.listCustomers({ id: ids }, { take: 1, order: { created_at: "ASC" } }))[0];
   }
   if (existing) {
     const metadata = { ...(existing.metadata ?? {}) } as Record<string, unknown>;
-    if (!metadata.birth_date) metadata.birth_date = c.birth_date;
+    // Never erase a known birth date with a blank one.
+    if (!metadata.birth_date && c.birth_date) metadata.birth_date = c.birth_date;
     await svc.updateCustomers(existing.id, {
-      first_name: existing.first_name || c.first_name,
-      last_name: existing.last_name || c.last_name,
-      phone: existing.phone || c.phone,
-      email: existing.email || c.email,
+      first_name: existing.first_name || c.first_name || null,
+      last_name: existing.last_name || c.last_name || null,
+      phone: existing.phone || c.phone || null,
+      email: existing.email || c.email || undefined,
       metadata,
     });
     return existing.id;
   }
+  // A name or phone not given yet stays empty (lenient sale), never "".
   const created = await svc.createCustomers({
-    email: c.email,
-    first_name: c.first_name,
-    last_name: c.last_name,
-    phone: c.phone,
+    email: c.email || undefined,
+    first_name: c.first_name || undefined,
+    last_name: c.last_name || undefined,
+    phone: c.phone || undefined,
     has_account: false,
     metadata: { birth_date: c.birth_date, created_at_store: true },
   });
@@ -308,6 +379,8 @@ export interface RxMeta {
   rx_date: string | null;
   rx_date_approx: boolean;
   worn_source: WornSource | null;
+  /** Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts). */
+  clinical?: Clinical | null;
 }
 
 export interface StoredRx {
@@ -324,9 +397,14 @@ export interface StoredRx {
   pd_od: number | null;
   pd_os: number | null;
   seg_height: number | null;
+  /** Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts); null = not recorded. */
+  clinical: Clinical | null;
 }
 
 const n = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
+// `rx_date` is a DATE column: pg hands it back as midnight in the server's
+// zone (UTC), so the UTC slice IS the stored day. Do not shift it to the
+// store's zone — that would move every prescription one day back.
 const isoDay = (v: unknown): string | null => (v ? new Date(v as string).toISOString().slice(0, 10) : null);
 
 function toStoredRx(r: Record<string, unknown>): StoredRx {
@@ -344,6 +422,7 @@ function toStoredRx(r: Record<string, unknown>): StoredRx {
     pd_od: n(r.pd_od),
     pd_os: n(r.pd_os),
     seg_height: n(r.seg_height),
+    clinical: r.clinical && typeof r.clinical === "object" ? (r.clinical as Clinical) : null,
   };
 }
 
@@ -407,7 +486,8 @@ export function checkPrescriptions(
   container: MedusaContainer,
   input: { new: RxInput | null; worn: RxInput | null },
   required: boolean,
-  contexts: Array<{ usage_type?: string; eye_size?: number }> = []
+  contexts: Array<{ usage_type?: string; eye_size?: number }> = [],
+  designs: LensRxDesign[] = []
 ): { warnings: unknown[] } {
   if (input.worn && !hasEyes(input.worn)) throw new PosError("bad_worn_prescription");
   if (!input.new) {
@@ -415,6 +495,12 @@ export function checkPrescriptions(
     return { warnings: [] };
   }
   if (!hasEyes(input.new)) throw new PosError("prescription_required");
+  // Read from a photo: a person must have confirmed it on screen.
+  const unconfirmed = rxConfirmationProblem(input.new.rx);
+  if (unconfirmed) throw new PosError(unconfirmed, 422, { field: "verified_by_user" });
+  // The ADD must fit the lens design (single vision without, multifocal with the same in both eyes).
+  const problem = lensRxProblems(designs, input.new.rx);
+  if (problem) throw new PosError(problem.reason, 422, problem.details);
   const svc = container.resolve<PrescriptionModuleService>(PRESCRIPTION_MODULE);
   const warnings: unknown[] = [];
   for (const ctx of contexts.length ? contexts : [{}]) {
@@ -429,7 +515,9 @@ export function checkPrescriptions(
 }
 
 async function nextRxNumber(container: MedusaContainer, now = new Date()): Promise<string> {
-  const year = now.getUTCFullYear();
+  // The store's year, not the server's: on New Year's Eve the till is still in
+  // the old year while the UTC clock already turned (lib/pos.ts localYear).
+  const year = localYear(now, tenant().timezone);
   const res = await pgOf(container).raw(
     `INSERT INTO rx_sequence (year, last_value) VALUES (?, 1)
      ON CONFLICT (year) DO UPDATE SET last_value = rx_sequence.last_value + 1
@@ -449,7 +537,7 @@ async function insertPrescriptions(
   const row = (r: RxInput, m: RxMeta, kind: "worn" | "new", previous: string | null, number: string | null) => ({
     ...prescriptionColumns(r.rx),
     source: r.rx.source === "ocr" ? "ocr" : "manual",
-    verified_by_user: true,
+    verified_by_user: storedVerifiedByUser(r.rx),
     file_url: typeof r.rx.file_url === "string" && /^rx\/[A-Za-z0-9._-]{1,200}$/.test(r.rx.file_url) ? r.rx.file_url : null,
     customer_id: customerId,
     kind,
@@ -458,6 +546,7 @@ async function insertPrescriptions(
     worn_source: kind === "worn" ? m.worn_source : null,
     previous_prescription_id: previous,
     rx_number: number,
+    clinical: m.clinical ? JSON.stringify(m.clinical) : null,
   });
   let wornId: string | null = null;
   if (input.worn && meta.worn) {
@@ -470,73 +559,177 @@ async function insertPrescriptions(
   return { newId: (nw as { id: string }).id, wornId, rxNumber: number };
 }
 
+/**
+ * The NEW prescription of a sale whose prescription came later (lib/rx-pending.ts):
+ * the same row the till writes, with the next Rx number. Returns its id and number.
+ */
+export async function insertLatePrescription(container: MedusaContainer, customerId: string, rx: Prescription, rxDate: string | null, clinical: Clinical | null = null): Promise<{ id: string; rxNumber: string }> {
+  const out = await insertPrescriptions(container, { new: { rx }, worn: null }, { new: { rx_date: rxDate, rx_date_approx: false, worn_source: null, clinical }, worn: null }, customerId);
+  if (!out.newId || !out.rxNumber) throw new PosError("save_failed", 500);
+  return { id: out.newId, rxNumber: out.rxNumber };
+}
+
 // ---------------------------------------------------------------------------
 // Catalog and quote
 // ---------------------------------------------------------------------------
+
+export interface PosProductVariant {
+  id: string;
+  title: string;
+  sku: string | null;
+  barcode: string | null;
+  /** The colour's own photo (variant metadata), null when the catalog has none. */
+  image: string | null;
+  /** Human colour name (variant metadata `color`), falling back to the variant title. */
+  color: string | null;
+  /**
+   * Store price of this colour when it differs from the model's. Always null
+   * today: the catalog prices by model and `quoteSale` charges the model price,
+   * so a colour price here would contradict the quote.
+   */
+  price: number | null;
+}
 
 export interface PosProduct {
   product_id: string;
   title: string;
   thumbnail: string | null;
-  /** Frame only, in this store, before sales tax. Null when the model has no price. */
+  /**
+   * Frame only, in this store, before sales tax — WITH the owner's promotion on
+   * the model in this store (store_item_discount). Null when it has no price.
+   */
   price: number | null;
-  variants: Array<{ id: string; title: string; sku: string | null; barcode: string | null }>;
+  /** The same price before the promotion (equal to `price` when there is none). */
+  price_before: number | null;
+  /** The owner's promotion on this model in this store, %; null = none. */
+  discount_pct: number | null;
+  variants: PosProductVariant[];
+  /** Colours whose code (UPC/SKU, barcode) matched the search, best first; empty when found by name. */
+  matched_variant_ids: string[];
+  /** Display brand from product metadata ("Di Caprio"); null for an unscraped product. */
+  brand: string | null;
+  /** The model name — same as `title`, named for the card. */
+  model: string;
+  /** Up to four catalog photos, main first (thumbnail, then the gallery, then colour photos). */
+  images: string[];
+  /** Technical sheet for the card (raw slugs, mm); every field null when unscraped. */
+  specs: PosFrameSpecs;
 }
 
-/** Products the owner priced as cases (rules with scope "case"); everything else is a frame. */
+const MAX_CARD_IMAGES = 4;
+
+const firstText = (...values: unknown[]): string | null => {
+  for (const v of values) if (typeof v === "string" && v.trim()) return v.trim();
+  return null;
+};
+
+/**
+ * Products the owner priced as cases (rules with scope "case" this store can
+ * see). Together with the catalogue's own word (`metadataSaysCase`: brand
+ * case/cases, `metadata.kind` "case") it decides the scope — the matrix uses
+ * the same test per store (lib/price-matrix.ts `storePriceScope`).
+ */
 function caseProductIds(rules: Array<{ scope: string; target: string | null }>): Set<string> {
   return new Set(rules.filter((r) => r.scope === "case" && r.target).map((r) => r.target as string));
 }
 
 /**
- * Catalog search by name, SKU or scanned barcode (HU-20), with each model's
- * price in the store (HU-17: shown, never editable).
+ * Catalog search by name, model handle or the code on the tag — UPC/SKU,
+ * barcode, EAN — whole (a scanner) or in part (typed from the tag) (HU-20),
+ * with each model's price in the store (HU-17: shown, never editable).
  */
+/** A model the owner discontinued (any status but published; absent = not known, allowed). Pure. */
+export const isDiscontinued = (status: string | null | undefined): boolean => typeof status === "string" && status !== "published";
+
 export async function searchPosProducts(container: MedusaContainer, establishmentId: string, q: string): Promise<PosProduct[]> {
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const term = q.trim().slice(0, 80);
   if (term.length < 2) return [];
-  const fields = ["id", "title", "thumbnail", "variants.id", "variants.title", "variants.sku", "variants.barcode"];
-  // An exact SKU or barcode (what a scanner sends) first; then the name.
+  // Many scraped models have no `thumbnail`: the list falls back to their first
+  // photo, then to a colour's photo, so the seller can recognise the frame.
+  const fields = ["id", "title", "thumbnail", "metadata", "images.url", "variants.id", "variants.title", "variants.sku", "variants.barcode", "variants.metadata"];
+  // Codes first (exact, then partial — rankCodeMatches); then the name and the handle.
+  const like = `%${term}%`;
   const { data: byCode } = await query.graph({
     entity: "variant",
-    fields: ["product_id"],
-    filters: { $or: [{ sku: term }, { barcode: term }, { ean: term }, { upc: term }] } as never,
-    pagination: { take: 5 },
+    fields: ["id", "product_id", "sku", "barcode", "ean", "upc"],
+    filters: { $or: [{ sku: { $ilike: like } }, { barcode: { $ilike: like } }, { ean: { $ilike: like } }, { upc: { $ilike: like } }] } as never,
+    pagination: { take: 60 },
   });
-  const codeIds = [...new Set((byCode as Array<{ product_id?: string }>).map((v) => v.product_id).filter(Boolean) as string[])];
-  const [{ data: exact }, { data: named }] = await Promise.all([
+  const { productIds: codeIds, matched } = rankCodeMatches(byCode as VariantCodes[], term);
+  const [{ data: exact }, { data: named }, assortment] = await Promise.all([
     codeIds.length
-      ? query.graph({ entity: "product", fields, filters: { id: codeIds } })
+      ? // Published only, like the name search: a discontinued model found by its tag code is not for sale.
+        query.graph({ entity: "product", fields, filters: { id: codeIds, status: "published" } as never }).then((r) => ({
+          data: (r.data as Array<{ id: string }>).slice().sort((x, y) => codeIds.indexOf(x.id) - codeIds.indexOf(y.id)),
+        }))
       : Promise.resolve({ data: [] as unknown[] }),
     query.graph({
       entity: "product",
       fields,
-      filters: { title: { $ilike: `%${term}%` }, status: "published" } as never,
-      pagination: { take: 20 },
+      filters: { $or: [{ title: { $ilike: like } }, { handle: { $ilike: like } }], status: "published" } as never,
+      // Wider than the 20 shown: models the store does not expose are dropped below.
+      pagination: { take: 60 },
     }),
+    effectiveAssortmentRules(container, establishmentId),
   ]);
   const seen = new Set<string>();
-  const products = ([...exact, ...named] as Array<{ id: string; title: string; thumbnail?: string | null; variants?: Array<{ id: string; title?: string; sku?: string | null; barcode?: string | null }> }>)
+  const products = ([...exact, ...named] as Array<{
+    id: string;
+    title: string;
+    thumbnail?: string | null;
+    metadata?: Record<string, unknown> | null;
+    images?: Array<{ url?: string | null }> | null;
+    variants?: Array<{ id: string; title?: string; sku?: string | null; barcode?: string | null; metadata?: Record<string, unknown> | null }>;
+  }>)
     .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
+    .filter((p) => isExposed(assortment, { id: p.id, brand: brandOf(p.metadata) }))
     .slice(0, 20);
-  const [rules, prices] = await Promise.all([
+  const [rules, prices, discounts] = await Promise.all([
     openRules(container, [establishmentId]),
     productPrices(container, products.map((p) => p.id)),
+    storeDiscountIndex(container, [establishmentId]),
   ]);
   const byId = new Map(prices.map((p) => [p.product_id, p.price]));
   const caseIds = caseProductIds(rules);
   return products.map((p) => {
     const base = byId.get(p.id) ?? null;
+    const variants: PosProductVariant[] = (p.variants ?? []).map((v) => ({
+      id: v.id,
+      title: v.title ?? "",
+      sku: v.sku ?? null,
+      barcode: v.barcode ?? null,
+      // Absolute (lib/image-url.ts): the catalogue stores bare bucket keys.
+      image: absoluteImageUrl(firstText(v.metadata?.["image"])),
+      color: firstText(v.metadata?.["color"], v.title),
+      price: null,
+    }));
+    const thumbnail = absoluteImageUrl(firstText(p.thumbnail, p.images?.[0]?.url, ...variants.map((v) => v.image)));
+    // Main photo first, then the gallery, then the colours' photos — deduplicated.
+    const images = absoluteImageUrls([thumbnail, ...(p.images ?? []).map((i) => i.url), ...variants.map((v) => v.image)]).slice(0, MAX_CARD_IMAGES);
+    const brandSlug = brandOf(p.metadata);
+    // The store's brand price applies when the model has no exact price (v2).
+    const priced =
+      base === null
+        ? null
+        : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) || metadataSaysCase(p.metadata) ? "case" : "frame", target: p.id, base, lenses: 0, brand: brandSlug });
+    const before = priced ? priced.total : null;
+    // The model's own discount, else its brand's (v2).
+    const discountPct = productDiscountOf(discounts, establishmentId, p.id, brandSlug);
     return {
       product_id: p.id,
       title: p.title,
-      thumbnail: p.thumbnail ?? null,
-      price:
-        base === null
-          ? null
-          : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) ? "case" : "frame", target: p.id, base, lenses: 0 }).total,
-      variants: (p.variants ?? []).map((v) => ({ id: v.id, title: v.title ?? "", sku: v.sku ?? null, barcode: v.barcode ?? null })),
+      thumbnail,
+      // The same promotion `quoteSale` applies, so the card and the quote agree.
+      price: before === null ? null : dollars(applyPct(cents(before), discountPct)),
+      price_before: before,
+      discount_pct: before === null ? null : discountPct,
+      variants,
+      matched_variant_ids: matched.get(p.id) ?? [],
+      brand: frameBrand(p.metadata),
+      model: p.title,
+      images,
+      specs: posFrameSpecs(p.metadata),
     };
   });
 }
@@ -550,11 +743,19 @@ export interface QuotedLine {
   sku: string | null;
   selection: PosLine["selection"];
   description: string | null;
+  /** Own frame: brand, model, color and size the clerk typed (null = a catalog frame or not given). */
+  own_frame: PosLine["own_frame"];
   /** Lens design category (sv | bifocal | prog), null for a bare frame. */
   lens_category: string | null;
+  /** The design needs an ADD in the prescription (bifocal, progressive). */
+  lens_requires_add: boolean;
   /** Frame size from the catalog, for the prescription check and the lab ticket. */
   eye_size: number | null;
-  /** Store list price of the line, before discount and tax. */
+  /**
+   * Store list price of the line, before the seller's discount and tax — and
+   * AFTER the owner's per-article promotion (`promo`), so the seller's
+   * discount, its limit and the approval all work on the reduced price.
+   */
   list: number;
   frame: number;
   lenses: number;
@@ -562,8 +763,11 @@ export interface QuotedLine {
   tax_amount: number;
   tax_rate: number;
   unit_price: number;
-  frame_source: "store_exact" | "adjusted" | "own_frame";
+  /** `brand` (v2): the store's price for every model of the brand (lib/store-pricing.ts). */
+  frame_source: "store_exact" | "brand" | "adjusted" | "own_frame" | "store_frame";
   below_minimum: boolean;
+  /** The owner's promotion on this line (lib/price-matrix.ts `promoStoreLine`); null = none. */
+  promo: LinePromo | null;
 }
 
 export interface Quote {
@@ -592,59 +796,88 @@ export async function quoteSale(
   const { data: variants } = variantIds.length
     ? await query.graph({
         entity: "variant",
-        fields: ["id", "title", "sku", "product.id", "product.title"],
+        fields: ["id", "title", "sku", "product.id", "product.title", "product.status"],
         filters: { id: variantIds },
       })
     : { data: [] as unknown[] };
   const variantById = new Map(
-    (variants as Array<{ id: string; title?: string; sku?: string | null; product?: { id: string; title?: string } }>).map((v) => [v.id, v])
+    (variants as Array<{ id: string; title?: string; sku?: string | null; product?: { id: string; title?: string; status?: string | null } }>).map((v) => [v.id, v])
   );
   const productIds = [...new Set([...variantById.values()].map((v) => v.product?.id).filter((v): v is string => Boolean(v)))];
-  const [rules, prices, settings, metadata] = await Promise.all([
+  const [rules, prices, settings, metadata, assortment, discounts] = await Promise.all([
     openRules(container, [establishmentId]),
     productPrices(container, productIds),
     resolveStoreSettings(container),
     loadProductMetadata(pg, productIds),
+    effectiveAssortmentRules(container, establishmentId),
+    storeDiscountIndex(container, [establishmentId]),
   ]);
   const priceById = new Map(prices.map((p) => [p.product_id, p.price]));
   const caseIds = caseProductIds(rules);
 
   const quoted: QuotedLine[] = [];
   for (const line of lines) {
-    let lensCents: number;
+    let lensParts: { lens_base_cents: number; photo_cents: number; ar_cents: number };
     let category: string | null;
+    let requiresAdd: boolean;
+    let finish: LensFinish | null;
     try {
-      const b = await computeLensBreakdown(pg, line.selection);
-      lensCents = b.total_cents;
+      const b = await computeLensBreakdown(pg, line.selection, establishmentId);
+      lensParts = { lens_base_cents: b.lens_base_cents, photo_cents: b.photo_cents, ar_cents: b.ar_cents };
       category = b.category;
-    } catch {
+      requiresAdd = b.requires_add;
+      finish = b.finish;
+    } catch (e) {
+      // The finish the seller picked has no priced cell (a digital single
+      // vision the owner has not priced yet, or "stock" on a progressive).
+      if (e instanceof LensFinishError) throw new PosError(e.reason, 422, { design_code: e.design_code, material_code: e.material_code, finish: e.finish });
+      // A photochromic or AR the list does not offer for that design (lib/pos-lens-rules.ts).
+      if (e instanceof LensOptionError) throw new PosError(e.reason, 422, { code: e.code, design_code: e.design_code, category: e.category });
       throw new PosError("bad_lens");
     }
 
     let listFrame: number;
     let listLenses: number;
     let frameSource: QuotedLine["frame_source"];
+    let promo: LinePromo | null;
     let min = { frame_min: null as number | null, floor_pct: null as number | null };
     const variant = line.variant_id ? variantById.get(line.variant_id) : undefined;
     const productId = variant?.product?.id ?? null;
+    // The owner's promotion on each part of this line in this store (store_item_discount).
+    // v2: the model's brand slug, so the store's brand price and brand discount apply.
+    const brandSlug = productId ? brandOf(metadata.get(productId)) || null : null;
+    const pcts = discounts.size ? linePromoPcts(discounts, establishmentId, { productId, brandSlug, selection: line.selection, category, finish }) : NO_PROMO;
 
-    if (line.kind === "own_frame") {
-      // No frame is sold: the store's adjustment applies to the lenses alone
-      // (a fixed amount lands on the frame part when the base is 0, so move it).
-      const sp = storeLinePrice(rules, { establishmentId, scope: "frame", target: "", base: 0, lenses: lensCents / 100 });
-      listFrame = 0;
+    if (line.kind === "own_frame" || line.kind === "store_frame") {
+      // The customer's own frame is not sold; a store frame off the catalog is
+      // sold at the price the seller typed, untouched by the catalog's store
+      // rules (there is no catalog price to adjust). Either way the store's
+      // adjustment applies to the lenses alone (a fixed amount lands on the
+      // frame part when the base is 0, so move it).
+      const sp = promoStoreLine(rules, { establishmentId, scope: "frame", target: "", base: 0, lens: lensParts }, pcts);
+      listFrame = line.kind === "store_frame" ? dollars(line.frame_price_cents ?? 0) : 0;
       listLenses = dollars(cents(sp.frame) + cents(sp.lenses));
-      frameSource = "own_frame";
+      frameSource = line.kind;
+      promo = sp.promo;
       min = lineMinimum(rules, { establishmentId, scope: "frame", target: "" });
     } else {
       if (!variant || !productId) throw new PosError("bad_variant");
+      // A discontinued model (draft, «Productos y precios» → descontinuar) leaves
+      // the till too: the search hides it, this stops a stale screen or a scan.
+      if (isDiscontinued(variant.product?.status)) throw new PosError("discontinued");
+      // The store only sells what it exposes (store-assortment.ts); the search
+      // already hides the rest, this stops a stale screen or a scanned code.
+      if (!isExposed(assortment, { id: productId, brand: brandOf(metadata.get(productId)) })) {
+        throw new PosError("not_exposed");
+      }
       const base = priceById.get(productId);
       if (base == null) throw new PosError("no_price");
-      const scope = caseIds.has(productId) ? "case" : "frame";
-      const sp = storeLinePrice(rules, { establishmentId, scope, target: productId, base, lenses: lensCents / 100 });
+      const scope = caseIds.has(productId) || metadataSaysCase(metadata.get(productId)) ? "case" : "frame";
+      const sp = promoStoreLine(rules, { establishmentId, scope, target: productId, brand: brandSlug, base, lens: lensParts }, pcts);
       listFrame = sp.frame;
       listLenses = sp.lenses;
-      frameSource = sp.frame_source;
+      frameSource = sp.before.frame_source;
+      promo = sp.promo;
       min = lineMinimum(rules, { establishmentId, scope, target: productId });
     }
 
@@ -654,7 +887,7 @@ export async function quoteSale(
     // medical product (same rule as the web's configured-line route).
     let tax_rate = 0;
     let tax_amount = 0;
-    if (line.kind === "frame" && line.selection.design_code === "frame-only" && settings.frame_tax_rate > 0) {
+    if (line.kind !== "own_frame" && line.selection.design_code === "frame-only" && settings.frame_tax_rate > 0) {
       tax_rate = settings.frame_tax_rate;
       tax_amount = dollars(cents(d.total * tax_rate));
     }
@@ -664,13 +897,16 @@ export async function quoteSale(
       kind: line.kind,
       variant_id: variant?.id ?? null,
       product_id: productId,
-      title: line.kind === "own_frame" ? line.description || "" : variant?.product?.title ?? "",
+      title: line.kind === "frame" ? variant?.product?.title ?? "" : line.description || "",
       variant_title: variant?.title ?? null,
       sku: variant?.sku ?? null,
       selection: line.selection,
       description: line.description,
+      own_frame: line.own_frame,
       lens_category: line.selection.design_code === "frame-only" ? null : category,
-      eye_size: Number.isFinite(eye) && eye > 0 ? eye : null,
+      lens_requires_add: line.selection.design_code === "frame-only" ? false : requiresAdd,
+      // The customer's own frame: the lens width they gave (small-frame checks use it too).
+      eye_size: line.kind === "frame" ? (Number.isFinite(eye) && eye > 0 ? eye : null) : line.own_frame?.eye_size ?? null,
       list,
       frame: d.frame,
       lenses: d.lenses,
@@ -679,6 +915,7 @@ export async function quoteSale(
       unit_price: dollars(cents(d.total) + cents(tax_amount)),
       frame_source: frameSource,
       below_minimum: discountPct > 0 && belowMinimum(min, { list, frame: d.frame, total: d.total }),
+      promo,
     });
   }
 
@@ -705,6 +942,13 @@ export function rxContexts(quote: Quote): Array<{ usage_type?: string; eye_size?
       ...(l.lens_category === "prog" ? { usage_type: "progressive" } : {}),
       ...(l.eye_size ? { eye_size: l.eye_size } : {}),
     }));
+}
+
+/** The lens designs of a quote, for the ADD rules (lib/pos-lens-rules.ts). */
+export function rxDesigns(quote: Quote): LensRxDesign[] {
+  return quote.lines
+    .filter((l) => l.lens_category)
+    .map((l) => ({ code: l.selection.design_code, category: l.lens_category, requires_add: l.lens_requires_add }));
 }
 
 // ---------------------------------------------------------------------------
@@ -800,6 +1044,34 @@ export async function createApproval(
   return toApproval(created as unknown as Record<string, unknown>);
 }
 
+/** A statement and its bindings, kept apart from the connection so the guards can be unit-tested. */
+export interface SqlPlan {
+  sql: string;
+  bindings: Array<string | number | null>;
+}
+
+/** Rows a `pg.raw` UPDATE … RETURNING gave back (the pg driver shape). */
+type RawRows<T> = { rows: T[] };
+
+/**
+ * The decision as one guarded UPDATE. Two owners deciding the same request
+ * at once (or one double-clicking) used to both read "pending" and both
+ * write: the second decision silently overwrote the first, and both were
+ * audited as if taken. With the status in the WHERE clause the database lets
+ * exactly one through; the loser gets 0 rows and is told the current state.
+ * An expired request is left alone for the same reason `toApproval` reports
+ * it as expired: nobody can approve what the till can no longer use.
+ */
+export function approvalDecisionPlan(id: string, decision: "approved" | "rejected", actorId: string, note: string | null): SqlPlan {
+  return {
+    sql: `UPDATE discount_approval
+             SET status = ?, decided_by = ?, decided_at = now(), decision_note = ?, updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status = 'pending' AND expires_at > now()
+       RETURNING *`,
+    bindings: [decision, actorId, note, id],
+  };
+}
+
 /** Owner or superadmin decision; only a pending, unexpired request can be decided. */
 export async function decideApproval(
   container: MedusaContainer,
@@ -808,20 +1080,86 @@ export async function decideApproval(
   actorId: string,
   note: string | null
 ): Promise<ApprovalRow> {
-  const current = await getApproval(container, id);
-  if (!current) throw new PosError("approval_not_found", 404);
-  if (current.status !== "pending") throw new PosError(`approval_${current.status}`, 409);
-  await pos(container).updateDiscountApprovals({ id, status: decision, decided_by: actorId, decided_at: new Date(), decision_note: note } as never);
+  const plan = approvalDecisionPlan(id, decision, actorId, note);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<Record<string, unknown>>;
+  const row = res.rows[0];
+  if (!row) {
+    // Lost the race, or there was nothing to decide: say which.
+    const current = await getApproval(container, id);
+    if (!current) throw new PosError("approval_not_found", 404);
+    throw new PosError(`approval_${current.status === "pending" ? "expired" : current.status}`, 409);
+  }
+  const decided = toApproval(row);
   await recordAudit(container, {
     actorId,
     action: decision === "approved" ? "discount.approve" : "discount.reject",
     entity: "discount_approval",
     entityId: id,
-    establishmentId: current.establishment_id,
+    establishmentId: decided.establishment_id,
     before: { status: "pending" },
-    after: { status: decision, pct: current.discount_pct, note },
+    after: { status: decision, pct: decided.discount_pct, note },
   });
-  return (await getApproval(container, id)) as ApprovalRow;
+  return decided;
+}
+
+/**
+ * Takes an approved discount for a sale about to be recorded. The approval is
+ * single-use, but `assertApprovalFits` only *reads* it: two tills recording
+ * two sales with the same approval id at the same moment both saw "approved"
+ * and both sold with the discount, and the second `status = 'used'` write
+ * hid the first. The status guard makes the database the arbiter — one
+ * UPDATE matches, the other finds 0 rows. The expiry is checked here too, by
+ * the database clock, so a request that lapsed between the read and the
+ * claim is not consumed.
+ */
+export function approvalClaimPlan(id: string): SqlPlan {
+  return {
+    sql: `UPDATE discount_approval
+             SET status = 'used', updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status = 'approved'
+             AND (expires_at IS NULL OR expires_at > now())
+       RETURNING id`,
+    bindings: [id],
+  };
+}
+
+/**
+ * Gives a claimed approval back when the sale it was taken for never got its
+ * row. Guarded on `sale_id IS NULL`: once the sale exists the approval is
+ * spent for good, whatever fails afterwards.
+ */
+export function approvalReleasePlan(id: string): SqlPlan {
+  return {
+    sql: `UPDATE discount_approval
+             SET status = 'approved', updated_at = now()
+           WHERE id = ? AND status = 'used' AND sale_id IS NULL
+       RETURNING id`,
+    bindings: [id],
+  };
+}
+
+/** Claims the approval or throws the reason it cannot be used (`approval_used`, `approval_expired`…). */
+export async function claimApproval(container: MedusaContainer, id: string): Promise<void> {
+  const plan = approvalClaimPlan(id);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ id: string }>;
+  if (res.rows.length) return;
+  const current = await getApproval(container, id);
+  if (!current) throw new PosError("approval_not_found", 404);
+  // "approved" on re-read means the claim lost only to the clock: it expired
+  // between our read and the UPDATE and `toApproval` has not caught up yet.
+  throw new PosError(current.status === "approved" ? "approval_expired" : `approval_${current.status}`, 409);
+}
+
+/** Best-effort release (logged, never thrown): the caller is already failing and must rethrow its own error. */
+async function releaseApproval(container: MedusaContainer, id: string): Promise<void> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  try {
+    const plan = approvalReleasePlan(id);
+    const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ id: string }>;
+    if (res.rows.length) logger.warn(`[pos] approval ${id} released: the sale it was claimed for was not recorded.`);
+  } catch (e) {
+    logger.error(`[pos] approval ${id} could not be released after a failed sale: ${(e as Error).message}`);
+  }
 }
 
 /**
@@ -857,12 +1195,30 @@ export interface CreateSaleInput {
   thresholds: Thresholds;
   delivery: "pickup" | "ship";
   notifyEmail: boolean;
+  /** The patient asked for the stage notices by SMS too (the till's switch). */
+  notifySms?: boolean;
+  /**
+   * The lenses are sold before the prescription exists (the patient goes to
+   * the exam and comes back): the sale, the order and its lens lines say so,
+   * and the lab ticket waits until the prescription is added from the sale.
+   */
+  rxPending?: boolean;
+  /** The promotion the sale used (lib/pos-promotion.ts), copied onto the sale. */
+  promotion?: AppliedPromotion | null;
+  /** Patient data recorded as missing (lib/pos.ts missingCustomerData). */
+  missing?: MissingKey[];
+  /** The sale happened on an earlier day (lib/sale-date.ts); null/absent = now. */
+  backdate?: Backdate | null;
   idempotencyKey: string | null;
 }
 
 export interface CreatedSale {
   id: string;
   number: string;
+  /** The day it was recorded as, when backdated (lib/sale-date.ts). */
+  sold_on?: string | null;
+  /** Set when the backdated sale was recorded as already delivered. */
+  delivered_at?: string | null;
   order_id: string;
   display_id: number | null;
   total: number;
@@ -874,8 +1230,18 @@ export interface CreatedSale {
   promised_on: string | null;
   /** "Daño óptico" for the screen only — never on receipts, emails or Sheets. */
   optical_change: OpticalChange | null;
+  /**
+   * True when the till sent a photo of a typed frame (the patient's or one off
+   * the catalog) and the private bucket did not keep it. The sale stands; the
+   * till says so, because the receipt and the lab ticket go out without it.
+   */
+  frame_photo_failed?: boolean;
   /** True when this response is a replay of an earlier identical request. */
   replayed?: boolean;
+  /** Sold with the prescription pending (lib/rx-pending.ts): the lab ticket waits for it. */
+  rx_pending?: boolean;
+  /** What the sale was recorded without (lib/pos.ts saleMissing): the till says it and how to complete it. */
+  missing?: MissingKey[];
 }
 
 /** Sales currently being recorded, by idempotency key (one process; the unique index covers the rest). */
@@ -890,7 +1256,7 @@ async function usdRegionId(container: MedusaContainer): Promise<string> {
 }
 
 /** Next number of a store's sequence; atomic, so two tills never get the same one. */
-async function nextSaleSeq(container: MedusaContainer, establishmentId: string): Promise<number> {
+export async function nextSaleSeq(container: MedusaContainer, establishmentId: string): Promise<number> {
   const res = await pgOf(container).raw(
     `INSERT INTO pos_sale_counter (establishment_id, last_seq) VALUES (?, 1)
      ON CONFLICT (establishment_id) DO UPDATE SET last_seq = pos_sale_counter.last_seq + 1
@@ -918,6 +1284,8 @@ async function replayOf(container: MedusaContainer, key: string): Promise<Create
     promised_on: (sale.promised_on as string | null) ?? null,
     optical_change: null,
     replayed: true,
+    rx_pending: sale.rx_pending === true,
+    missing: saleMissing(sale.missing, { rx_pending: sale.rx_pending === true, paid: Number(sale.paid_cents) / 100, insurance: Number(sale.insurance_cents) / 100, total: Number(sale.total_cents) / 100 }),
   };
 }
 
@@ -940,157 +1308,49 @@ export async function createPosSale(container: MedusaContainer, input: CreateSal
 
 async function recordSale(container: MedusaContainer, input: CreateSaleInput): Promise<CreatedSale> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
-  const query = container.resolve(ContainerRegistrationKeys.QUERY);
-  const { store, customer, quote } = input;
+  const { store, quote } = input;
   if (!store.sales_channel_id) throw new PosError("store_without_channel", 409);
 
-  let approval: ApprovalRow | null = null;
-  if (input.needsApproval) {
-    approval = input.approvalId ? await getApproval(container, input.approvalId) : null;
-    assertApprovalFits(approval, store, quote);
+  // Every query here is a round trip to the database (~45 ms from the server
+  // in staging, see "db ping" in pos-after-sale.ts), so whatever does not
+  // depend on another step runs alongside it. Reads first: nothing is written
+  // until the approval is known to fit.
+  const [regionId, approval] = await Promise.all([
+    usdRegionId(container),
+    input.needsApproval && input.approvalId ? getApproval(container, input.approvalId) : Promise.resolve(null),
+  ]);
+  if (input.needsApproval) assertApprovalFits(approval, store, quote);
+
+  // From here on the approval is spent. Everything up to the sale row is a
+  // chain of writes (customer, prescriptions, cart, order) any of which can
+  // fail; if one does, the approval goes back so the till can retry with it.
+  if (approval) await claimApproval(container, approval.id);
+  let placed: PlacedSale;
+  try {
+    placed = await placeOrderAndSale(container, input, approval, regionId);
+  } catch (e) {
+    if (approval) await releaseApproval(container, approval.id);
+    throw e;
   }
-
-  const regionId = await usdRegionId(container);
-  const customerId = await upsertCustomer(container, customer, input.customerId);
-  const rx = await insertPrescriptions(container, input.prescriptions, input.rxMeta, customerId);
-
-  // Photos of frames the customer brought go to the private bucket: they travel
-  // with the lab ticket to the main store (HU-89).
-  const photoKeys: Array<string | null> = [];
-  for (const line of input.lines) {
-    photoKeys.push(line.kind === "own_frame" ? await uploadPrivateImage(line.photo, "posframe") : null);
-  }
-
-  const address = {
-    first_name: customer.first_name,
-    last_name: customer.last_name,
-    phone: customer.phone,
-    ...(customer.address
-      ? {
-          address_1: customer.address.address_1,
-          city: customer.address.city,
-          province: customer.address.province ?? undefined,
-          postal_code: customer.address.postal_code,
-          country_code: customer.address.country_code,
-        }
-      : {}),
-  };
-
-  const { result: cart } = await createCartWorkflow(container).run({
-    input: {
-      region_id: regionId,
-      sales_channel_id: store.sales_channel_id,
-      currency_code: "usd",
-      email: customer.email,
-      customer_id: customerId,
-      shipping_address: address,
-      billing_address: address,
-      metadata: {
-        source: "pos",
-        channel: "pos",
-        establishment_id: store.id,
-        establishment_code: store.code,
-        terminal_id: input.terminal.id,
-        terminal_code: input.terminal.code,
-        seller_id: input.sellerId,
-        // NOT seller_code: on an order that key is the referral seller of the
-        // Sellers module, who earns a commission (costing.ts). The till's
-        // seller is a member of the staff.
-        staff_code: input.sellerCode,
-        notify_email: input.notifyEmail,
-        notify_sms: false,
-        patient_phone: customer.phone,
-        delivery: input.delivery,
-      },
-      items: quote.lines.map((l, i) => {
-        const withRx = l.selection.design_code !== "frame-only";
-        const metadata = {
-          kind: l.kind === "own_frame" ? "own-frame" : "configured-frame",
-          channel: "pos",
-          lens_config: l.selection,
-          // By id only: the Rx values (PHI) live in the prescription record.
-          prescription_id: withRx ? rx.newId : null,
-          list_price: l.list,
-          discount_pct: quote.discount_pct,
-          approved_by: approval?.decided_by ?? null,
-          frame_price: l.frame,
-          lens_addon: l.lenses,
-          tax_amount: l.tax_amount,
-          tax_rate: l.tax_rate,
-          price_pretax: dollars(cents(l.frame) + cents(l.lenses)),
-          frame_source: l.frame_source,
-          frame_handling: l.kind === "own_frame" ? "patient_own_frame" : withRx ? "frame_supplied" : null,
-          own_frame: l.kind === "own_frame" ? { description: l.description, photo_key: photoKeys[i] } : null,
-        };
-        // Nothing is shipped from the till: without this Medusa would ask for
-        // a shipping method before completing the cart.
-        return l.variant_id
-          ? { variant_id: l.variant_id, quantity: 1, unit_price: l.unit_price, requires_shipping: false, metadata }
-          : { title: l.description || "Patient's own frame", quantity: 1, unit_price: l.unit_price, requires_shipping: false, metadata };
-      }),
-    } as never,
-  });
-  const cartId = (cart as { id: string }).id;
-
-  // Defensive: the cart must total what was quoted, or something priced it
-  // differently (a tax provider, a promotion) and the ledger would not match.
-  const { data: carts } = await query.graph({ entity: "cart", fields: ["id", "total"], filters: { id: cartId } });
-  const cartTotal = cents(Number((carts[0] as { total?: number } | undefined)?.total ?? NaN));
-  if (cartTotal !== quote.total_cents) {
-    logger.error(`[pos] cart ${cartId} totals ${cartTotal} cents but the quote was ${quote.total_cents}; sale not completed.`);
-    throw new PosError("total_changed", 409);
-  }
-
-  await createPaymentCollectionForCartWorkflow(container).run({ input: { cart_id: cartId } });
-  const { data: withCollection } = await query.graph({
-    entity: "cart",
-    fields: ["id", "payment_collection.id"],
-    filters: { id: cartId },
-  });
-  const collectionId = (withCollection[0] as { payment_collection?: { id: string } } | undefined)?.payment_collection?.id;
-  if (!collectionId) throw new PosError("payment_failed", 500);
-  await createPaymentSessionsWorkflow(container).run({
-    input: { payment_collection_id: collectionId, provider_id: MANUAL_PROVIDER_ID, customer_id: customerId },
-  });
-  const { result: completed } = await completeCartWorkflow(container).run({ input: { id: cartId } });
-  const orderId = (completed as { id: string }).id;
-
-  // The number is taken only now that the order exists: a failed sale never
-  // leaves a hole in the store's sequence (HU-84).
-  const seq = await nextSaleSeq(container, store.id);
-  const number = saleNumber(store.code, seq);
-  const withLenses = quote.lines.some((l) => l.lens_category);
-  const promisedOn = (withLenses ? addBusinessDays(new Date(), LAB_BUSINESS_DAYS) : new Date()).toISOString().slice(0, 10);
+  const { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed } = placed;
   const svc = pos(container);
   const p = input.payments;
-  const sale = await svc.createPosSales({
-    number,
-    establishment_id: store.id,
-    seq,
-    seller_id: input.sellerId,
-    seller_code: input.sellerCode,
-    terminal_id: input.terminal.id,
-    order_id: orderId,
-    cart_id: cartId,
-    customer_id: customerId,
-    idempotency_key: input.idempotencyKey,
-    list_cents: quote.list_cents,
-    discount_cents: quote.discount_cents,
-    discount_pct: quote.discount_pct,
-    discount_approval_id: approval?.id ?? null,
-    total_cents: quote.total_cents,
-    paid_cents: p.paid_cents,
-    insurance_cents: p.insurance_cents,
-    balance_cents: p.balance_cents,
-    promised_on: promisedOn,
-    delivery: input.delivery,
-    currency_code: "usd",
-    own_frame_photo_keys: photoKeys.filter(Boolean) as unknown as Record<string, unknown>,
-  });
-  const tray = withLenses ? await takeTray(container, store.id, sale.id) : null;
-  if (tray !== null) await svc.updatePosSales({ id: sale.id, tray_number: tray });
-  await writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments });
-  if (approval) await svc.updateDiscountApprovals({ id: approval.id, status: "used", sale_id: sale.id } as never);
+  // Tray, payments and the approval touch different rows of the new sale:
+  // none waits for the others. The order's stamp below needs the tray. The
+  // approval was already claimed (status "used") before the order was placed;
+  // only the link to the sale is written now that the sale exists.
+  const b = input.backdate ?? null;
+  // An old sale recorded as already delivered takes no tray: the glasses are not in the store.
+  const [tray] = await Promise.all([
+    withLenses && !b?.delivered
+      ? takeTray(container, store.id, sale.id).then(async (n) => {
+          await svc.updatePosSales({ id: sale.id, tray_number: n });
+          return n;
+        })
+      : Promise.resolve(null),
+    writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments, paidAt: b && b.moneyOn === "sale" ? b.soldAt : null }),
+    approval ? svc.updateDiscountApprovals({ id: approval.id, sale_id: sale.id } as never) : Promise.resolve(),
+  ]);
 
   // The order board, the Sheet and the emails show the store's number and the
   // balance. Best-effort: the sale row already links both ways.
@@ -1110,6 +1370,13 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
 
   // Dashboards (sale_fact), after the order carries the sale's id.
   await projectOrder(container, orderId);
+
+  // Recorded as already delivered (lib/sale-date.ts): delivered as of that day, silently.
+  let deliveredAt: string | null = null;
+  if (b?.delivered && p.balance_cents === 0) {
+    const row = await getSale(container, sale.id);
+    if (row) deliveredAt = (await markDelivered(container, row, { actorId: input.sellerId, at: b.soldAt, silent: true })).delivered_at;
+  }
 
   logger.info(`[pos] sale ${number} (order ${orderId}) by ${input.sellerCode ?? input.sellerId ?? "?"} at ${input.terminal.code}: ${quote.total_cents} cents, paid ${p.paid_cents}, balance ${p.balance_cents}`);
 
@@ -1136,32 +1403,289 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     rx_number: rx.rxNumber,
     promised_on: promisedOn,
     optical_change: change,
+    rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true,
+    sold_on: input.backdate?.date ?? null,
+    delivered_at: deliveredAt,
+    missing: saleMissing(input.missing, { rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true, paid: p.paid_cents / 100, insurance: p.insurance_cents / 100, total: quote.total }),
+    ...(framePhotoFailed ? { frame_photo_failed: true } : {}),
   };
 }
 
-async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {
+/** What `placeOrderAndSale` hands back to the rest of `recordSale`. */
+interface PlacedSale {
+  sale: { id: string };
+  orderId: string;
+  number: string;
+  promisedOn: string;
+  withLenses: boolean;
+  rx: { newId: string | null; wornId: string | null; rxNumber: string | null };
+  /** A typed frame came with a photo that the private bucket did not keep. */
+  framePhotoFailed: boolean;
+}
+
+/**
+ * Customer, prescriptions, cart, Medusa order and the pos_sale row — the part
+ * of a sale that must either finish or leave nothing behind that needs the
+ * discount approval (recordSale releases it when this throws).
+ */
+async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleInput, approval: ApprovalRow | null, regionId: string): Promise<PlacedSale> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const { store, customer, quote } = input;
+  // The prescription needs the customer; the photos of frames the customer
+  // brought (private bucket, they travel with the lab ticket to the main
+  // store, HU-89) need neither.
+  const [{ customerId, rx }, photoKeys] = await Promise.all([
+    upsertCustomer(container, customer, input.customerId).then(async (customerId) => ({
+      customerId,
+      rx: await insertPrescriptions(container, input.prescriptions, input.rxMeta, customerId),
+    })),
+    // The patient's own frame → private bucket; a store frame off the catalog → public assets (lib/store-frame-photo.ts).
+    Promise.all(input.lines.map((line) => (line.kind === "own_frame" ? uploadPrivateImage(line.photo, "posframe") : line.kind === "store_frame" ? uploadStoreFramePhoto(container, line.photo) : Promise.resolve(null)))),
+  ]);
+  // A photo that was sent but not kept used to vanish without a trace: the
+  // receipt then printed the empty frame icon and nobody knew why.
+  const framePhotoFailed = input.lines.some((line, i) => line.kind !== "frame" && Boolean(line.photo) && !photoKeys[i]);
+  if (framePhotoFailed) {
+    // The patient's own frame goes to the private bucket; a store frame's photo to the public file storage (which logs its own reason).
+    const ownLost = input.lines.some((line, i) => line.kind === "own_frame" && Boolean(line.photo) && !photoKeys[i]);
+    const why = !ownLost
+      ? "the public file storage refused the store frame's photo"
+      : storageConfigured()
+        ? "the private bucket refused it"
+        : "private storage is not configured: R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_PRESCRIPTION_BUCKET";
+    logger.warn(`[pos] frame photo not stored (${why})`);
+  }
+
+  const address = {
+    first_name: customer.first_name || undefined,
+    last_name: customer.last_name || undefined,
+    phone: customer.phone || undefined,
+    ...(customer.address
+      ? {
+          address_1: customer.address.address_1,
+          city: customer.address.city,
+          province: customer.address.province ?? undefined,
+          postal_code: customer.address.postal_code,
+          country_code: customer.address.country_code,
+        }
+      : {}),
+  };
+
+  const { result: cart } = await createCartWorkflow(container).run({
+    input: {
+      region_id: regionId,
+      sales_channel_id: store.sales_channel_id,
+      currency_code: "usd",
+      email: customer.email || undefined,
+      customer_id: customerId,
+      shipping_address: address,
+      billing_address: address,
+      metadata: {
+        source: "pos",
+        channel: "pos",
+        establishment_id: store.id,
+        establishment_code: store.code,
+        terminal_id: input.terminal.id,
+        terminal_code: input.terminal.code,
+        seller_id: input.sellerId,
+        // NOT seller_code: on an order that key is the referral seller of the
+        // Sellers module, who earns a commission (costing.ts). The till's
+        // seller is a member of the staff.
+        staff_code: input.sellerCode,
+        // The two switches of the pay step. No email on file = nothing to mail.
+        notify_email: input.notifyEmail && Boolean(customer.email),
+        notify_sms: input.notifySms === true,
+        patient_phone: customer.phone || null,
+        // Where the stage SMS goes (lib/order-stage-transition.ts reads `phone`), only when asked for.
+        ...(input.notifySms === true && customer.phone ? { phone: customer.phone } : {}),
+        delivery: input.delivery,
+        // The prescription comes later (lib/rx-pending.ts): the order board and the lab ticket wait for it.
+        ...(input.rxPending === true ? { rx_pending: true } : {}),
+      },
+      items: quote.lines.map((l, i) => {
+        const withRx = l.selection.design_code !== "frame-only";
+        const metadata = {
+          kind: l.kind === "own_frame" ? "own-frame" : l.kind === "store_frame" ? "store-frame" : "configured-frame",
+          channel: "pos",
+          lens_config: l.selection,
+          // By id only: the Rx values (PHI) live in the prescription record.
+          prescription_id: withRx ? rx.newId : null,
+          // A lens sold before its prescription: added later from the sale (lib/rx-pending.ts).
+          ...(withRx && input.rxPending === true && !rx.newId ? { rx_pending: true } : {}),
+          list_price: l.list,
+          discount_pct: quote.discount_pct,
+          approved_by: approval?.decided_by ?? null,
+          frame_price: l.frame,
+          lens_addon: l.lenses,
+          tax_amount: l.tax_amount,
+          tax_rate: l.tax_rate,
+          price_pretax: dollars(cents(l.frame) + cents(l.lenses)),
+          frame_source: l.frame_source,
+          // The owner's per-article promotion (null = none): `list_price` above is
+          // already the reduced price; this keeps what it was before and by how much.
+          promo: l.promo,
+          frame_handling: l.kind === "own_frame" ? "patient_own_frame" : withRx ? "frame_supplied" : null,
+          own_frame: l.kind === "own_frame" ? { description: l.description, photo_key: photoKeys[i], ...(l.own_frame ?? {}) } : null,
+          // A store frame off the catalog: what was sold, for the lab, the receipt and the sale.
+          store_frame: l.kind === "store_frame" ? { description: l.description, photo_url: photoKeys[i], price: l.frame, ...(l.own_frame ?? {}) } : null,
+        };
+        // Nothing is shipped from the till: without this Medusa would ask for
+        // a shipping method before completing the cart.
+        return l.variant_id
+          ? { variant_id: l.variant_id, quantity: 1, unit_price: l.unit_price, requires_shipping: false, metadata }
+          : { title: l.description || (l.kind === "store_frame" ? "Store frame" : "Patient's own frame"), quantity: 1, unit_price: l.unit_price, requires_shipping: false, metadata };
+      }),
+    } as never,
+  });
+  const cartId = (cart as { id: string }).id;
+
+  // Defensive: the cart must total what was quoted, or something priced it
+  // differently (a tax provider, a promotion) and the ledger would not match.
+  const { data: carts } = await query.graph({ entity: "cart", fields: ["id", "total"], filters: { id: cartId } });
+  const cartTotal = cents(Number((carts[0] as { total?: number } | undefined)?.total ?? NaN));
+  if (cartTotal !== quote.total_cents) {
+    logger.error(`[pos] cart ${cartId} totals ${cartTotal} cents but the quote was ${quote.total_cents}; sale not completed.`);
+    throw new PosError("total_changed", 409);
+  }
+
+  // The workflow returns the collection it created; reading it back from the
+  // cart is only a fallback.
+  const { result: collection } = await createPaymentCollectionForCartWorkflow(container).run({ input: { cart_id: cartId } });
+  let collectionId = (collection as { id?: string } | undefined)?.id;
+  if (!collectionId) {
+    const { data: withCollection } = await query.graph({
+      entity: "cart",
+      fields: ["id", "payment_collection.id"],
+      filters: { id: cartId },
+    });
+    collectionId = (withCollection[0] as { payment_collection?: { id: string } } | undefined)?.payment_collection?.id;
+  }
+  if (!collectionId) throw new PosError("payment_failed", 500);
+  await createPaymentSessionsWorkflow(container).run({
+    input: { payment_collection_id: collectionId, provider_id: MANUAL_PROVIDER_ID, customer_id: customerId },
+  });
+  const { result: completed } = await completeCartWorkflow(container).run({ input: { id: cartId } });
+  const orderId = (completed as { id: string }).id;
+
+  // The number is taken only now that the order exists: a failed sale never
+  // leaves a hole in the store's sequence (HU-84).
+  const seq = await nextSaleSeq(container, store.id);
+  const number = saleNumber(store.code, seq);
+  const withLenses = quote.lines.some((l) => l.lens_category);
+  // Counted on the store's calendar: a sale at 7 pm in Texas is still "today"
+  // there although the UTC date has already moved on (lib/pos.ts promisedDate).
+  // A backdated sale was promised from the day it happened (lib/sale-date.ts).
+  const promisedOn = promisedDate(input.backdate?.soldAt ?? new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
+  const p = input.payments;
+  const sale = await pos(container).createPosSales({
+    number,
+    establishment_id: store.id,
+    seq,
+    seller_id: input.sellerId,
+    seller_code: input.sellerCode,
+    terminal_id: input.terminal.id,
+    order_id: orderId,
+    cart_id: cartId,
+    customer_id: customerId,
+    idempotency_key: input.idempotencyKey,
+    list_cents: quote.list_cents,
+    discount_cents: quote.discount_cents,
+    discount_pct: quote.discount_pct,
+    discount_approval_id: approval?.id ?? null,
+    total_cents: quote.total_cents,
+    paid_cents: p.paid_cents,
+    insurance_cents: p.insurance_cents,
+    balance_cents: p.balance_cents,
+    promised_on: promisedOn,
+    delivery: input.delivery,
+    currency_code: "usd",
+    // Only the private keys (the patient's frames): a store frame's photo is a public URL.
+    own_frame_photo_keys: photoKeys.filter((k, i) => k && input.lines[i]?.kind === "own_frame") as unknown as Record<string, unknown>,
+    rx_pending: input.rxPending === true && withLenses && !rx.newId,
+    promotion: (input.promotion ?? null) as unknown as Record<string, unknown> | null,
+    missing: (input.missing?.length ? input.missing : null) as unknown as Record<string, unknown> | null,
+  });
+  if (input.backdate) await backdateSale(container, sale.id, orderId, input.backdate, input.sellerId);
+  return { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed };
+}
+
+/**
+ * The sale happened on an earlier day (lib/sale-date.ts): its row and its
+ * Medusa order carry THAT instant as their date — every report, the receipt and
+ * the dashboards (projected right after, from `pos_sale.created_at`) read it
+ * from there — and the row keeps when it was really recorded. The payments
+ * follow `money_on` (see writePayments).
+ */
+async function backdateSale(container: MedusaContainer, saleId: string, orderId: string, b: Backdate, actorId: string | null): Promise<void> {
+  const pg = pgOf(container);
+  const record = backdateRecord(b, new Date(), actorId);
+  await pg("pos_sale").where({ id: saleId }).update({ created_at: b.soldAt, backdate: JSON.stringify(record) });
+  await pg("order").where({ id: orderId }).update({ created_at: b.soldAt });
+}
+
+export async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {
   const orders = container.resolve<IOrderModuleService>(Modules.ORDER);
   const order = await orders.retrieveOrder(orderId, { select: ["id", "display_id", "metadata"] });
   await orders.updateOrders(orderId, { metadata: { ...(order.metadata ?? {}), ...patch } });
   return Number(order.display_id) || null;
 }
 
-/** The till's open cash register, if any: cash payments and refunds go into it (HU-32). */
-async function openCashSession(container: MedusaContainer, terminalId: string | null): Promise<string | null> {
-  if (!terminalId) return null;
-  const [s] = await pos(container).listCashSessions({ terminal_id: terminalId, closed_at: null } as never, { take: 1 });
-  return s?.id ?? null;
+/**
+ * The STORE's open cash register, opened on the spot when there is none (the
+ * owner's rule: the first cash payment is the opening). Cash payments and
+ * refunds go into it as ledger lines (lib/cash.ts — a circular import, used
+ * only at call time, like cash.ts's use of PosError). Null only when the register cannot be opened — the payment
+ * is still recorded, the register just will not see it.
+ */
+async function openCashSession(container: MedusaContainer, args: { establishmentId: string; terminalId: string | null; actorId: string | null }): Promise<string | null> {
+  try {
+    return await ensureStoreSession(container, args);
+  } catch (e) {
+    container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).error(`[pos] cash register of ${args.establishmentId} could not be opened: ${(e as Error).message}`);
+    return null;
+  }
+}
+
+/** Ledger lines of the cash rows just written (lib/cash.ts recordSalePayments). Best-effort: logged, never undoes the payment. */
+async function ledgerCashPayments(
+  container: MedusaContainer,
+  args: { sessionId: string | null; saleId: string; terminalId: string | null; actorId: string | null; rows: Array<{ id: string; amount_cents: unknown; counts_as_cash?: boolean | null }> }
+): Promise<void> {
+  const cash = args.rows.filter((r) => r.counts_as_cash).map((r) => ({ id: r.id, amount_cents: Math.round(Number(r.amount_cents) || 0) }));
+  if (!args.sessionId || !cash.length) return;
+  try {
+    await recordSalePayments(container, { sessionId: args.sessionId, saleId: args.saleId, terminalId: args.terminalId, actorId: args.actorId, payments: cash });
+  } catch (e) {
+    container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).error(`[pos] cash ledger of sale ${args.saleId} not written: ${(e as Error).message}`);
+  }
 }
 
 /** Writes payments to the ledger; an insurer's part also opens its claim (HU-113). */
 async function writePayments(
   container: MedusaContainer,
-  args: { saleId: string; orderId: string | null; establishmentId: string; terminalId: string | null; actorId: string | null; kind: "deposit" | "balance"; payments: PosPayment[] }
+  args: {
+    saleId: string;
+    orderId: string | null;
+    establishmentId: string;
+    terminalId: string | null;
+    actorId: string | null;
+    kind: "deposit" | "balance";
+    payments: PosPayment[];
+    /**
+     * A backdated sale whose money was collected THAT day (lib/sale-date.ts,
+     * `money_on: "sale"`): the payments carry that instant and enter no
+     * register — the day's register was counted (or closed) without the system,
+     * and today's would show cash that is not in the drawer.
+     */
+    paidAt?: Date | null;
+  }
 ): Promise<void> {
   const svc = pos(container);
   if (!args.payments.length) return;
-  const cashSession = args.payments.some((p) => p.counts_as_cash) ? await openCashSession(container, args.terminalId) : null;
-  await svc.createPosSalePayments(
+  const offRegister = Boolean(args.paidAt);
+  const cashSession = !offRegister && args.payments.some((p) => p.counts_as_cash) ? await openCashSession(container, { establishmentId: args.establishmentId, terminalId: args.terminalId, actorId: args.actorId }) : null;
+  const written = await svc.createPosSalePayments(
     args.payments.map((p) => ({
       sale_id: args.saleId,
       method_code: p.method_code,
@@ -1172,10 +1696,15 @@ async function writePayments(
       received_by: args.actorId,
       fee_cents: p.fee_cents,
       counts_as_cash: p.counts_as_cash,
-      details: p.details as unknown as Record<string, unknown>,
+      details: (offRegister ? { ...p.details, backdated: true } : p.details) as unknown as Record<string, unknown>,
       cash_session_id: p.counts_as_cash ? cashSession : null,
     }))
   );
+  if (offRegister) {
+    await pgOf(container)("pos_sale_payment").whereIn("id", written.map((w) => w.id)).update({ created_at: args.paidAt });
+  } else {
+    await ledgerCashPayments(container, { sessionId: cashSession, saleId: args.saleId, terminalId: args.terminalId, actorId: args.actorId, rows: written });
+  }
   for (const p of args.payments.filter((x) => x.insurance)) {
     await svc.createInsuranceClaims({
       sale_id: args.saleId,
@@ -1218,12 +1747,70 @@ export interface SaleRow {
   delivered_at: string | null;
   voided_at: string | null;
   void_reason: string | null;
+  /** Free text written with the void (or the void request): what the approver reads before confirming. */
+  void_note: string | null;
   void_requested_at: string | null;
   created_at: string;
-  payments: Array<{ method_code: string; amount: number; kind: string; reference: string | null; created_at: string }>;
+  /** Staff-only note (lib/pos-sale-admin.ts); never on the customer's receipt. */
+  internal_note: string | null;
+  edited_at: string | null;
+  edited_by: string | null;
+  /** Set only on a deleted (hidden) sale, which only owners and superadmins read. */
+  deleted_at: string | null;
+  deleted_by: string | null;
+  delete_reason: string | null;
+  /** Numbers the sale had in other stores before being moved, oldest first. */
+  previous_numbers: Array<{ number: string; establishment_id: string; moved_at: string; moved_by: string | null }>;
+  /**
+   * A photo of the patient wearing the frame exists (lib/pos-wearing-photo.ts).
+   * Only the flag and the time: the photo itself is read through its own
+   * route, and its key never leaves the backend.
+   */
+  has_wearing_photo: boolean;
+  wearing_photo_at: string | null;
+  /** Lenses sold before the prescription exists; it is added from the sale (lib/rx-pending.ts). */
+  rx_pending: boolean;
+  /** The promotion it used (lib/promotions.ts), as it was then; null = none. */
+  promotion: AppliedPromotion | null;
+  /** What is still to complete (lib/pos.ts saleMissing): patient data, prescription, deposit. [] = complete. */
+  missing: MissingKey[];
+  /** Recorded with an earlier date: when it was really recorded and the day chosen (lib/sale-date.ts); null = that day. */
+  backdate: BackdateRecord | null;
+  /**
+   * When the sale was really written into the system (owner, 19-nov-2026: «se debe
+   * incluir la fecha en la que se registró, así se sabe si fue una actualización o
+   * una venta del día»): the backdate's `recorded_at`, else `created_at`.
+   */
+  recorded_at: string;
+  /** True when it was recorded on a later day than the one it is of. */
+  backdated: boolean;
+  /**
+   * The live payment rows. `id` and `details` are what the payment correction
+   * (lib/payment-correction.ts) sends back for a row it keeps; `corrected_at`
+   * marks a row that was corrected after it was taken.
+   */
+  payments: Array<{ id: string; method_code: string; amount: number; kind: string; reference: string | null; details: Record<string, unknown> | null; created_at: string; corrected_at: string | null }>;
+  /**
+   * Who the sale was for and what was sold, when the caller asked for it
+   * (`listSales` with `withDetail`). Read from the source tables — the
+   * customer, the order's lines, the product — by lib/pos-sale-detail.ts, with
+   * the field names the analytics list uses, so a panel never has to tell
+   * where a value came from. Absent (not null) when it was not asked for.
+   */
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  frame_brand?: string | null;
+  frame_model?: string | null;
+  frame_color?: string | null;
+  frame_sku?: string | null;
+  own_frame?: boolean;
+  has_rx?: boolean;
+  lens?: LensCodes | null;
+  lens_summary?: { es: string; en: string } | null;
+  items?: string;
 }
 
-function toSale(s: Record<string, unknown>, payments: Array<Record<string, unknown>>): SaleRow {
+export function toSale(s: Record<string, unknown>, payments: Array<Record<string, unknown>>): SaleRow {
   const code = String(s.number).split("-")[0];
   const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
   return {
@@ -1249,16 +1836,35 @@ function toSale(s: Record<string, unknown>, payments: Array<Record<string, unkno
     delivered_at: iso(s.delivered_at),
     voided_at: iso(s.voided_at),
     void_reason: (s.void_reason as string | null) ?? null,
+    void_note: typeof s.void_note === "string" && s.void_note.trim() ? s.void_note.trim() : null,
     void_requested_at: iso(s.void_requested_at),
     created_at: new Date(s.created_at as string).toISOString(),
+    internal_note: typeof s.internal_note === "string" && s.internal_note.trim() ? s.internal_note : null,
+    edited_at: iso(s.edited_at),
+    edited_by: (s.edited_by as string | null) ?? null,
+    deleted_at: iso(s.deleted_at),
+    deleted_by: (s.deleted_by as string | null) ?? null,
+    delete_reason: (s.delete_reason as string | null) ?? null,
+    previous_numbers: Array.isArray(s.previous_numbers) ? (s.previous_numbers as SaleRow["previous_numbers"]) : [],
+    has_wearing_photo: typeof s.wearing_photo_key === "string" && s.wearing_photo_key.length > 0,
+    wearing_photo_at: iso(s.wearing_photo_at),
+    rx_pending: s.rx_pending === true,
+    promotion: s.promotion && typeof s.promotion === "object" ? (s.promotion as AppliedPromotion) : null,
+    missing: saleMissing(s.missing, { rx_pending: s.rx_pending === true, paid: Number(s.paid_cents ?? 0) / 100, insurance: Number(s.insurance_cents ?? 0) / 100, total: Number(s.total_cents ?? 0) / 100, status: String(s.status) }),
+    backdate: s.backdate && typeof s.backdate === "object" ? (s.backdate as BackdateRecord) : null,
+    recorded_at: s.backdate && typeof s.backdate === "object" && (s.backdate as BackdateRecord).recorded_at ? (s.backdate as BackdateRecord).recorded_at : new Date(s.created_at as string).toISOString(),
+    backdated: Boolean(s.backdate && typeof s.backdate === "object"),
     payments: payments
       .filter((p) => p.sale_id === s.id)
       .map((p) => ({
+        id: String(p.id),
         method_code: String(p.method_code),
         amount: dollars(Number(p.amount_cents)),
         kind: String(p.kind ?? "deposit"),
         reference: (p.reference as string | null) ?? null,
+        details: p.details && typeof p.details === "object" ? (p.details as Record<string, unknown>) : null,
         created_at: new Date(p.created_at as string).toISOString(),
+        corrected_at: iso(p.corrected_at),
       })),
   };
 }
@@ -1266,6 +1872,12 @@ function toSale(s: Record<string, unknown>, payments: Array<Record<string, unkno
 export interface SalesFilter {
   establishmentIds: string[] | null;
   sellerId?: string;
+  /**
+   * A seller's list (owner's rule, lib/pos-route.ts saleAccessFor): their own
+   * sales plus the colleagues' sales that still owe money, so the balance can
+   * be collected by whoever is at the counter. The route reduces those rows.
+   */
+  ownOrPendingFor?: string;
   terminalId?: string;
   customerId?: string;
   number?: string;
@@ -1275,21 +1887,50 @@ export interface SalesFilter {
   to?: string;
 }
 
+/** What `listSales` may add to each row beyond the sale itself. */
+export interface ListSalesOptions {
+  /**
+   * Also read who the sale was for and what was sold (customer, frame, lenses,
+   * items) from the source tables — lib/pos-sale-detail.ts. Opt-in because it
+   * costs a handful of extra queries per page, and the callers that only need
+   * the money (the store's status, a seller's own panel) should not pay for
+   * them. Batched: the cost does not grow with the number of sales.
+   */
+  withDetail?: boolean;
+}
+
 /** Sales, newest first, within the caller's scope (the route sets it). */
-export async function listSales(container: MedusaContainer, f: SalesFilter, take = 50): Promise<SaleRow[]> {
+export async function listSales(container: MedusaContainer, f: SalesFilter, take = 50, opts: ListSalesOptions = {}): Promise<SaleRow[]> {
   const svc = pos(container);
   const where: Record<string, unknown> = {};
   if (f.establishmentIds !== null) where.establishment_id = f.establishmentIds;
   if (f.sellerId) where.seller_id = f.sellerId;
+  else if (f.ownOrPendingFor) where.$or = [{ seller_id: f.ownOrPendingFor }, { balance_cents: { $gt: 0 } }];
   if (f.terminalId) where.terminal_id = f.terminalId;
   if (f.customerId) where.customer_id = f.customerId;
   if (f.number) where.number = f.number;
   if (f.status) where.status = f.status;
   if (f.withBalance) where.balance_cents = { $gt: 0 };
   if (f.from || f.to) where.created_at = { ...(f.from ? { $gte: new Date(f.from) } : {}), ...(f.to ? { $lte: new Date(f.to) } : {}) };
-  const sales = await svc.listPosSales(where as never, { take, order: { created_at: "DESC" } });
+  let sales = await svc.listPosSales(where as never, { take, order: { created_at: "DESC" } });
+  // A sale moved to another store answers to its old number too (lib/pos-sale-admin.ts moveSale).
+  if (f.number && !sales.length) {
+    const moved = (await pgOf(container)("pos_sale")
+      .whereNull("deleted_at")
+      .whereRaw("previous_numbers @> ?::jsonb", [JSON.stringify([{ number: f.number }])])
+      .limit(5)
+      .select("id")) as Array<{ id: string }>;
+    if (moved.length) {
+      const { number: _byNumber, ...rest } = where;
+      sales = await svc.listPosSales({ ...rest, id: moved.map((r) => r.id) } as never, { take, order: { created_at: "DESC" } });
+    }
+  }
   const payments = sales.length ? await svc.listPosSalePayments({ sale_id: sales.map((s) => s.id) }, { take: sales.length * 12 }) : [];
-  return sales.map((s) => toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>));
+  const rows = sales.map((s) => toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>));
+  if (!opts.withDetail || !rows.length) return rows;
+  // A sale with no order or no customer simply gets nulls: the list never fails over its description.
+  const details = await loadSaleDetails(container, rows);
+  return rows.map((r) => ({ ...r, ...(details.get(r.id) ?? EMPTY_SALE_DETAIL) }));
 }
 
 export async function getSale(container: MedusaContainer, id: string): Promise<SaleRow | null> {
@@ -1300,6 +1941,32 @@ export async function getSale(container: MedusaContainer, id: string): Promise<S
   return toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>);
 }
 
+/**
+ * The collection as one guarded UPDATE on the sale's own figures. The old
+ * code added the payment to the `paid`/`balance` the caller had read, so two
+ * clerks collecting the same balance at once (two tills, or a double tap)
+ * both started from the same stale numbers: the second write erased the
+ * first and the customer paid twice for one balance. Here the database adds
+ * to what is *currently* paid, and the WHERE refuses the update when the sale
+ * was voided meanwhile, when nothing is owed any more, or when this payment
+ * would take the sale over its total (the losing twin of a race, or a stale
+ * screen). In SET the right-hand columns are the row's values before the
+ * update, so `balance_cents` is computed from the same figures it adds to.
+ */
+export function paymentClaimPlan(saleId: string, paidCents: number, insuranceCents: number): SqlPlan {
+  return {
+    sql: `UPDATE pos_sale
+             SET paid_cents = paid_cents + ?,
+                 insurance_cents = insurance_cents + ?,
+                 balance_cents = total_cents - (paid_cents + ?) - (insurance_cents + ?),
+                 updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status <> 'voided' AND balance_cents > 0
+             AND (paid_cents + insurance_cents + ? + ?) <= total_cents
+       RETURNING paid_cents, insurance_cents, balance_cents`,
+    bindings: [paidCents, insuranceCents, paidCents, insuranceCents, saleId, paidCents, insuranceCents],
+  };
+}
+
 /** Collects (part of) the balance — usually when the glasses are picked up (HU-29). */
 export async function collectPayment(
   container: MedusaContainer,
@@ -1307,13 +1974,27 @@ export async function collectPayment(
   payments: CleanedPayments,
   actorId: string | null
 ): Promise<SaleRow> {
+  // Cheap early exits on what the caller saw; the UPDATE below is the real gate.
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
   if (sale.balance <= 0) throw new PosError("nothing_due", 409);
-  const paid = cents(sale.paid) + payments.paid_cents;
-  const insurance = cents(sale.insurance) + payments.insurance_cents;
-  const balance = cents(sale.total) - paid - insurance;
+  const plan = paymentClaimPlan(sale.id, payments.paid_cents, payments.insurance_cents);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ paid_cents: unknown; insurance_cents: unknown; balance_cents: unknown }>;
+  const claimed = res.rows[0];
+  if (!claimed) {
+    // Refused: nothing was written, so the ledger stays as it was. Say why,
+    // from the sale as it is now rather than as the caller saw it.
+    const now = await getSale(container, sale.id);
+    if (!now) throw new PosError("sale_not_found", 404);
+    if (now.status === "voided") throw new PosError("sale_voided", 409);
+    if (now.balance <= 0) throw new PosError("nothing_due", 409);
+    throw new PosError("overpaid", 409, { balance: now.balance });
+  }
+  const paid = Number(claimed.paid_cents);
+  const insurance = Number(claimed.insurance_cents);
+  const balance = Number(claimed.balance_cents);
+  // The ledger rows only once the sale has accepted the money: a refused
+  // collection must not leave payments that no balance accounts for.
   await writePayments(container, { saleId: sale.id, orderId: sale.order_id, establishmentId: sale.establishment_id, terminalId: sale.terminal_id, actorId, kind: "balance", payments: payments.payments });
-  await pos(container).updatePosSales({ id: sale.id, paid_cents: paid, insurance_cents: insurance, balance_cents: balance });
   if (sale.order_id) await stampOrder(container, sale.order_id, { balance_due_cents: balance, paid_cents: paid + insurance }).catch(() => null);
   await recordAudit(container, {
     actorId,
@@ -1321,19 +2002,164 @@ export async function collectPayment(
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
-    before: { balance_cents: cents(sale.balance) },
+    // From the figures the database returned, not from the caller's screen.
+    before: { balance_cents: balance + payments.paid_cents + payments.insurance_cents },
     after: { balance_cents: balance, collected_cents: payments.paid_cents + payments.insurance_cents },
+  });
+  // The dashboards' payment-method dimension (sale_fact.payment_methods) was
+  // projected when the sale was made; a balance paid later with another method
+  // would otherwise never show under that method's filter. Best-effort, like
+  // every projection: the money is already recorded.
+  if (sale.order_id) {
+    try {
+      await projectOrder(container, sale.order_id);
+    } catch (e) {
+      container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).warn(`[pos] sale ${sale.number}: facts not reprojected after the collection: ${(e as Error).message}`);
+    }
+  }
+  return (await getSale(container, sale.id)) as SaleRow;
+}
+
+/**
+ * The hand-over as one guarded UPDATE. Two clerks delivering the same sale
+ * (or one double tap) used to both write `delivered_at`; and a sale whose
+ * balance was still owed, or that was voided between the screen and the
+ * click, relied on figures the caller had read earlier. The WHERE makes the
+ * database decide: only a live sale with nothing owed and not yet delivered
+ * takes the stamp. 0 rows = already delivered (idempotent), voided, or owed.
+ */
+export function deliveryClaimPlan(saleId: string): SqlPlan {
+  return {
+    sql: `UPDATE pos_sale
+             SET delivered_at = now(), updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status <> 'voided' AND balance_cents <= 0 AND delivered_at IS NULL
+       RETURNING delivered_at`,
+    bindings: [saleId],
+  };
+}
+
+/** The steps the order board still needs to show a sale as delivered: the real events, in order. */
+const DELIVERY_STAGES = ["shipped", "in_transit", "delivered"] as const;
+
+/**
+ * Moves the Medusa order of a delivered sale to `delivered` through the one
+ * stage machine (lib/order-stage-transition.ts), so the order board, the
+ * customer's tracking page and the Sheet agree with the till. A pickup sale
+ * has no fulfillment, and the machine only reaches `delivered` through
+ * `shipped → in_transit → delivered`, so the missing steps are walked in
+ * order: the intermediate ones silently (nothing is "packed" or "on its way"
+ * when the customer is at the counter), the last one with the customer's
+ * usual "delivered" email — the only email the hand-over sends, and only if
+ * they did not opt out (`metadata.notify_email`).
+ *
+ * Must run BEFORE `delivered_at` is written: the board reads that column
+ * (order-board.ts applyPosDelivery) and, once set, answers `next_stages: []`
+ * to every move. Best-effort: a step the machine refuses or that fails is
+ * logged and the delivery stands — the sale is delivered in our records and
+ * the board shows it so from `delivered_at` anyway.
+ */
+async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow, actorId: string | null, silent = false): Promise<boolean> {
+  if (!sale.order_id) return false;
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  try {
+    const board = await fetchBoardOrder(container, sale.order_id);
+    if (!board) return false;
+    if (board.terminal === "canceled" || board.terminal === "refunded") return false;
+    if (board.stage === "delivered") return true;
+    const first = DELIVERY_STAGES.findIndex((s) => board.next_stages.includes(s));
+    if (first < 0) {
+      logger.warn(`[pos] sale ${sale.number}: order ${sale.order_id} at '${board.stage}' offers none of ${DELIVERY_STAGES.join("/")}; stage left as is.`);
+      return false;
+    }
+    const steps = DELIVERY_STAGES.slice(first);
+    for (const stage of steps) {
+      try {
+        await transitionOrderStage(container, sale.order_id, { stage, actorId: actorId ?? "pos", noNotification: silent || stage !== "delivered" });
+      } catch (e) {
+        const why = e instanceof StageError ? `${e.reason}: ${e.message}` : (e as Error).message;
+        logger.warn(`[pos] sale ${sale.number}: order ${sale.order_id} not moved to '${stage}': ${why}`);
+        return false;
+      }
+    }
+    return true;
+  } catch (e) {
+    logger.warn(`[pos] sale ${sale.number}: order stage not moved: ${(e as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * Hands the glasses over (HU-29): stamps `delivered_at` (guarded, see
+ * `deliveryClaimPlan`), releases the tray, moves the order to `delivered` and
+ * audits who handed them. Idempotent: a sale already delivered comes back as
+ * it is, nothing is rewritten. `balance_due` while money is owed — collect it
+ * first, or in the same step with `collectAndDeliver` (HU-32).
+ */
+export async function markDelivered(
+  container: MedusaContainer,
+  sale: SaleRow,
+  opts: {
+    actorId?: string | null;
+    /** The instant it was handed over, when earlier than now (a backdated sale recorded as delivered). */
+    at?: Date | null;
+    /** No message to the patient on the way to "delivered" (it happened long ago). */
+    silent?: boolean;
+  } = {}
+): Promise<SaleRow> {
+  // Cheap early exits on what the caller saw; the UPDATE below is the real gate.
+  if (sale.status === "voided") throw new PosError("sale_voided", 409);
+  if (sale.balance > 0) throw new PosError("balance_due", 409, { balance: sale.balance });
+  if (sale.delivered_at) return sale;
+  const actorId = opts.actorId ?? null;
+  // The order first: once delivered_at exists the board refuses every move.
+  const stageMoved = await advanceOrderToDelivered(container, sale, actorId, opts.silent === true);
+  const plan = deliveryClaimPlan(sale.id);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ delivered_at: unknown }>;
+  if (!res.rows[0]) {
+    // Refused: say why from the sale as it is now, not as the caller saw it.
+    const now = await getSale(container, sale.id);
+    if (!now) throw new PosError("sale_not_found", 404);
+    if (now.status === "voided") throw new PosError("sale_voided", 409);
+    if (now.balance > 0) throw new PosError("balance_due", 409, { balance: now.balance });
+    return now; // delivered meanwhile: the other hand-over counts
+  }
+  if (opts.at) await pgOf(container)("pos_sale").where({ id: sale.id }).update({ delivered_at: opts.at });
+  await releaseTray(container, sale.id);
+  await recordAudit(container, {
+    actorId,
+    action: "sale.deliver",
+    entity: "pos_sale",
+    entityId: sale.id,
+    establishmentId: sale.establishment_id,
+    after: { delivery: sale.delivery, order_stage_moved: stageMoved, ...(opts.at ? { delivered_on: opts.at.toISOString(), backdated: true } : {}) },
   });
   return (await getSale(container, sale.id)) as SaleRow;
 }
 
-/** Hands the glasses over: releases the tray (HU-29). The lab stage is moved on the order board. */
-export async function markDelivered(container: MedusaContainer, sale: SaleRow): Promise<SaleRow> {
+/**
+ * Collect the balance and hand over in one step (HU-32): the customer pays
+ * what is left at the counter and leaves with the glasses. `payments` (as
+ * cleaned by the route) is collected first when something is owed —
+ * `collectPayment` is atomic and writes the ledger — then `markDelivered`
+ * runs on the sale as the collection left it. With nothing owed the payments
+ * are ignored and it is a plain delivery. A refused collection stops before
+ * the delivery, so a sale is never delivered with money still due.
+ */
+export async function collectAndDeliver(
+  container: MedusaContainer,
+  sale: SaleRow,
+  payments: CleanedPayments | null,
+  actorId: string | null
+): Promise<{ sale: SaleRow; collected: boolean }> {
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
-  if (sale.balance > 0) throw new PosError("balance_due", 409, { balance: sale.balance });
-  await pos(container).updatePosSales({ id: sale.id, delivered_at: new Date() });
-  await releaseTray(container, sale.id);
-  return (await getSale(container, sale.id)) as SaleRow;
+  let current = sale;
+  let collected = false;
+  if (current.balance > 0) {
+    if (!payments || !payments.payments.length) throw new PosError("balance_due", 409, { balance: current.balance });
+    current = await collectPayment(container, current, payments, actorId);
+    collected = true;
+  }
+  return { sale: await markDelivered(container, current, { actorId }), collected };
 }
 
 export const VOID_REASONS = ["customer_changed_mind", "wrong_entry", "price_error", "duplicate", "lab_cannot_make", "other"] as const;
@@ -1342,16 +2168,52 @@ export type VoidReason = (typeof VOID_REASONS)[number];
 /** A seller asks; a manager of the store (or someone with sale.void) decides (HU-28). */
 export async function requestVoid(container: MedusaContainer, sale: SaleRow, actorId: string, reason: VoidReason, note: string | null): Promise<SaleRow> {
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
-  await pos(container).updatePosSales({ id: sale.id, void_requested_by: actorId, void_requested_at: new Date(), void_reason: reason, void_note: note });
+  const svc = pos(container);
+  // A repeated request (the seller comes back to add detail, or a colleague
+  // asks again) used to overwrite who asked first and when, which is what the
+  // manager's queue is ordered by and what the audit trail points to. The
+  // first request keeps its timestamp and requester; only the reason and the
+  // note move, and the audit shows what they moved from.
+  const [raw] = (await svc.listPosSales({ id: sale.id }, { take: 1 })) as unknown as Array<Record<string, unknown>>;
+  const pending = Boolean(raw?.void_requested_at);
+  const before = pending ? { reason: (raw.void_reason as string | null) ?? null, note: (raw.void_note as string | null) ?? null } : undefined;
+  await svc.updatePosSales(
+    pending
+      ? { id: sale.id, void_reason: reason, void_note: note }
+      : { id: sale.id, void_requested_by: actorId, void_requested_at: new Date(), void_reason: reason, void_note: note }
+  );
   await recordAudit(container, {
     actorId,
     action: "sale.void_request",
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
+    before,
     after: { reason, note },
   });
   return (await getSale(container, sale.id)) as SaleRow;
+}
+
+/**
+ * The void as one guarded UPDATE. Two confirmations of the same sale (a
+ * double click, two managers at once) both passed the `status !== "voided"`
+ * check on what each had read and both wrote the refund rows: the customer
+ * was "given back" twice what they paid once. The WHERE makes the database
+ * decide who voids: one UPDATE matches, the other finds 0 rows and is told
+ * `sale_voided`. The refunds, the order and the tray follow only for the
+ * winner. Same style as `deliveryClaimPlan`.
+ */
+export function voidClaimPlan(saleId: string, actorId: string, reason: VoidReason, note: string | null): SqlPlan {
+  // `void_note = COALESCE(NULLIF(?, ''), void_note)`: a confirmation without a
+  // note of its own keeps what the seller wrote when asking (the reason the
+  // approver read); a new note replaces it.
+  return {
+    sql: `UPDATE pos_sale
+             SET status = 'voided', voided_at = now(), voided_by = ?, void_reason = ?, void_note = COALESCE(NULLIF(?, ''), void_note), updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status <> 'voided'
+       RETURNING voided_at`,
+    bindings: [actorId, reason, note ?? "", saleId],
+  };
 }
 
 /**
@@ -1359,6 +2221,11 @@ export async function requestVoid(container: MedusaContainer, sale: SaleRow, act
  * marked voided with who, when and why. The Medusa order is canceled when no
  * fulfillment has shipped; what the customer paid is recorded as refunds in
  * the ledger, so the cash count and the reports stay true.
+ *
+ * The mark is taken FIRST, atomically (`voidClaimPlan`); everything that
+ * follows (order, refunds, claims, tray, facts) runs once, for whoever took
+ * it. A failure after the claim leaves a voided sale whose follow-ups are
+ * logged for the owner to finish by hand — never two refunds.
  */
 export async function voidSale(
   container: MedusaContainer,
@@ -1368,8 +2235,38 @@ export async function voidSale(
   note: string | null
 ): Promise<{ sale: SaleRow; order_canceled: boolean }> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  // Cheap early exit on what the caller saw; the UPDATE below is the real gate.
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
+  const plan = voidClaimPlan(sale.id, actorId, reason, note);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ voided_at: unknown }>;
+  if (!res.rows[0]) {
+    // Refused: say why from the sale as it is now, not as the caller saw it.
+    const now = await getSale(container, sale.id);
+    if (!now) throw new PosError("sale_not_found", 404);
+    throw new PosError("sale_voided", 409);
+  }
+  try {
+    return await voidFollowUps(container, sale, actorId, reason, note);
+  } catch (e) {
+    // The mark stands (never a second refund); what did not get written is in the log.
+    logger.error(`[pos] void ${sale.number}: marked voided but a follow-up failed: ${(e as Error).message}`);
+    throw e;
+  }
+}
+
+/** Everything a void does once the sale is marked: order, refunds, claims, tray, facts, audit. */
+async function voidFollowUps(
+  container: MedusaContainer,
+  sale: SaleRow,
+  actorId: string,
+  reason: VoidReason,
+  note: string | null
+): Promise<{ sale: SaleRow; order_canceled: boolean }> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const svc = pos(container);
+  // The payments as they are NOW (a balance collected between the screen and
+  // the click is refunded too), not as the caller's screen had them.
+  const held = (await getSale(container, sale.id)) ?? sale;
   let orderCanceled = false;
   if (sale.order_id) {
     try {
@@ -1384,38 +2281,33 @@ export async function voidSale(
   }
   // Net paid per method (refunds are negative rows), returned by the same method.
   const byMethod = new Map<string, number>();
-  for (const p of sale.payments) byMethod.set(p.method_code, (byMethod.get(p.method_code) ?? 0) + cents(p.amount));
+  for (const p of held.payments) byMethod.set(p.method_code, (byMethod.get(p.method_code) ?? 0) + cents(p.amount));
   const methods = new Map((await listPaymentMethods(container)).map((m) => [m.code, m]));
-  const cashSession = await openCashSession(container, sale.terminal_id);
-  const ledger = [...byMethod.entries()]
-    .filter(([code, amount]) => amount > 0 && !(methods.get(code)?.kind === "insurance" || methods.get(code)?.receivable))
-    .map(([code, amount]) => ({
-      sale_id: sale.id,
-      method_code: code,
-      amount_cents: -amount,
-      kind: "refund" as const,
-      establishment_id: sale.establishment_id,
-      received_by: actorId,
-      counts_as_cash: Boolean(methods.get(code)?.counts_as_cash),
-      cash_session_id: methods.get(code)?.counts_as_cash ? cashSession : null,
-      reference: null,
-    }));
-  if (ledger.length) await svc.createPosSalePayments(ledger);
+  const refundable = [...byMethod.entries()].filter(([code, amount]) => amount > 0 && !(methods.get(code)?.kind === "insurance" || methods.get(code)?.receivable));
+  // A cash refund leaves the store's register (opening it if nobody has yet); other methods never touch it.
+  const cashSession = refundable.some(([code]) => methods.get(code)?.counts_as_cash) ? await openCashSession(container, { establishmentId: sale.establishment_id, terminalId: sale.terminal_id, actorId }) : null;
+  const ledger = refundable.map(([code, amount]) => ({
+    sale_id: sale.id,
+    method_code: code,
+    amount_cents: -amount,
+    kind: "refund" as const,
+    establishment_id: sale.establishment_id,
+    received_by: actorId,
+    counts_as_cash: Boolean(methods.get(code)?.counts_as_cash),
+    cash_session_id: methods.get(code)?.counts_as_cash ? cashSession : null,
+    reference: null,
+  }));
+  if (ledger.length) {
+    const written = await svc.createPosSalePayments(ledger);
+    await ledgerCashPayments(container, { sessionId: cashSession, saleId: sale.id, terminalId: sale.terminal_id, actorId, rows: written });
+  }
   // The insurer's open claims of a voided sale are rejected: nothing to collect.
   const claims = await svc.listInsuranceClaims({ sale_id: sale.id, status: ["pending", "submitted"] } as never, { take: 20 });
   if (claims.length) await svc.updateInsuranceClaims(claims.map((c) => ({ id: c.id, status: "rejected", note: "sale voided" })) as never);
 
-  await svc.updatePosSales({
-    id: sale.id,
-    status: "voided",
-    voided_at: new Date(),
-    voided_by: actorId,
-    void_reason: reason,
-    void_note: note,
-    paid_cents: 0,
-    insurance_cents: 0,
-    balance_cents: 0,
-  });
+  // Status, who, when and why were written by the claim; only the figures
+  // move now that the refunds exist.
+  await svc.updatePosSales({ id: sale.id, paid_cents: 0, insurance_cents: 0, balance_cents: 0 });
   await releaseTray(container, sale.id);
   await voidFacts(container, sale.id);
   if (sale.order_id) await stampOrder(container, sale.order_id, { pos_voided: true, balance_due_cents: 0 }).catch(() => null);
@@ -1425,7 +2317,7 @@ export async function voidSale(
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
-    before: { status: sale.status, total: sale.total, paid: sale.paid },
+    before: { status: sale.status, total: sale.total, paid: held.paid },
     after: { status: "voided", reason, note, order_canceled: orderCanceled },
   });
   return { sale: (await getSale(container, sale.id)) as SaleRow, order_canceled: orderCanceled };

@@ -523,3 +523,17 @@ describe("defaultCostRules", () => {
     expect(sheet.profit_target_amount).toBe(26.04);
   });
 });
+
+describe("computeCostSheet — lab surcharge for a high power (owner, 19-nov-2026: «+30 cuando es +6»)", () => {
+  it("is one material line after the items, and lowers the margin by exactly that", () => {
+    const base = computeCostSheet(OWNER_ORDER, OWNER_RULES);
+    const withIt = computeCostSheet({ ...OWNER_ORDER, lab_surcharge: 30 }, OWNER_RULES);
+    const line = withIt.lines.find((l) => l.key === "lab_surcharge:rx");
+    expect(line).toMatchObject({ kind: "lab_surcharge", group: "material", subtotal: 30, undefined_cost: false });
+    // After the frame line: summaries pair frame lines with items by position.
+    expect(withIt.lines.findIndex((l) => l.key === "lab_surcharge:rx")).toBeGreaterThan(withIt.lines.findIndex((l) => l.key.startsWith("frame:")));
+    expect(withIt.materials_total).toBe(base.materials_total + 30);
+    expect(withIt.margin).toBeCloseTo(base.margin - 30, 2);
+    expect(computeCostSheet({ ...OWNER_ORDER, lab_surcharge: 0 }, OWNER_RULES).lines.some((l) => l.kind === "lab_surcharge")).toBe(false);
+  });
+});

@@ -34,7 +34,9 @@ export async function POST(
       files.slice(0, MAX_PHOTOS).map((file) => ({
         filename: `reviews/${Date.now()}-${file.originalname}`,
         mimeType: file.mimetype,
-        content: file.buffer.toString("binary"),
+        // Base64: the file providers decode base64 first, else UTF-8 — a
+        // "binary" string came out corrupt (see admin/catalog/uploads).
+        content: file.buffer.toString("base64"),
         access: "public" as const,
       }))
     );

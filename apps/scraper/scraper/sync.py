@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from collections.abc import Callable
 from typing import Any
 
 import yaml
@@ -9,13 +10,20 @@ import yaml
 from scraper.config import Config, get_config
 from scraper.http_client import RateLimitedClient
 from scraper.images import process_product_images
-from scraper.medusa_push import close_admin_client, reconcile_discontinued, upsert_product
+from scraper.medusa_push import (
+    close_admin_client,
+    reconcile_discontinued,
+    report_ai_usage,
+    upsert_product,
+)
 from scraper.models import ScrapedProduct
+from scraper.normalize import brand_name
 from scraper.parser import (
     align_images_to_colors,
     parse_product_html,
     parse_store_api_product,
 )
+from scraper.report import SyncReport
 from scraper.state import StateStore
 from scraper.translate import translate_product
 
@@ -253,29 +261,56 @@ def _load_pricing() -> dict[str, Any]:
         return {"default_price_cents": 9900}
 
 
+#: Called with a progress dict: {phase, collection, position, total,
+#: collections_done, collections_total, handle}.
+ProgressFn = Callable[[dict[str, Any]], None]
+
+
 async def sync(
     config: Config,
     collections: list[str] | None = None,
     full: bool = False,
     dry_run: bool = False,
-) -> None:
+    *,
+    run_id: str | None = None,
+    on_progress: ProgressFn | None = None,
+    should_stop: Callable[[], bool] | None = None,
+) -> SyncReport:
+    """Scrape the supplier into Medusa and return what happened.
+
+    `on_progress` and `should_stop` are the worker's hooks (heartbeat to Medusa,
+    «Detener» from the panel); the CLI passes neither. A stop is honoured
+    between products, never inside one, and skips reconciliation: a run cut
+    short has not seen the whole catalog.
+    """
     state = StateStore(config.state_db_path)
     pricing = _load_pricing()
     target_collections = collections or config.collections
+    report = SyncReport()
+
+    def progress(**fields: Any) -> None:
+        if on_progress is not None:
+            on_progress({"collections_total": len(target_collections), **fields})
     # Every handle present at the supplier this run, whether pushed or skipped as
     # unchanged. Used to reconcile (draft) discontinued products on full syncs.
     seen_handles: set[str] = set()
     fetch_failed = False
 
     async with RateLimitedClient(config) as client:
-        for collection_slug in target_collections:
+        for collections_done, collection_slug in enumerate(target_collections):
+            if report.canceled:
+                break
             print(f"\n[scraper] ── Syncing collection: {collection_slug} ──")
+            progress(phase="fetch", collection=collection_slug, collections_done=collections_done)
             products = await _fetch_collection_products(client, config, collection_slug)
             print(f"[scraper]   Found {len(products)} products.")
+            report.collections += 1
+            report.found += len(products)
             if not products:
                 # A collection that yields nothing may be a fetch failure, not a real
                 # empty — don't let reconciliation unpublish it on a fluke.
                 fetch_failed = True
+                report.empty_collections.append(collection_slug)
 
             pushed = 0
             skipped = 0
@@ -283,10 +318,24 @@ async def sync(
             consecutive_failures = 0
             total = len(products)
             for position, product in enumerate(products, start=1):
+                if should_stop is not None and should_stop():
+                    print("[scraper]   Stopped from the admin panel.", flush=True)
+                    report.canceled = True
+                    break
                 seen_handles.add(product.handle)
                 if not full and not state.has_changed(product.handle, product.content_hash):
                     skipped += 1
+                    report.unchanged += 1
                     continue
+
+                progress(
+                    phase="products",
+                    collection=collection_slug,
+                    collections_done=collections_done,
+                    position=position,
+                    total=total,
+                    handle=product.handle,
+                )
 
                 # Per-product progress. Each product costs a rate-limited HTML fetch
                 # plus, per image, a download, an R2 upload and ~2.5s of u2net
@@ -318,19 +367,37 @@ async def sync(
                     # AI-assisted es/fr translation of title+description (skips
                     # gracefully if ANTHROPIC_API_KEY is unset or the call fails)
                     if config.anthropic_api_key:
+                        usage: list[dict[str, Any]] = []
                         product.translations = (
-                            translate_product(product.model_name, product.description_en, config)
+                            translate_product(
+                                product.model_name,
+                                product.description_en,
+                                config,
+                                on_usage=usage.append,
+                            )
                             or {}
                         )
+                        # The call is billed even on a dry run, so it is always
+                        # reported. One key per call: a re-sent report counts once.
+                        for i, event in enumerate(usage):
+                            event["ref_id"] = product.handle
+                            event["event_key"] = (
+                                f"translate:{run_id or 'cli'}:{product.handle}:{started:.3f}:{i}"
+                            )
+                        report_ai_usage(config, usage)
 
                     # Image pipeline (download → optimize → R2 upload)
                     product = process_product_images(product, config, dry_run=dry_run)
 
                     # Push to Medusa
-                    medusa_id = upsert_product(product, config, pricing, dry_run=dry_run)
+                    result = upsert_product(
+                        product, config, pricing, dry_run=dry_run, run_id=run_id
+                    )
                 except Exception as err:
                     failed += 1
                     consecutive_failures += 1
+                    report.failed += 1
+                    report.add_error(product.handle, f"{type(err).__name__}: {err}")
                     print(
                         f"[scraper]   [{position}/{total}] {product.handle} ✗ "
                         f"{time.monotonic() - started:.1f}s — {type(err).__name__}: {err}",
@@ -346,14 +413,46 @@ async def sync(
                             flush=True,
                         )
                         fetch_failed = True
+                        report.aborted = True
                         break
                     continue
 
                 consecutive_failures = 0
+                medusa_id = result.product_id if result else None
+                # Every picture failed (storage down, a bad key): the product is in
+                # Medusa but bare. Leave it out of the state cache so the next run
+                # retries the images instead of calling it "unchanged" forever.
+                images_lost = (
+                    not dry_run and bool(product.image_urls) and not product.r2_image_keys
+                )
+                if images_lost:
+                    report.add_error(
+                        product.handle,
+                        f"0 of {len(product.image_urls)} images stored — "
+                        "see the [images] lines in the log",
+                    )
                 if medusa_id or dry_run:
                     pushed += 1
-                    if not dry_run:
+                    if not dry_run and not images_lost:
                         state.mark_seen(product.handle, product.content_hash)
+                if result and result.created:
+                    report.new += 1
+                    report.new_products.append(
+                        {
+                            "handle": product.handle,
+                            "title": product.model_name,
+                            "brand": brand_name(product.collection_slug),
+                            "thumbnail": (product.r2_image_keys or [None])[0],
+                            "colors": len(product.colors),
+                            "collection": product.collection_slug,
+                        }
+                    )
+                elif result:
+                    report.updated += 1
+                    if result.images_recovered:
+                        report.images_recovered.append(
+                            {"handle": product.handle, "collection": product.collection_slug}
+                        )
 
                 print(
                     f"[scraper]   [{position}/{total}] {product.handle} "
@@ -373,19 +472,24 @@ async def sync(
                 # Reconciliation drafts anything not seen this run. A collection
                 # that partly failed is not evidence a product is discontinued.
                 fetch_failed = True
+            if report.aborted:
+                break
 
     # Reconcile discontinued models (draft them) — only on a full sync where every
     # collection returned data, so a partial/failed fetch never unpublishes stock.
-    if full and not fetch_failed:
+    if full and not fetch_failed and not report.canceled:
+        progress(phase="reconcile", collections_done=len(target_collections))
         drafted = reconcile_discontinued(
             seen_handles, set(target_collections), config, dry_run=dry_run
         )
+        report.drafted = len(drafted)
         print(f"[scraper]   Reconciled discontinued: {len(drafted)} drafted.")
-    elif full and fetch_failed:
-        print("[scraper]   Skipping reconciliation — a collection returned no data.")
+    elif full and (fetch_failed or report.canceled):
+        print("[scraper]   Skipping reconciliation — the run did not see the whole catalog.")
 
     close_admin_client()
     print("\n[scraper] ✓ Sync complete.")
+    return report
 
 
 async def _enrich_from_html(

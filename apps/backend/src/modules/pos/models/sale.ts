@@ -53,4 +53,41 @@ export const PosSale = model.define("pos_sale", {
   void_note: model.text().nullable(),
   void_requested_by: model.text().nullable(),
   void_requested_at: model.dateTime().nullable(),
+  /** Free text the staff keep on the sale (never printed on the customer's receipt). */
+  internal_note: model.text().nullable(),
+  /** Last edit of the sale's details (lib/pos-sale-admin.ts updateSaleDetails). */
+  edited_at: model.dateTime().nullable(),
+  edited_by: model.text().nullable(),
+  /**
+   * Soft delete by an owner or superadmin (lib/pos-sale-admin.ts deleteSale):
+   * `deleted_at` (Medusa's own column) hides the sale everywhere; these say who
+   * and why, so it can be restored.
+   */
+  deleted_by: model.text().nullable(),
+  delete_reason: model.text().nullable(),
+  /**
+   * Numbers the sale had before being moved to another store, oldest first:
+   * [{ number, establishment_id, moved_at, moved_by }] (lib/pos-sale-admin.ts moveSale).
+   */
+  previous_numbers: model.json().nullable(),
+  /**
+   * The patient wearing the frame, taken at the counter and shown at pickup
+   * (lib/pos-wearing-photo.ts). The key never leaves the backend.
+   */
+  wearing_photo_key: model.text().nullable(),
+  wearing_photo_at: model.dateTime().nullable(),
+  wearing_photo_by: model.text().nullable(),
+  wearing_photo_consent_at: model.dateTime().nullable(),
+  /**
+   * Lenses sold before the prescription exists (owner, 15-nov-2026: the patient
+   * pays the deposit, goes to the exam and the prescription arrives hours
+   * later). Cleared when it is added from the sale (lib/rx-pending.ts).
+   */
+  rx_pending: model.boolean().default(false),
+  /** The promotion the sale used, copied (lib/promotions.ts AppliedPromotion); null = none. */
+  promotion: model.json().nullable(),
+  /** Patient data the sale was recorded without, still to complete (lib/pos.ts missingCustomerData); null = none. */
+  missing: model.json().nullable(),
+  /** Recorded with an earlier date (lib/sale-date.ts): when it was really recorded, by whom, the day chosen; null = recorded that day. */
+  backdate: model.json().nullable(),
 });

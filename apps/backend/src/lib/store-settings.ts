@@ -163,3 +163,24 @@ export async function resolveStoreSettings(
     updated_at: (row["updated_at"] as string | null) ?? null,
   };
 }
+
+/**
+ * The user the last ownership transfer named (store_setting.owner_user_id), or
+ * null when there was none. Throws when the row cannot be read: the caller
+ * (ownerUserId) decides what a failed read means.
+ */
+export async function storedOwnerUserId(container: MedusaContainer): Promise<string | null> {
+  const svc = container.resolve<StoreSettingsModuleService>(STORE_SETTINGS_MODULE);
+  const rows = (await svc.listStoreSettings({ id: STORE_SETTING_ID })) as unknown as Record<string, unknown>[];
+  const id = rows[0]?.["owner_user_id"];
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
+/** Names `userId` the owner. One column of the single row: the previous owner is replaced, never joined. */
+export async function saveStoredOwnerUserId(container: MedusaContainer, userId: string, actorId: string | null): Promise<void> {
+  const svc = container.resolve<StoreSettingsModuleService>(STORE_SETTINGS_MODULE);
+  const rows = await svc.listStoreSettings({ id: STORE_SETTING_ID });
+  const data = { id: STORE_SETTING_ID, owner_user_id: userId, updated_by: actorId };
+  if (rows.length) await svc.updateStoreSettings(data);
+  else await svc.createStoreSettings(data);
+}

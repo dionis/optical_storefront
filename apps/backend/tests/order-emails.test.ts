@@ -9,6 +9,7 @@
  */
 
 import { enrichLensItems, type EnrichedItem } from "../src/lib/email/order-enrich";
+import { wantsStageEmail } from "../src/lib/order-stage-transition";
 import type { OrderEmailData, PrescriptionForEmail } from "../src/lib/email/order-confirmation";
 import {
   renderAdminOrderNotification,
@@ -383,5 +384,17 @@ describe("store identity at the top of the emails", () => {
     const mail = renderCustomerOrderConfirmation(order, "en");
     expect(mail.html).toContain('src="https://cdn.example.com/icon.png"');
     expect(mail.html).toContain("Óptica &lt;Demo&gt;");
+  });
+});
+
+describe("stage emails honour the customer's email opt-out", () => {
+  it("sends unless metadata.notify_email is an explicit false (the till and the checkout both write it)", () => {
+    expect(wantsStageEmail({})).toBe(true);
+    expect(wantsStageEmail(null)).toBe(true);
+    expect(wantsStageEmail({ notify_email: true })).toBe(true);
+    expect(wantsStageEmail({ notify_email: "true" })).toBe(true);
+    expect(wantsStageEmail({ notify_email: null })).toBe(true);
+    expect(wantsStageEmail({ notify_email: false })).toBe(false);
+    expect(wantsStageEmail({ notify_email: "false" })).toBe(false);
   });
 });

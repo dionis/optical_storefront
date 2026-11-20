@@ -8,9 +8,9 @@ import {
 import { isShippableCountry, quoteCarrier } from "../../../../../lib/shipping-rates";
 
 /**
- * POST /store/carts/:id/shipping-select — el cliente ELIGE transportista
- * (fedex | dhl) y el servidor fija el método de envío del carrito con la
- * tarifa RE-COTIZADA aquí (nunca la que diga el cliente):
+ * POST /store/carts/:id/shipping-select — fija el método de envío del carrito
+ * con el precio RE-COTIZADO aquí (el fijo del servidor, nunca el que diga el
+ * cliente). `carrier` solo admite el que el servidor ofrece:
  *
  *   1. valida USA-solo y re-cotiza con la tabla del servidor;
  *   2. asegura un método de envío Medusa en el carrito (la opción base de la
@@ -64,7 +64,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<voi
 
   const quote = quoteCarrier(Number(cart.item_total ?? 0), carrier);
   if (!quote) {
-    res.status(422).json({ type: "invalid_data", reason: "unknown_carrier", message: `Unknown carrier '${carrier}'. Allowed: fedex, dhl.` });
+    res.status(422).json({ type: "invalid_data", reason: "unknown_carrier", message: `Unknown carrier '${carrier}'. Allowed: fedex.` });
     return;
   }
 

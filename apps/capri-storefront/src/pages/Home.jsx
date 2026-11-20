@@ -8,6 +8,7 @@ import { useCatalog } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { setSeo } from "../lib/seo.js";
+import { TENANT } from "../config/tenant.js";
 
 const IMG = "https://caprioptics.com/wp-content/uploads/";
 
@@ -117,14 +118,14 @@ export default function Home() {
   const { t, lang } = useLang();
   useEffect(() => {
     setSeo({
-      title: lang === "es" ? "RUBI LENS — Espejuelos de marca online con probador virtual" : "RUBI LENS — Designer eyeglasses online with virtual try-on",
+      title: lang === "es" ? `${TENANT.name} — Espejuelos de marca online con probador virtual` : `${TENANT.name} — Designer eyeglasses online with virtual try-on`,
       description: lang === "es"
         ? "Espejuelos Di Caprio, Flexure, Millennial, Peachtree, Four You y Trendy con lentes de receta, probador virtual con tu cámara y envío FedEx a todo EE. UU."
         : "Di Caprio, Flexure, Millennial, Peachtree, Four You and Trendy eyeglasses with prescription lenses, camera try-on and FedEx shipping across the US.",
       path: "/",
     });
   }, [lang]);
-  const { products: PRODUCTS } = useCatalog();
+  const { products: PRODUCTS, loading } = useCatalog();
   const featured = PRODUCTS.slice(0, 12);
 
   // Carrusel del hero (avance automático + control manual)
@@ -154,7 +155,7 @@ export default function Home() {
       <section className="hero-zee">
         <div className="hero-zee-inner">
           <div className="hero-zee-left" key={slide}>
-            <span className="hero-kicker">RUBI LENS · Óptica y Salud Visual</span>
+            <span className="hero-kicker">{TENANT.name} · {TENANT.tagline}</span>
             <h1 className="hero-zee-title">{t(HERO_SLIDES[slide].tk)}</h1>
             <p className="hero-zee-sub">{t(HERO_SLIDES[slide].sk)}</p>
             <div className="hero-cta">
@@ -167,8 +168,10 @@ export default function Home() {
             {HERO_SLIDES.map((s, i) => (
               <Link key={i} to={s.to} aria-label={t(s.tk)} data-model={lookbookTag(s.ref)}
                     className={`hero-zee-photo${i === slide ? " is-active" : ""}`}>
+                {/* `fetchpriority` en minúsculas: React 18 no conoce `fetchPriority`
+                    (avisaba en consola y lo descartaba); en minúsculas lo pasa al DOM. */}
                 <img src={LOOKBOOK_BY_ID[s.ref].src} alt="" loading={i === 0 ? "eager" : "lazy"}
-                     fetchPriority={i === 0 ? "high" : "auto"} decoding="async"
+                     fetchpriority={i === 0 ? "high" : "auto"} decoding="async"
                      onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
               </Link>
             ))}
@@ -243,7 +246,7 @@ export default function Home() {
             ))}
           </div>
           <aside className="split-aside">
-            <span className="aside-kicker">RUBI LENS</span>
+            <span className="aside-kicker">{TENANT.name}</span>
             <h2 className="section-title left">{t("home.moods.title")}</h2>
             <p className="section-sub left">{t("home.moods.aside.text")}</p>
             <Link to="/catalogo" className="btn btn-primary">{t("home.moods.aside.cta")}</Link>
@@ -254,7 +257,7 @@ export default function Home() {
       <section className="section shape-shop reveal">
         <div className="split split-30-70">
           <aside className="split-aside">
-            <span className="aside-kicker">RUBI LENS</span>
+            <span className="aside-kicker">{TENANT.name}</span>
             <h2 className="section-title left">{t("home.shapes.title")}</h2>
             <p className="section-sub left">{t("home.shapes.sub")}</p>
             <Link to="/catalogo" className="btn btn-outline">{t("home.shapes.cta")}</Link>
@@ -338,9 +341,13 @@ export default function Home() {
           <Link to="/catalogo" className="see-all">{t("section.seeall")}</Link>
         </div>
         <div className="product-scroller">
-          {featured.map((p) => (
-            <div className="scroller-item" key={p.slug}><ProductCard product={p} /></div>
-          ))}
+          {loading && !featured.length
+            ? Array.from({ length: 6 }, (_, i) => (
+                <div className="scroller-item" key={`skel-${i}`}><div className="card-skeleton" /></div>
+              ))
+            : featured.map((p) => (
+                <div className="scroller-item" key={p.slug}><ProductCard product={p} /></div>
+              ))}
         </div>
       </section>
 

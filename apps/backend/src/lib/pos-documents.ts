@@ -1,13 +1,21 @@
+import type { AppliedPromotion } from "./promotions";
+import type { StoreHours } from "./store-hours";
 import type { INotificationModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
 import { listAudit, recordAudit } from "./audit";
 import { resolveEmailLocale, type EmailLocale } from "./email/copy";
+import type { PrescriptionForEmail } from "./email/order-confirmation";
+import { productImageUrl } from "./email/order-enrich";
+import { loadOrderImages } from "./email/order-images";
 import { renderReceiptEmail } from "./email/pos-emails";
 import { listEstablishments } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
+import { parseLensFinish, resolveLensFinish, withFinishSuffix, type LensFinish } from "./lens-finish";
 import { storefrontOrigin } from "./order-access";
 import { getSale, listPaymentMethods, listTerminals, PosError, type SaleRow } from "./pos-data";
+import { loadPrescriptionRecords } from "./prescription-read";
+import { promoLinePct } from "./price-matrix";
 import { presignPrescriptionUrl } from "./s3";
 import { tenant } from "./tenant";
 
@@ -20,15 +28,34 @@ import { tenant } from "./tenant";
  *  - Lab ticket (job): one per line with lenses. Carries the prescription the
  *    lab needs, never prices or payments. "Submitted By" is the seller code
  *    and the till, never a personal email.
- *  - Receipt: what was bought and paid, the balance and when to pick up.
- *    Never prescription values, the worn prescription, the optical change or
- *    insurance member data.
+ *  - Receipt: what was bought and paid, the balance and when to pick up. No
+ *    prescription values on paper or in the default email. The email adds the new
+ *    prescription and the frames' photos only when someone explicitly asks for
+ *    the details (HIPAA, owner's decision), only to the address on the sale, and
+ *    leaves a trace in the audit log. Never the worn prescription, the optical
+ *    change or insurance member data.
+ *  - Receipt, two copies ("receipt_duo"): the same receipt data laid out by the
+ *    panel as one letter page with a customer copy and a store copy, for tills
+ *    with a regular (non-thermal) printer. Same data as "receipt"; the kind only
+ *    tells the audit log what came out of the printer.
+ *
+ * The printed documents carry the frame's photo (catalog photo, or the photo of
+ * the frame the customer brought through a short-lived presigned URL — the
+ * private bucket is never linked directly). The email keeps its own rule: photos
+ * only in the detailed version, own-frame photos attached, never linked.
  *
  * Every print is recorded in the audit log; from the second on, the document
- * says "REPRINT" with the date (HU-105).
+ * says "REPRINT" with the date (HU-105). The two receipt kinds share one counter:
+ * a roll receipt after a two-copy one is still a reprint.
  */
 
 type Bilingual = { es: string; en: string } | null;
+
+export const DOCUMENT_KINDS = ["job", "receipt", "receipt_duo"] as const;
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+export const isDocumentKind = (v: unknown): v is DocumentKind => DOCUMENT_KINDS.includes(v as DocumentKind);
+/** Kinds whose prints count together for "REPRINT". */
+const printFamily = (kind: DocumentKind): DocumentKind[] => (kind === "job" ? ["job"] : ["receipt", "receipt_duo"]);
 
 export interface DocLine {
   kind: "frame" | "own_frame";
@@ -38,19 +65,83 @@ export interface DocLine {
   list: number;
   unit_price: number;
   tax_amount: number;
+  frame_price: number;
+  lens_price: number;
+  quantity: number;
+  /**
+   * Photo of the frame: the public catalog photo (resized) for a store frame; for
+   * the customer's own frame, a short-lived presigned URL, only when the caller
+   * asked for photo URLs (prints). Null when there is none — the panel draws a
+   * placeholder. The email ignores it unless detailed.
+   */
+  image_url?: string | null;
   design_code: string | null;
-  lens: { design: Bilingual; material: Bilingual; photo: Bilingual; ar: Bilingual; category: string | null } | null;
+  /**
+   * `design` already carries the finish word where it matters — "Visión
+   * Sencilla (tallado digital)" — so every print, the e-mail and the sale
+   * panel name the lens the lab has to cut without each formatting it;
+   * `finish` is the code for anything that needs to branch on it.
+   */
+  lens: { design: Bilingual; material: Bilingual; photo: Bilingual; ar: Bilingual; category: string | null; finish: LensFinish | null } | null;
   handling: "lenses_only" | "frame_supplied" | "patient_own_frame" | null;
-  frame: { brand: string | null; model: string | null; material: string | null; eye_size: number | null; bridge: number | null } | null;
-  own_frame: { description: string | null; has_photo: boolean; photo_url?: string | null } | null;
+  /**
+   * The frame sold. For a store frame off the catalog (`off_catalog`) the brand,
+   * model, color and size are what the seller typed (there is no product).
+   */
+  frame: { brand: string | null; model: string | null; material: string | null; eye_size: number | null; bridge: number | null; color?: string | null; temple?: number | null; off_catalog?: boolean } | null;
+  own_frame: {
+    description: string | null;
+    has_photo: boolean;
+    photo_url?: string | null;
+    photo_key?: string | null;
+    /** What the clerk typed about the customer's frame (null on older sales). */
+    brand?: string | null;
+    model?: string | null;
+    color?: string | null;
+    eye_size?: number | null;
+    bridge?: number | null;
+    temple?: number | null;
+  } | null;
   prescription_id: string | null;
+  /**
+   * The owner's promotion on this line («Productos y precios», sale line
+   * metadata `promo`): `list` above is already the reduced price; `before` is
+   * the price before it (dollars) and `pct` the line's effective % off, one
+   * decimal — what the receipt prints as «Precio antes $X · Promoción −Y %».
+   * The per-part percentages say what was discounted. Null = no promotion.
+   */
+  promo: DocLinePromo | null;
+}
+
+export interface DocLinePromo {
+  before: number;
+  pct: number;
+  frame_pct: number | null;
+  lens_pct: number | null;
+  photo_pct: number | null;
+  ar_pct: number | null;
+}
+
+/** A sale line's stored `promo` as the documents show it; null when absent or meaningless. Pure. */
+export function docLinePromo(raw: unknown, list: number): DocLinePromo | null {
+  if (!raw || typeof raw !== "object") return null;
+  const p = raw as Record<string, unknown>;
+  const beforeCents = Math.round(Number(p["before_cents"]));
+  if (!Number.isFinite(beforeCents) || beforeCents <= 0) return null;
+  const pct = promoLinePct({ before_cents: beforeCents }, list);
+  if (pct === null) return null;
+  const part = (v: unknown) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+  return { before: beforeCents / 100, pct, frame_pct: part(p["frame_pct"]), lens_pct: part(p["lens_pct"]), photo_pct: part(p["photo_pct"]), ar_pct: part(p["ar_pct"]) };
 }
 
 export interface SaleDocument {
-  kind: "job" | "receipt";
-  business: { name: string; legal_name: string; url: string; support_email: string | null };
-  store: { code: string; name: string; address: string | null; phone: string | null; receipt_note: string | null };
-  terminal: { code: string | null; receipt_locale: string; ticket_locale: string };
+  kind: DocumentKind;
+  /** `timezone`: the store's IANA zone; every date on a document is shown in it, never in the server's (UTC). */
+  business: { name: string; legal_name: string; url: string; support_email: string | null; timezone: string };
+  /** `hours`: the store's opening hours (lib/store-hours.ts), printed as one line on receipts; null = not set. */
+  store: { code: string; name: string; address: string | null; phone: string | null; receipt_note: string | null; hours: StoreHours | null };
+  /** `printer`: the till's printer as configured (free text such as "thermal 80mm" or "HP LaserJet"); null when unknown. */
+  terminal: { code: string | null; receipt_locale: string; ticket_locale: string; printer: string | null };
   sale: {
     id: string;
     number: string;
@@ -62,14 +153,18 @@ export interface SaleDocument {
     status: string;
     voided_at: string | null;
     delivery: string;
+    /** The prescription is not in yet (lib/rx-pending.ts): the lab ticket cannot be printed. */
+    rx_pending: boolean;
+    /** The promotion the sale used, printed by name (lib/promotions.ts); null = none. */
+    promotion: AppliedPromotion | null;
   };
-  customer: { name: string };
+  customer: { name: string; phone: string | null };
   tracking_url: string;
   print: { count: number; reprint: boolean; first_at: string | null };
-  /** Receipt only. */
+  /** Receipt kinds only. */
   lines?: DocLine[];
   totals?: { list: number; discount: number; discount_pct: number; tax: number; total: number; paid: number; insurance: number; balance: number };
-  payments?: Array<{ method_code: string; method: Bilingual; amount: number; kind: string; created_at: string }>;
+  payments?: Array<{ method_code: string; method: Bilingual; amount: number; kind: string; reference: string | null; created_at: string }>;
   /** Job only: one ticket per line with lenses. */
   tickets?: Array<{ line: DocLine; rx: Record<string, unknown> | null; job_type: string }>;
 }
@@ -95,28 +190,60 @@ async function lensLabels(pg: Knex, codes: { designs: string[]; materials: strin
   return { designs, materials, photos, ars };
 }
 
-async function printCount(container: MedusaContainer, saleId: string, kind: string): Promise<{ count: number; first_at: string | null }> {
-  const events = (await listAudit(container, { action: "document.print", entity: "pos_sale", entityId: saleId }, 500)).filter(
-    (e) => (e.after as { kind?: string } | null)?.kind === kind
+async function printCount(container: MedusaContainer, saleId: string, kind: DocumentKind): Promise<{ count: number; first_at: string | null }> {
+  const family = printFamily(kind);
+  const events = (await listAudit(container, { action: "document.print", entity: "pos_sale", entityId: saleId }, 500)).filter((e) =>
+    family.includes((e.after as { kind?: DocumentKind } | null)?.kind as DocumentKind)
   );
   return { count: events.length, first_at: events.length ? events[events.length - 1].created_at : null };
+}
+
+/** The till's printer as free text ("thermal 80mm", "HP LaserJet"); the column is JSON, so a string or an object with a name/type/model. */
+async function terminalPrinter(pg: Knex, terminalId: string | null): Promise<string | null> {
+  if (!terminalId) return null;
+  try {
+    const row = (await pg("pos_terminal").where("id", terminalId).first("printer")) as { printer?: unknown } | undefined;
+    const p = row?.printer;
+    if (!p) return null;
+    if (typeof p === "string") return p;
+    const o = p as Record<string, unknown>;
+    const text = [o.type, o.kind, o.model, o.name, o.paper].filter((v) => typeof v === "string" && v).join(" ");
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Catalog thumbnails by product id, for the frame photo on paper. Missing or unreadable: no photo. */
+async function productThumbnails(pg: Knex, productIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const ids = [...new Set(productIds.filter(Boolean))];
+  if (!ids.length) return map;
+  try {
+    const rows = (await pg("product").whereIn("id", ids).select("id", "thumbnail")) as Array<Record<string, unknown>>;
+    for (const r of rows) if (r.thumbnail) map.set(String(r.id), String(r.thumbnail));
+  } catch {
+    // Without a photo the document shows the placeholder.
+  }
+  return map;
 }
 
 export async function buildSaleDocument(
   container: MedusaContainer,
   saleId: string,
-  kind: "job" | "receipt",
-  opts: { withPhotoUrls?: boolean } = {}
+  kind: DocumentKind,
+  opts: { withPhotoUrls?: boolean; forEmail?: boolean } = {}
 ): Promise<SaleDocument> {
   const sale = await getSale(container, saleId);
   if (!sale) throw new PosError("sale_not_found", 404);
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const pg = pgOf(container);
-  const [stores, terminals, methods, prints] = await Promise.all([
+  const [stores, terminals, methods, prints, printer] = await Promise.all([
     listEstablishments(container),
     sale.terminal_id ? listTerminals(container, [sale.establishment_id]) : Promise.resolve([]),
     listPaymentMethods(container),
     printCount(container, sale.id, kind),
+    terminalPrinter(pg, sale.terminal_id),
   ]);
   const store = stores.find((s) => s.id === sale.establishment_id);
   if (!store) throw new PosError("store_not_found", 404);
@@ -125,12 +252,12 @@ export async function buildSaleDocument(
   const { data: orders } = sale.order_id
     ? await query.graph({
         entity: "order",
-        fields: ["id", "created_at", "updated_at", "email", "shipping_address.first_name", "shipping_address.last_name", "items.*"],
+        fields: ["id", "created_at", "updated_at", "email", "shipping_address.first_name", "shipping_address.last_name", "shipping_address.phone", "items.*"],
         filters: { id: sale.order_id },
       })
     : { data: [] as unknown[] };
   const order = orders[0] as
-    | { updated_at?: string; shipping_address?: { first_name?: string; last_name?: string }; items?: Array<Record<string, unknown>> }
+    | { updated_at?: string; shipping_address?: { first_name?: string; last_name?: string; phone?: string | null }; items?: Array<Record<string, unknown>> }
     | undefined;
   const items = (order?.items ?? []) as Array<Record<string, unknown>>;
   const mdOf = (it: Record<string, unknown>) => (it.metadata ?? {}) as Record<string, unknown>;
@@ -142,38 +269,68 @@ export async function buildSaleDocument(
     photos: items.map((i) => sel(i).photo_code).filter((v): v is string => Boolean(v)),
     ars: items.map((i) => sel(i).ar_code).filter((v): v is string => Boolean(v)),
   });
-  const productMeta = await loadProductMetadata(pg, items.map((i) => String(i.product_id ?? "")).filter(Boolean));
+  const productIds = items.map((i) => String(i.product_id ?? "")).filter(Boolean);
+  const [productMeta, thumbs] = await Promise.all([loadProductMetadata(pg, productIds), productThumbnails(pg, productIds)]);
 
   const lines: DocLine[] = [];
   for (const it of items) {
     const md = mdOf(it);
     const s = sel(it);
     const own = md.kind === "own-frame";
+    // A store frame that is not in the catalog: sold (charged), described by the seller.
+    const offCat = md.kind === "store-frame";
+    const storeFrame = offCat ? ((md.store_frame ?? null) as { description?: string | null; photo_url?: string | null; photo_key?: string | null; brand?: string | null; model?: string | null; color?: string | null; eye_size?: unknown; bridge?: unknown; temple?: unknown } | null) : null;
     const withLenses = Boolean(s.design_code) && s.design_code !== "frame-only";
     const pm = it.product_id ? productMeta.get(String(it.product_id)) ?? {} : {};
     const n = (v: unknown) => (v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
-    const ownFrame = (md.own_frame ?? null) as { description?: string | null; photo_key?: string | null } | null;
+    const ownFrame = (md.own_frame ?? null) as { description?: string | null; photo_key?: string | null; brand?: string | null; model?: string | null; color?: string | null; eye_size?: unknown; bridge?: unknown; temple?: unknown } | null;
+    // The customer's own photo lives in the private bucket: a presigned link only when a print asked for it.
+    const ownPhotoUrl = own && opts.withPhotoUrls ? await presignPrescriptionUrl(ownFrame?.photo_key ?? null) : null;
+    // A store frame's photo is a public URL (lib/store-frame-photo.ts); sales recorded before kept a private key.
+    const offCatPhotoUrl = offCat ? productImageUrl(storeFrame?.photo_url ?? null) ?? (opts.withPhotoUrls ? await presignPrescriptionUrl(storeFrame?.photo_key ?? null) : null) : null;
+    const list = Number(md.list_price ?? it.unit_price ?? 0);
     lines.push({
       kind: own ? "own_frame" : "frame",
-      title: String(own ? ownFrame?.description ?? it.title ?? "" : it.product_title ?? it.title ?? ""),
+      title: String(own ? ownFrame?.description ?? it.title ?? "" : offCat ? storeFrame?.description ?? it.title ?? "" : it.product_title ?? it.title ?? ""),
       variant_title: own ? null : ((it.variant_title as string | null) ?? null),
       sku: own ? null : ((it.variant_sku as string | null) ?? null),
-      list: Number(md.list_price ?? it.unit_price ?? 0),
+      list,
       unit_price: Number(it.unit_price ?? 0),
       tax_amount: Number(md.tax_amount ?? 0),
+      frame_price: Number(md.frame_price ?? 0),
+      lens_price: Number(md.lens_addon ?? 0),
+      quantity: Math.max(1, Number(it.quantity ?? 1) || 1),
+      image_url: own ? ownPhotoUrl : offCat ? offCatPhotoUrl : productImageUrl((it.thumbnail as string | null) || thumbs.get(String(it.product_id ?? "")) || null),
       design_code: s.design_code ?? null,
       lens: withLenses
-        ? {
-            design: bi(labels.designs.get(String(s.design_code)) as never),
-            material: s.material_code ? bi(labels.materials.get(s.material_code) as never) : null,
-            photo: s.photo_code ? bi(labels.photos.get(s.photo_code) as never) : null,
-            ar: s.ar_code ? bi(labels.ars.get(s.ar_code) as never) : null,
-            category: (labels.designs.get(String(s.design_code))?.category as string | undefined) ?? null,
-          }
+        ? (() => {
+            const category = (labels.designs.get(String(s.design_code))?.category as string | undefined) ?? null;
+            // A line sold before finishes existed has none: it was the design's default cell.
+            const finish = resolveLensFinish(parseLensFinish(s.finish), category);
+            return {
+              design: withFinishSuffix(bi(labels.designs.get(String(s.design_code)) as never), finish, category),
+              material: s.material_code ? bi(labels.materials.get(s.material_code) as never) : null,
+              photo: s.photo_code ? bi(labels.photos.get(s.photo_code) as never) : null,
+              ar: s.ar_code ? bi(labels.ars.get(s.ar_code) as never) : null,
+              category,
+              finish,
+            };
+          })()
         : null,
       handling: own ? "patient_own_frame" : withLenses ? "frame_supplied" : null,
       frame: own
         ? null
+        : offCat
+        ? {
+            brand: storeFrame?.brand ?? null,
+            model: storeFrame?.model ?? null,
+            material: null,
+            eye_size: n(storeFrame?.eye_size),
+            bridge: n(storeFrame?.bridge),
+            color: storeFrame?.color ?? null,
+            temple: n(storeFrame?.temple),
+            off_catalog: true,
+          }
         : {
             brand: (pm.brand as string | undefined) ?? (pm.brand_slug as string | undefined) ?? null,
             model: String(it.product_title ?? ""),
@@ -185,10 +342,18 @@ export async function buildSaleDocument(
         ? {
             description: ownFrame?.description ?? null,
             has_photo: Boolean(ownFrame?.photo_key),
-            ...(opts.withPhotoUrls ? { photo_url: await presignPrescriptionUrl(ownFrame?.photo_key ?? null) } : {}),
+            brand: ownFrame?.brand ?? null,
+            model: ownFrame?.model ?? null,
+            color: ownFrame?.color ?? null,
+            eye_size: n(ownFrame?.eye_size),
+            bridge: n(ownFrame?.bridge),
+            temple: n(ownFrame?.temple),
+            ...(opts.withPhotoUrls ? { photo_url: ownPhotoUrl } : {}),
+            ...(opts.forEmail ? { photo_key: ownFrame?.photo_key ?? null } : {}),
           }
         : null,
       prescription_id: (md.prescription_id as string | null) ?? null,
+      promo: docLinePromo(md.promo, list),
     });
   }
 
@@ -196,9 +361,9 @@ export async function buildSaleDocument(
   const t = tenant();
   const base: SaleDocument = {
     kind,
-    business: { name: t.name, legal_name: t.legalName, url: t.storefrontUrl, support_email: t.supportEmail },
-    store: { code: store.code, name: store.name, address: store.address, phone: store.phone, receipt_note: store.receipt_note },
-    terminal: { code: terminal?.code ?? null, receipt_locale: terminal?.receipt_locale ?? "es", ticket_locale: terminal?.ticket_locale ?? "en" },
+    business: { name: t.name, legal_name: t.legalName, url: t.storefrontUrl, support_email: t.supportEmail, timezone: t.timezone },
+    store: { code: store.code, name: store.name, address: store.address, phone: store.phone, receipt_note: store.receipt_note, hours: store.hours ?? null },
+    terminal: { code: terminal?.code ?? null, receipt_locale: terminal?.receipt_locale ?? "es", ticket_locale: terminal?.ticket_locale ?? "en", printer },
     sale: {
       id: sale.id,
       number: sale.number,
@@ -210,14 +375,16 @@ export async function buildSaleDocument(
       status: sale.status,
       voided_at: sale.voided_at,
       delivery: sale.delivery,
+      rx_pending: sale.rx_pending,
+      promotion: sale.promotion ?? null,
     },
-    customer: { name },
+    customer: { name, phone: order?.shipping_address?.phone ?? null },
     // The QR on the receipt opens the existing order tracking — no personal data in it.
     tracking_url: `${storefrontOrigin()}/my-orders`,
     print: { count: prints.count, reprint: prints.count > 0, first_at: prints.first_at },
   };
 
-  if (kind === "receipt") {
+  if (kind === "receipt" || kind === "receipt_duo") {
     const byCode = new Map(methods.map((m) => [m.code, m]));
     return {
       ...base,
@@ -240,6 +407,7 @@ export async function buildSaleDocument(
           method: m && !m.builtin ? { es: m.label ?? m.code, en: m.label_en ?? m.label ?? m.code } : null,
           amount: p.amount,
           kind: p.kind,
+          reference: p.reference,
           created_at: p.created_at,
         };
       }),
@@ -267,6 +435,11 @@ export async function buildSaleDocument(
               pd_od: nn(r.pd_od) ?? (pd === null ? null : pd / 2),
               pd_os: nn(r.pd_os) ?? (pd === null ? null : pd / 2),
               seg_height: nn(r.seg_height),
+              // Visual acuity sc/cc and dominant eye (lib/visual-acuity.ts): the panel shows them with
+              // the prescription; the printed ticket carries only the dominant eye (the lab needs it for
+              // progressives and monovision, not the acuity).
+              // The case history and the doctor's notes NEVER leave with the lab document (minimum necessary).
+              clinical: r.clinical && typeof r.clinical === "object" ? { va: (r.clinical as { va?: unknown }).va ?? null, dominant_eye: (r.clinical as { dominant_eye?: unknown }).dominant_eye ?? null } : null,
             }
           : null,
       };
@@ -274,10 +447,16 @@ export async function buildSaleDocument(
   return { ...base, tickets };
 }
 
-/** Records a print (audit) and returns the document as printed: "REPRINT" from the second time (HU-105). */
-export async function printSaleDocument(container: MedusaContainer, saleId: string, kind: "job" | "receipt", actorId: string | null): Promise<SaleDocument> {
+/**
+ * Records a print (audit) and returns the document as printed: "REPRINT" from the
+ * second time (HU-105). The audit keeps the exact kind (roll or two copies); the
+ * counter is shared by both receipt kinds. Every print gets the photo URLs.
+ */
+export async function printSaleDocument(container: MedusaContainer, saleId: string, kind: DocumentKind, actorId: string | null): Promise<SaleDocument> {
   const sale = await getSale(container, saleId);
   if (!sale) throw new PosError("sale_not_found", 404);
+  // A lab order without its prescription is how a wrong pair gets cut (lib/rx-pending.ts).
+  if (kind === "job" && sale.rx_pending) throw new PosError("rx_pending", 409);
   const before = await printCount(container, saleId, kind);
   await recordAudit(container, {
     actorId,
@@ -287,21 +466,60 @@ export async function printSaleDocument(container: MedusaContainer, saleId: stri
     establishmentId: sale.establishment_id,
     after: { kind, copy: before.count + 1 },
   });
-  const doc = await buildSaleDocument(container, saleId, kind, { withPhotoUrls: kind === "job" });
+  const doc = await buildSaleDocument(container, saleId, kind, { withPhotoUrls: true });
   return { ...doc, print: { count: before.count + 1, reprint: before.count > 0, first_at: before.first_at ?? new Date().toISOString() } };
 }
 
-/** Sends the receipt by email (HU-27, HU-102). Throws PosError when there is no address. */
-export async function emailReceipt(container: MedusaContainer, sale: SaleRow, to?: string | null): Promise<string> {
+/** The prescriptions of a sale's lines, as the email shows them. Health data: only for the sale's own address. */
+async function receiptPrescriptions(container: MedusaContainer, lines: DocLine[]): Promise<Record<string, PrescriptionForEmail>> {
+  const pid = (l: DocLine) => l.prescription_id;
+  const records = await loadPrescriptionRecords(pgOf(container), lines.map(pid).filter((v): v is string => Boolean(v)));
+  const n = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+  const out: Record<string, PrescriptionForEmail> = {};
+  for (const [id, r] of records) {
+    const eye = (e: "od" | "os") => ({
+      sph: n(r[`${e}_sph`]),
+      cyl: n(r[`${e}_cyl`]),
+      axis: n(r[`${e}_axis`]),
+      add: n(r[`${e}_add`]),
+      prism: n(r[`${e}_prism`]),
+      base: (r[`${e}_base`] as string | null) ?? null,
+    });
+    out[id] = { od: eye("od"), os: eye("os"), pd: n(r.pd), pd_od: n(r.pd_od), pd_os: n(r.pd_os), seg_height: n(r.seg_height) } as PrescriptionForEmail;
+  }
+  return out;
+}
+
+/**
+ * Sends the receipt by email (HU-27, HU-102). Simple unless `detailed` is exactly
+ * true: then with the frames' photos and the prescription. Throws PosError when
+ * there is no address. An address other than the sale's never gets the details.
+ */
+export async function emailReceipt(
+  container: MedusaContainer,
+  sale: SaleRow,
+  opts: { to?: string | null; detailed?: boolean; actorId?: string | null } = {}
+): Promise<string> {
+  const to = opts.to ?? null;
+  const detailed = opts.detailed === true && !to;
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
-  const doc = await buildSaleDocument(container, sale.id, "receipt");
-  let email = to ?? null;
+  const doc = await buildSaleDocument(container, sale.id, "receipt", { forEmail: detailed });
+  let email = to;
   if (!email && sale.order_id) {
     const { data } = await container.resolve(ContainerRegistrationKeys.QUERY).graph({ entity: "order", fields: ["id", "email"], filters: { id: sale.order_id } });
     email = (data[0] as { email?: string } | undefined)?.email ?? null;
   }
   if (!email) throw new PosError("no_email", 422);
   const locale: EmailLocale = resolveEmailLocale(doc.terminal.receipt_locale);
+  const prescriptions = detailed ? await receiptPrescriptions(container, doc.lines ?? []) : {};
+  // What the customer brought is in the private bucket: attached, never linked.
+  const ownPhotos = Object.fromEntries((doc.lines ?? []).map((l, i) => [i, l.own_frame?.photo_key ?? null]));
+  const images = detailed
+    ? await loadOrderImages(doc.sale.number, { prescriptions: {}, items: ownPhotos }, "montura").catch((e: Error) => {
+        logger.warn(`[pos] receipt ${sale.number}: own frame photos unavailable: ${e.message}`);
+        return { attachments: [], prescriptions: {}, items: {} };
+      })
+    : { attachments: [], prescriptions: {}, items: {} };
   await container.resolve<INotificationModuleService>(Modules.NOTIFICATION).createNotifications({
     to: email,
     channel: "email",
@@ -309,8 +527,18 @@ export async function emailReceipt(container: MedusaContainer, sale: SaleRow, to
     trigger_type: "pos.sale.receipt",
     resource_id: sale.id,
     resource_type: "pos_sale",
-    content: renderReceiptEmail(doc, locale),
+    content: renderReceiptEmail(doc, locale, { prescriptions, itemImages: images.items, detailed }),
+    ...(images.attachments.length ? { attachments: images.attachments } : {}),
   });
-  logger.info(`[pos] receipt ${sale.number} emailed`);
+  // Who sent health data by email, and when; the values and the address stay out of the log.
+  await recordAudit(container, {
+    actorId: opts.actorId ?? null,
+    action: "document.email",
+    entity: "pos_sale",
+    entityId: sale.id,
+    establishmentId: sale.establishment_id,
+    after: { kind: "receipt", detailed },
+  });
+  logger.info(`[pos] receipt ${sale.number} emailed (${detailed ? "detailed" : "simple"})`);
   return email;
 }

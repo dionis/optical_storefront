@@ -21,4 +21,12 @@ export const PosSalePayment = model.define("pos_sale_payment", {
   /** Reference data asked by the method (last4, confirmation, tendered/change…). */
   details: model.json().nullable(),
   cash_session_id: model.text().nullable(),
+  /**
+   * A registration mistake corrected after the payment was taken
+   * (lib/payment-correction-data.ts): when, who, and the history of each
+   * correction [{ at, by, action, reason, note, from, to }].
+   */
+  corrected_at: model.dateTime().nullable(),
+  corrected_by: model.text().nullable(),
+  corrections: model.json().nullable(),
 });

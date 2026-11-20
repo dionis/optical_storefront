@@ -1,0 +1,20 @@
+/* Dónde se usa: ReportDoc.jsx, incrustada en la hoja del reporte junto a
+   report.css (REPORT_CSS). Son los pocos retoques de la versión del reporte
+   que se SOCIALIZA (specForAudience → `audience: "share"`, clase `.share` en
+   el documento): ahí no hay tira de indicadores, sino un solo dato arriba —
+   el total vendido del período — y una tarjeta estirada a todo lo ancho con
+   el tamaño de las diez del reporte del dueño parecería que faltan nueve.
+   Va en hoja aparte, y no dentro de report.css, para que el reporte del dueño
+   no pueda cambiar por un descuido al tocar esto. */
+
+/* El dato único: ancho al contenido (no estirado) y en cuerpo grande, que es
+   lo que se mira primero al recibir el papel. */
+.rp-doc.share .rp-kpis { margin-bottom: 4.5mm; }
+.rp-doc.share .rp-kpi { flex: 0 1 auto; min-width: 52mm; padding: 2.2mm 3.4mm; border-left-width: 4px; }
+.rp-doc.share .rp-kpi b { font-size: 19px; }
+.rp-doc.share .rp-kpi small { font-size: 8px; }
+
+/* El aviso de qué versión es (va en el subtítulo de la cabecera): se tiene que
+   leer sin buscarlo, porque un PDF suelto en una mesa no trae quien explique
+   de dónde salió. */
+.rp-doc.share .rp-subtitle { font-weight: 700; opacity: .95; }

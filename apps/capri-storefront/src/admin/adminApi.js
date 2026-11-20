@@ -21,6 +21,8 @@
 // CORS to keep in sync. VITE_ADMIN_MEDUSA_URL overrides this for the unusual
 // deployment that has no proxy in front of it.
 
+import { cachedGet, clearCache, configureCache, invalidate } from "./adminCache.js";
+
 const env = (typeof import.meta !== "undefined" && import.meta.env) || {};
 
 const ORIGIN =
@@ -77,6 +79,8 @@ function jwtExpiry(token) {
 }
 
 function saveSession(user, token) {
+  // A new login never inherits what the previous account had read.
+  clearCache();
   const session = { user, token, exp: jwtExpiry(token) };
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -100,12 +104,32 @@ export function getSession() {
   }
 }
 
+/**
+ * Name of the window event the panel listens to (pages/AdminPage.jsx) when the
+ * session stops being usable: `detail.kind` is "cleared" (a 401: the token was
+ * revoked or expired, the storage is already empty) or "inactive" (a 403
+ * `inactive`: the account was deactivated while this tab was open). Without it
+ * the shell stayed painted — with the OWNER's menu, since `me` never loaded —
+ * on top of requests that all failed (QA roles 5-nov-2026).
+ */
+export const SESSION_EVENT = "oer:admin-session";
+
+function announce(kind) {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+  try {
+    window.dispatchEvent(new CustomEvent(SESSION_EVENT, { detail: { kind } }));
+  } catch {
+    /* noop */
+  }
+}
+
 export function clearSession() {
   try {
     sessionStorage.removeItem(SESSION_KEY);
   } catch {
     /* noop */
   }
+  announce("cleared");
 }
 
 /* ─────────────────────────────  requests  ───────────────────────────── */
@@ -142,6 +166,9 @@ async function call(path, { method = "GET", body, token, query } = {}) {
   }
 
   if (!res.ok) {
+    // A deactivated account: every /admin call answers this from now on, so the
+    // page switches to the «access deactivated» card instead of erroring tab by tab.
+    if (res.status === 403 && payload?.reason === "inactive" && token) announce("inactive");
     // `message` is the server's English developer note; `reason` is the code the
     // UI turns into translated copy. Callers should prefer the reason.
     throw new AdminApiError(payload?.message || `HTTP ${res.status}`, {
@@ -160,6 +187,32 @@ async function call(path, { method = "GET", body, token, query } = {}) {
  * left for every caller to remember — otherwise the panel loops on failing
  * requests behind a shell that still looks logged in.
  */
+/**
+ * Authenticated GET of a binary resource (an image only the backend may read,
+ * e.g. the photo of the patient wearing the frame). Returns a Blob; never
+ * cached by the browser (the route answers `no-store`).
+ */
+export async function adminFetchBlob(path) {
+  const session = getSession();
+  if (!session) throw new AdminApiError("adm.err.sessionExpired", { status: 401 });
+  let res;
+  try {
+    res = await fetch(new URL(`${ADMIN_API_URL}${path}`, ORIGIN || undefined).toString(), {
+      headers: { Authorization: `Bearer ${session.token}` },
+      cache: "no-store",
+    });
+  } catch {
+    throw new AdminApiError("adm.err.offline", { reason: "offline" });
+  }
+  if (!res.ok) {
+    let payload = null;
+    try { payload = await res.json(); } catch { payload = null; }
+    if (res.status === 401) clearSession();
+    throw new AdminApiError(payload?.message || `HTTP ${res.status}`, { status: res.status, reason: payload?.reason, payload });
+  }
+  return res.blob();
+}
+
 /**
  * Authenticated multipart upload (a prescription photo for the OCR reader).
  * No Content-Type header: the browser sets the multipart boundary itself.
@@ -201,6 +254,36 @@ export async function adminFetch(path, options = {}) {
   }
 }
 
+/* ─────────────────────────────  cached reads  ───────────────────────────── */
+
+/**
+ * `path` + `query` as one canonical string (sorted keys, empty values out):
+ * the cache key, so two screens asking the same thing share one entry.
+ */
+export function queryKey(path, query) {
+  const entries = Object.entries(query || {})
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => [k, String(v)])
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  if (!entries.length) return path;
+  const qs = new URLSearchParams(entries).toString();
+  return `${path}${path.includes("?") ? "&" : "?"}${qs}`;
+}
+
+// The cache only knows how to call us back: one authenticated GET per key.
+configureCache({ fetcher: (key) => adminFetch(key) });
+
+/**
+ * Cached GET (adminCache.js): what was read before is returned at once and
+ * refreshed in the background when older than `ttl`; identical concurrent
+ * reads become one request. Mutations keep using `adminFetch` and call
+ * `invalidate(prefix)` afterwards. `force` skips the cache.
+ */
+export function adminGet(path, { query, ttl, force } = {}) {
+  return cachedGet(queryKey(path, query), { ttl, force });
+}
+export { invalidate as invalidateCache };
+
 /* ─────────────────────────────  login  ───────────────────────────── */
 
 // Held between the password step and the code step. Never persisted: it is a
@@ -234,6 +317,11 @@ export async function login(email, password) {
     // do we — telling them apart is how you enumerate accounts.
     if (error.status === 401 || error.status === 400) {
       return { ok: false, error: "adm.err.badCredentials" };
+    }
+    // The login rate limit (src/lib/security.ts): say so, or the person keeps
+    // retrying a password that was right all along.
+    if (error.status === 429) {
+      return { ok: false, error: "adm.auth.tooMany" };
     }
     return { ok: false, error: "adm.err.auth" };
   }
@@ -286,4 +374,5 @@ export async function verifyMfa(code) {
 export function logout() {
   pendingMfa = null;
   clearSession();
+  clearCache();
 }

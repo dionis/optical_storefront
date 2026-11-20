@@ -17,6 +17,7 @@
  */
 import type { Attachment } from "@medusajs/framework/types";
 import { readPrivateObject } from "../tryon-image";
+import { tenantHost } from "../tenant";
 
 /** Raw bytes budget for every image in one email (base64 adds ~33%). */
 const MAX_TOTAL_BYTES = 18 * 1024 * 1024;
@@ -51,7 +52,9 @@ const extOf = (contentType: string, key: string): string => {
 
 export async function loadOrderImages(
   displayId: string,
-  sources: OrderImageSources
+  sources: OrderImageSources,
+  /** What the attached file of a line is called. */
+  itemLabel = "prueba-virtual"
 ): Promise<OrderImages> {
   const out: OrderImages = { attachments: [], prescriptions: {}, items: {} };
   let budget = MAX_TOTAL_BYTES;
@@ -65,7 +68,7 @@ export async function loadOrderImages(
     seq += 1;
     const isImage = obj.contentType.startsWith("image/");
     const filename = `${base}-${displayId}-${seq}.${extOf(obj.contentType, key)}`;
-    const cid = isImage ? `${base}-${seq}@rubilens` : null;
+    const cid = isImage ? `${base}-${seq}@${tenantHost()}` : null;
     out.attachments.push({
       content: obj.buffer.toString("base64"),
       filename,
@@ -81,7 +84,7 @@ export async function loadOrderImages(
     if (ref) out.prescriptions[pid] = ref;
   }
   for (const [index, key] of Object.entries(sources.items)) {
-    const ref = await fetchOne(key, "prueba-virtual");
+    const ref = await fetchOne(key, itemLabel);
     if (ref) out.items[Number(index)] = ref;
   }
   return out;
