@@ -30,6 +30,14 @@ import {
   type LensStorePriceLike,
 } from "./pricing-overview";
 import { brandOf, isExposed, type AssortmentRuleLike } from "./store-assortment";
+import {
+  designToggleRule,
+  isArEnabled,
+  isLensKeyEnabled,
+  isPhotoEnabled,
+  treatmentGroupToggleRule,
+  type StoreToggleLookup,
+} from "./store-lens-toggle";
 import { brandPriceRule, brandTarget, globalPrice, hasGlobalPrice, storeLinePrice, type PriceRuleLike, type StoreLinePrice } from "./store-pricing";
 
 // ── Vocabulary ───────────────────────────────────────────────────────────────
@@ -830,6 +838,8 @@ export interface LensSectionInput {
   cells: ReadonlyArray<{ design_code: string; material_code: string; finish: LensFinish | null; price_cents: number; cost_cents: number | null; active?: boolean }>;
   /** Each store's `lens_store_price` rows. */
   storeRows: ReadonlyMap<string, LensStorePriceLike[]>;
+  /** Each store's per-store ON/OFF toggles (`store_lens_toggle`). */
+  storeToggles?: ReadonlyMap<string, StoreToggleLookup>;
 }
 
 const STORE_KIND: Record<"lens" | "photo" | "ar", "base" | "photo" | "ar"> = { lens: "base", photo: "photo", ar: "ar" };
@@ -840,12 +850,13 @@ function lensCells(
   masterCents: number,
   stores: readonly MatrixStore[],
   storeRows: ReadonlyMap<string, LensStorePriceLike[]>,
-  discounts: DiscountIndex
+  discounts: DiscountIndex,
+  exposedOf: (storeId: string) => boolean = () => true
 ): Record<string, MatrixCell> {
   const out: Record<string, MatrixCell> = {};
   for (const s of stores) {
     const price = storeLensCell(masterCents, storeRows.get(s.id) ?? [], { kind: STORE_KIND[kind], key });
-    out[s.id] = cellOf(price, discountOf(discounts, s.id, kind, key), true);
+    out[s.id] = cellOf(price, discountOf(discounts, s.id, kind, key), exposedOf(s.id));
   }
   return out;
 }
@@ -877,7 +888,15 @@ export function buildLensGroups(input: LensSectionInput, stores: readonly Matrix
           category: d.category,
           master_cents: c.price_cents,
           active: c.active !== false,
-          stores: lensCells("lens", key, c.price_cents, stores, input.storeRows, discounts),
+          stores: lensCells(
+            "lens",
+            key,
+            c.price_cents,
+            stores,
+            input.storeRows,
+            discounts,
+            (sid) => c.active !== false && isLensKeyEnabled(input.storeToggles?.get(sid), d.code, key)
+          ),
         };
         if (withCosts) {
           row.cost_cents = c.cost_cents;
@@ -904,12 +923,20 @@ export function buildLensGroups(input: LensSectionInput, stores: readonly Matrix
         (materialSort.get(a.material_code ?? "") ?? 999) - (materialSort.get(b.material_code ?? "") ?? 999) ||
         LENS_FINISHES.indexOf(a.finish as LensFinish) - LENS_FINISHES.indexOf(b.finish as LensFinish)
     );
+    const perStore: NonNullable<MatrixGroup["stores"]> = {};
+    for (const s of stores) {
+      perStore[s.id] = {
+        brand_rule: designToggleRule(input.storeToggles?.get(s.id), d.code),
+        exposed_rows: rows.filter((r) => r.available !== false && r.active !== false && r.stores[s.id]?.exposed !== false).length,
+      };
+    }
     return {
       key: d.code,
       label: d.label_es || d.label_en || d.code,
       label_en: d.label_en || d.label_es || d.code,
       kind: "design" as const,
       rows,
+      stores: perStore,
       design: { category: d.category, label_es: d.label_es, label_en: d.label_en, requires_add: Boolean(d.requires_add), tier: d.tier ?? null, use_es: d.use_es ?? null, use_en: d.use_en ?? null },
     };
   });
@@ -954,6 +981,8 @@ export interface TreatmentSectionInput {
   photoCosts: ReadonlyMap<string, number | null>;
   arCosts: ReadonlyMap<string, number | null>;
   storeRows: ReadonlyMap<string, LensStorePriceLike[]>;
+  /** Each store's per-store ON/OFF toggles (`store_lens_toggle`). */
+  storeToggles?: ReadonlyMap<string, StoreToggleLookup>;
   /** Whether the treatment matrix prices photochromics by design × material. */
   photoByMaterial: boolean;
 }
@@ -988,7 +1017,7 @@ export function buildTreatmentGroups(input: TreatmentSectionInput, stores: reado
         label_en: String(p["label_en"] ?? ""),
         by_material: input.photoByMaterial,
         master_cents: master,
-        stores: lensCells("photo", key, master, stores, input.storeRows, discounts),
+        stores: lensCells("photo", key, master, stores, input.storeRows, discounts, (sid) => isPhotoEnabled(input.storeToggles?.get(sid), code, category)),
       };
       if (withCosts) {
         const cost = input.photoCosts.get(key) ?? input.photoCosts.get(code) ?? null;
@@ -1014,7 +1043,7 @@ export function buildTreatmentGroups(input: TreatmentSectionInput, stores: reado
         label_en: String(a["label_en"] ?? ""),
         by_material: MATERIAL_PRICED_AR.has(code),
         master_cents: master,
-        stores: lensCells("ar", key, master, stores, input.storeRows, discounts),
+        stores: lensCells("ar", key, master, stores, input.storeRows, discounts, (sid) => isArEnabled(input.storeToggles?.get(sid), code)),
       };
       if (withCosts) {
         const cost = input.arCosts.get(code) ?? null;
@@ -1023,9 +1052,19 @@ export function buildTreatmentGroups(input: TreatmentSectionInput, stores: reado
       }
       return row;
     });
+  const groupStores = (groupKey: "photo" | "ar", rows: readonly MatrixRow[]): NonNullable<MatrixGroup["stores"]> => {
+    const out: NonNullable<MatrixGroup["stores"]> = {};
+    for (const s of stores) {
+      out[s.id] = {
+        brand_rule: treatmentGroupToggleRule(input.storeToggles?.get(s.id), groupKey),
+        exposed_rows: rows.filter((r) => r.stores[s.id]?.exposed !== false).length,
+      };
+    }
+    return out;
+  };
   return [
-    { key: "photo", label: "Fotocromáticos", kind: "treatment", rows: photoRows },
-    { key: "ar", label: "Antirreflejo", kind: "treatment", rows: arRows },
+    { key: "photo", label: "Fotocromáticos", kind: "treatment", rows: photoRows, stores: groupStores("photo", photoRows) },
+    { key: "ar", label: "Antirreflejo", kind: "treatment", rows: arRows, stores: groupStores("ar", arRows) },
   ];
 }
 

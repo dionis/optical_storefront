@@ -585,6 +585,15 @@ export async function setLensCellActive(code, material, finish, active) {
   forgetPriceCaches();
   return data;
 }
+/**
+ * Habilitar o deshabilitar un diseño de lente, celda de lente, familia de
+ * tratamiento, fotocromático o antirreflejo en UNA tienda (física u online).
+ */
+export async function setStoreLensToggle({ store, kind, key: itemKey, enabled }) {
+  const data = await post(`${MATRIX_PATH}/toggle`, { store, kind, key: itemKey, enabled: Boolean(enabled) });
+  forgetPriceCaches();
+  return data;
+}
 /** Todos los materiales de la lista maestra (para el selector). */
 export async function fetchLensMaterials() {
   try {

@@ -1,6 +1,8 @@
 import type { Knex } from "@mikro-orm/knex";
 import { defaultLensFinish, parseLensFinish, type LensFinish } from "./lens-finish";
 import { applyStoreLensPrice, lensArKey, lensBaseKey, lensPhotoKey, loadStoreLensPricesPg, type LensStorePriceLike } from "./pricing-overview";
+import { applyStoreLensToggles } from "./store-lens-toggle";
+import { loadStoreLensTogglesPg } from "./store-lens-toggle-data";
 
 /**
  * The editable 2026 lens price list as ONE payload: designs × materials base
@@ -164,8 +166,12 @@ export function applyStoreLensMatrix(matrix: LensMatrixPayload, storeRows: LensS
   return { ...matrix, base_prices, photos, ars };
 }
 
-/** The list a store sells from: master cells with that store's variations; the master itself without a store. */
+/** The list a store sells from: master cells filtered by that store's toggles and with that store's variations; the master itself without a store. */
 export async function loadLensMatrixForStore(pg: Knex, establishmentId: string | null | undefined): Promise<LensMatrixPayload> {
-  const [matrix, storeRows] = await Promise.all([loadLensMatrix(pg), loadStoreLensPricesPg(pg, establishmentId)]);
-  return applyStoreLensMatrix(matrix, storeRows);
+  const [matrix, storeRows, toggles] = await Promise.all([
+    loadLensMatrix(pg),
+    loadStoreLensPricesPg(pg, establishmentId),
+    loadStoreLensTogglesPg(pg, establishmentId),
+  ]);
+  return applyStoreLensMatrix(applyStoreLensToggles(matrix, toggles), storeRows);
 }

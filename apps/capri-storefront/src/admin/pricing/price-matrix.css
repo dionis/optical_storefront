@@ -146,6 +146,8 @@
 .pm-sw input:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
 .pm-sw input:disabled { opacity: .5; }
 .pm-gh-sw { position: absolute; z-index: 1; left: 6px; top: 50%; transform: translateY(-50%); }
+.pm-cell-sw { position: absolute; z-index: 1; left: 6px; top: 50%; transform: translateY(-50%); }
+.pm-gh-sw-inline { flex: none; }
 .pm-cell.has-sw .pm-in { padding-left: 38px; }
 .pm-cell.has-sw.exact::before { display: none; }
 .pm-grp.is-brand .pm-gh .pm-in { font-weight: 800; }
