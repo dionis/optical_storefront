@@ -55,5 +55,6 @@ import labSurcharges from "./lab-surcharges.js";
 import repeatPatients from "./repeat-patients.js";
 import clinicalHistory from "./clinical-history.js";
 import webShowcase from "./web-showcase.js";
+import materialChooser from "./material-chooser.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant, saleAdmin, password, wearing, frameModes, webChannel, operationLog, storeHoursPromos, posMissing, pnlBreakdown, financeReport, saleDate, visualAcuity, labSurcharges, repeatPatients, clinicalHistory, webShowcase];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant, saleAdmin, password, wearing, frameModes, webChannel, operationLog, storeHoursPromos, posMissing, pnlBreakdown, financeReport, saleDate, visualAcuity, labSurcharges, repeatPatients, clinicalHistory, webShowcase, materialChooser];

@@ -9560,3 +9560,28 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: #d92d2
   .card .card-media { aspect-ratio: 1.9; padding-left: 2px; padding-right: 2px; }
   .card .card-body { padding-left: 8px; padding-right: 8px; }
 }
+
+/* ═══ ETAPA 122 — Tarjetas de la tienda online (24-nov-2026) ═══════════════
+   Dónde se usa: ProductCard (catálogo, portada, favoritos). Pedido del dueño:
+   - «Comprar con receta» pasa a un azul más claro (misma barra de cristal con
+     filo dorado, lámina bar-blue-gold.png): el azul marino queda solo para
+     «Probármelos», que es donde debe caer la vista.
+   - En celular y tableta vertical los tres botones bajan otro punto (26 → 22 px,
+     letra 10,5 px, menos aire) y la foto gana alto: la montura se ve mejor y
+     los iconos de la esquina dejan de pisarla. */
+.card .card-tryon.btn-glass.card-rxflow {
+  border-image: url("/ui/glass/bar-blue-gold.png") 34 fill stretch !important;
+}
+.card .card-tryon.btn-glass.card-rxflow .btn-glass-fb { color: #08264d; text-shadow: 0 1px 0 rgba(255, 255, 255, .45); }
+.card .card-tryon.btn-glass.card-rxflow:hover:not(:disabled) { filter: brightness(1.04) drop-shadow(0 10px 18px rgba(31, 95, 196, .28)); }
+
+@media (max-width: 760px) {
+  .card .card-tryon.btn-glass, .card .card-add-cart.btn-glass { height: 22px; border-width: 11px !important; }
+  .card .btn-glass .btn-glass-fb { inset: -11px; font-size: 10.5px; letter-spacing: .03em; gap: 4px; }
+  .card .card-tryon.btn-glass { margin: 6px 0 0; }
+  .card .card-tryon.btn-glass.card-rxflow, .card .card-add-cart.btn-glass { margin: 4px 0 0; }
+  .card .btn-glass .btn-glass-fb .ic-raster { height: 11px; }
+  .card .btn-glass .card-rxflow-ic { width: 12px; height: 12px; }
+  .card .card-add-cart.done { height: 22px; min-height: 0; margin: 4px 0 0; font-size: 10.5px; border-radius: 8px; }
+  .card .card-media { aspect-ratio: 1.6; }
+}
