@@ -35,6 +35,8 @@ import {
   DIAGRAMS,
 } from "../components/LensGraphics.jsx";
 import GlassesLoader from "../components/GlassesLoader.jsx";
+import MaterialChooser from "../components/MaterialChooser.jsx";
+import { LensGlyph } from "../components/MaterialArt.jsx";
 // Probador (try-on): mismo componente que en la ficha de producto. Se abre desde el
 // espejuelo de esta página de receta (imagen 1) para que el cliente pueda probárselo
 // y tomar sus medidas sin salir del flujo de compra.
@@ -1821,43 +1823,25 @@ export default function LensProcess() {
         </ZlxPop>
       )}
 
-      {/* ── MATERIAL: paso dentro del MISMO popup (botón atrás), recomendado
-             resaltado, lo NO apto en rojo con el porqué, ayuda tras un botón (i) ── */}
+      {/* ── MATERIAL: paso dentro del MISMO popup (botón atrás). El contenido es
+             MaterialChooser: recomendación, bloque que explica el material o el
+             tipo de lente, comparativa de grosor y lista con etiqueta y precio.
+             Tocar una fila elige; «Continuar» pasa a los tratamientos. ── */}
       {pop === "mat" && !frameOnly && design && (
-        <ZlxPop title={t("lens.chooseMaterial")} icon={<IconMaterial className="zlx-ic" />}
+        <ZlxPop title={t("lens.chooseMaterial")} icon={<LensGlyph className="zlx-ic mx-head-ic" />}
                 onClose={() => setPop("rx")} onBack={() => setPop("rx")} closeLabel={closeLabel} backLabel={t("lens.back")}
                 onHelp={() => openInfo(t("lens.material"), null, materialDiagKeys())} helpLabel={t("lens.help")}
                 className="zlx-pop-mat">
-          {recommendedMat && (
-            <div className="reco">
-              <b>{t("lens.recommend")} {L(recommendedMat.label, lang)}</b>
-              <span>{t("lens.recommendHint")}</span>
-            </div>
-          )}
-          <div className="zlx-choices zlx-mat-list">
-            {suitableMats.map((m) => {
-              const isReco = recommendedMat?.id === m.id;
-              return (
-                <div key={m.id} className={`zlx-choice-row ${matId === m.id ? "sel" : ""}`}>
-                  <button type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""}`} onClick={() => { setMatId(m.id); setPop("treat"); }}>
-                    <span className="zlx-choice-main">
-                      {/* Icono 3D por material (lámina del dueño): menos aros = lente
-                          más delgado (1.74 un aro fino ... CR-39 las capas clásicas).
-                          Blanco/oro en la fila elegida (navy); el svg queda de respaldo. */}
-                      <img className="i3d i3d-mat" src={`/ui/icons3d/lm-${matId === m.id ? "whiteg" : "navyg"}-${({ cr39: "stack", poly: "t3", "1.67": "t2", "1.74": "t1" })[m.id] || "stack"}.png`} alt="" aria-hidden="true"
-                           onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
-                      <IconMaterial className="zlx-choice-ic" active={matId === m.id} />
-                      <span className="zlx-choice-title">
-                        {L(m.label, lang)}
-                        {isReco && <span className="reco-badge">★</span>}
-                      </span>
-                    </span>
-                    <span className="zlx-choice-price">{money(basePrice(designId, m.id))}</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+          <MaterialChooser
+            design={design}
+            materials={suitableMats}
+            priceOf={(id) => basePrice(designId, id)}
+            formatPrice={money}
+            recommendedId={recommendedMat?.id}
+            selectedId={matId}
+            onSelect={setMatId}
+            onContinue={(id) => { setMatId(id); setPop("treat"); }}
+          />
         </ZlxPop>
       )}
 
