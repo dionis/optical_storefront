@@ -27,6 +27,7 @@ import { loadLensMatrix, type LensMatrixRow } from "./lens-matrix";
 import { writeLensMaster } from "./lens-price-write";
 import { assortmentByStore } from "./pricing-across";
 import { brandSqlOf } from "./store-assortment";
+import { loadStoreLensTogglesMapPg } from "./store-lens-toggle-data";
 import { clearPriceBandCache } from "./pricing";
 import { lensBaseKey, parseLensBaseKey, upsertStoreLensPrice, type LensStorePriceLike } from "./pricing-overview";
 import {
@@ -396,7 +397,7 @@ const labelRow = (r: LensMatrixRow) => ({
 async function loadLensSection(container: MedusaContainer, stores: MatrixStore[], withCosts: boolean): Promise<MatrixGroup[]> {
   const pg = pgOf(container);
   const ids = stores.map((s) => s.id);
-  const [matrix, costs, storeRows, discounts] = await Promise.all([
+  const [matrix, costs, storeRows, storeToggles, discounts] = await Promise.all([
     // The owner's matrix lists the cells he switched off too (with their switch).
     loadLensMatrix(pg, { includeHidden: true }),
     withCosts
@@ -405,6 +406,7 @@ async function loadLensSection(container: MedusaContainer, stores: MatrixStore[]
         )
       : Promise.resolve([] as Array<Record<string, unknown>>),
     lensStoreRows(pg, ids),
+    loadStoreLensTogglesMapPg(pg, ids),
     storeDiscountIndex(container, ids),
   ]);
   const costOf = new Map(costs.map((c) => [`${c["design_code"]}|${c["material_code"]}|${parseLensFinish(c["finish"]) ?? ""}`, num(c["cost_cents"])]));
@@ -421,6 +423,7 @@ async function loadLensSection(container: MedusaContainer, stores: MatrixStore[]
         active: !c.hidden,
       })),
       storeRows,
+      storeToggles,
     },
     stores,
     discounts,
@@ -458,11 +461,12 @@ async function loadTreatmentSection(container: MedusaContainer, stores: MatrixSt
           .catch(() => (extra.length ? (pg(table).whereNull("deleted_at").select("code", "cost_cents") as Promise<Array<Record<string, unknown>>>) : Promise.reject(new Error("no costs"))))
           .catch(() => [] as Array<Record<string, unknown>>)
       : Promise.resolve([] as Array<Record<string, unknown>>);
-  const [matrix, photoCosts, arCosts, storeRows, discounts] = await Promise.all([
+  const [matrix, photoCosts, arCosts, storeRows, storeToggles, discounts] = await Promise.all([
     loadLensMatrix(pg),
     costsOf("lens_photo_option", ["cost_sv_cents", "cost_bifocal_cents", "cost_prog_cents"]),
     costsOf("lens_ar_option"),
     lensStoreRows(pg, ids),
+    loadStoreLensTogglesMapPg(pg, ids),
     storeDiscountIndex(container, ids),
   ]);
   return buildTreatmentGroups(
@@ -472,6 +476,7 @@ async function loadTreatmentSection(container: MedusaContainer, stores: MatrixSt
       photoCosts: photoCostIndex(photoCosts),
       arCosts: new Map(arCosts.map((r) => [String(r["code"]), num(r["cost_cents"])])),
       storeRows,
+      storeToggles,
       photoByMaterial: matrix.treatment_prices.some((t) => t["treatment_code"] === "photo"),
     },
     stores,

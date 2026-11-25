@@ -3,6 +3,8 @@ import { cellForFinish, LensFinishError, resolveLensFinish, type LensFinish } fr
 import { isHiddenLensCell } from "./lens-matrix";
 import { arGroupServes } from "./pos-lens-rules";
 import { applyStoreLensBreakdown, loadStoreLensPricesPg } from "./pricing-overview";
+import { isArEnabled, isDesignEnabled, isLensCellEnabled, isPhotoEnabled, type StoreToggleLookup } from "./store-lens-toggle";
+import { loadStoreLensTogglesPg } from "./store-lens-toggle-data";
 
 /**
  * Thrown by the quote when a photochromic or an AR is not offered for the
@@ -102,13 +104,14 @@ export async function computeLensBreakdown(
   // paid back on every keystroke of the funnel. The option tables (which DO
   // need the design's category, or only answer when the matrix has no cell)
   // are read after, and still in parallel.
-  const [designRows, baseRows, photoTreat, arTreat] = await Promise.all([
+  const [designRows, baseRows, photoTreat, arTreat, storeToggles] = await Promise.all([
     pg("lens_design").whereNull("deleted_at").where({ code: selection.design_code, is_active: true }),
     selection.material_code
       ? pg("lens_base_price").whereNull("deleted_at").where({ design_code: selection.design_code, material_code: selection.material_code })
       : Promise.resolve([] as unknown[]),
     selection.photo_code ? treatmentCell("photo") : Promise.resolve(null),
     selection.ar_code && (selection.ar_code === "ar-green" || selection.ar_code === "ar-blue") ? treatmentCell(selection.ar_code) : Promise.resolve(null),
+    establishmentId ? loadStoreLensTogglesPg(pg, establishmentId) : Promise.resolve(new Map() as StoreToggleLookup),
   ]);
 
   const design = (designRows as unknown[])[0];
@@ -123,11 +126,22 @@ export async function computeLensBreakdown(
   // is refused exactly like a cell with no price, never quoted.
   const offered = (baseRows as Array<{ finish?: unknown; price_cents?: number | null; cost_cents?: number | null; is_active?: unknown }>).filter((r) => !isHiddenLensCell(r));
   const cell = cellForFinish(offered, finish);
-  if (selection.material_code && (!cell || cell.price_cents == null)) {
-    throw new LensFinishError(selection.design_code, selection.material_code, finish);
+  if (selection.material_code) {
+    if (!cell || cell.price_cents == null || (establishmentId && !isLensCellEnabled(storeToggles, selection.design_code, selection.material_code, finish, category))) {
+      throw new LensFinishError(selection.design_code, selection.material_code, finish);
+    }
+  } else if (establishmentId && !isDesignEnabled(storeToggles, selection.design_code)) {
+    throw new Error(`Unknown lens design: ${selection.design_code}`);
   }
   const lens_base_cents = n(cell?.price_cents);
   const cost_cents = cell?.cost_cents == null ? null : n(cell.cost_cents);
+
+  if (selection.photo_code && establishmentId && !isPhotoEnabled(storeToggles, selection.photo_code, category)) {
+    throw new LensOptionError("photo_unavailable", selection.photo_code, selection.design_code, category);
+  }
+  if (selection.ar_code && establishmentId && !isArEnabled(storeToggles, selection.ar_code)) {
+    throw new LensOptionError("ar_unavailable", selection.ar_code, selection.design_code, category);
+  }
 
   const [photoRows, arRows] = await Promise.all([
     selection.photo_code && photoTreat == null

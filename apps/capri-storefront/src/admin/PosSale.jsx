@@ -248,13 +248,15 @@ function LensPresets({ line, onChange, catalog, rxForm }) {
 /** Diseño, material y tratamientos de una línea, con las mismas reglas que el asistente web. */
 function LensPicker({ line, onChange, catalog, rxForm, noRx, rxPending = false }) {
   const { t, lang } = useLang();
-  const { DESIGNS, MATERIALS, PHOTO, AR, FINISHES } = catalog;
+  const { DESIGNS, MATERIALS, BASE_MATERIALS, PHOTO, AR, FINISHES } = catalog;
   const L = (o) => (o ? o[lang] ?? o.es : "");
   const sel = line.selection;
   const design = sel.design_code === "frame-only" ? FRAME_ONLY : DESIGNS.find((d) => d.id === sel.design_code) || null;
   const cat = design?.cat;
+  const allowedMatSet = sel.design_code && sel.design_code !== "frame-only" && BASE_MATERIALS?.[sel.design_code] ? new Set(BASE_MATERIALS[sel.design_code]) : null;
+  const availMaterials = allowedMatSet ? MATERIALS.filter((m) => allowedMatSet.has(m.id)) : MATERIALS;
   const power = maxPower(rxForm);
-  const recommended = MATERIALS.find((m) => power <= m.maxAbs) || MATERIALS[MATERIALS.length - 1];
+  const recommended = availMaterials.find((m) => power <= m.maxAbs) || availMaterials[availMaterials.length - 1];
   const photos = PHOTO.filter((p) => cat && p.price && p.price[cat] != null);
   const ars = design && sel.design_code !== "frame-only" ? AR[arGroupFor(design)] || [] : [];
   const set = (patch) => onChange({ ...line, selection: { ...sel, ...patch } });
@@ -291,7 +293,7 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx, rxPending = false }
               }}
             >
               <option value="">—</option>
-              {MATERIALS.map((m) => <option key={m.id} value={m.id}>{L(m.label)}{m.id === recommended?.id ? " ★" : ""}</option>)}
+              {availMaterials.map((m) => <option key={m.id} value={m.id}>{L(m.label)}{m.id === recommended?.id ? " ★" : ""}</option>)}
             </select>
           </label>
           <label>
