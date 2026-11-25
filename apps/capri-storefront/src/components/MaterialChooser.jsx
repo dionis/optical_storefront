@@ -58,7 +58,7 @@ export default function MaterialChooser({
   const typeIcons = cat === "prog" ? ["ojo", "espejuelos", "verificado"] : ["ojo", "span", "espejuelos"];
 
   return (
-    <div className={`mx mx-${cat}`}>
+    <div className={`mx mx-${cat} ${materials.length > 3 ? "mx-many" : ""}`}>
       {/* ── Recomendación ── */}
       {reco && (
         <div className="mx-reco">
@@ -117,6 +117,11 @@ export default function MaterialChooser({
         </section>
       )}
 
+      {/* Este grupo solo cuenta en pantalla apaisada y baja (PC, portátil, tableta
+          acostada): ahí es la columna derecha de la ventana — comparativa, lista y
+          «Continuar» — junto al bloque que explica, para que todo quepa sin
+          deslizar. En el resto es transparente (display: contents). */}
+      <div className="mx-side">
       {/* ── Comparativa de grosor: tocar una columna también elige ── */}
       <section className="mx-compare">
         {/* El título largo de la lámina solo donde cabe en una línea. */}
@@ -188,6 +193,7 @@ export default function MaterialChooser({
                 onClick={() => onContinue(active.id)}>
           {t("lens.mx.continue", { m: name(active) })} <span className="mx-continue-ar" aria-hidden="true">→</span>
         </button>
+      </div>
       </div>
     </div>
   );

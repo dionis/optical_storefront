@@ -7643,6 +7643,16 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
 /* ── Ventanas emergentes del flujo de receta (src/pages/LensProcess.jsx ·
    ZlxPop) y modales estandarizados (Feedback.jsx) ───────────────────────── */
 .zlx-pop { animation: rl-pop var(--dur-2) var(--ease) both; }
+/* Centrado SIN transform (25-nov-2026). La ventana se centraba con
+   translate(-50%,-50%), pero esta animación termina en `transform: none` y se
+   queda ahí (fill both): la ventana acababa corrida media ventana hacia abajo y
+   a la derecha, y en un portátil de poca altura su botón salía de la pantalla.
+   Con «reducir movimiento» pasaba lo contrario (sin animación, volvía el
+   translate). inset + margin la centran igual en los dos casos. En ≤ 640 px
+   sigue siendo el panel inferior de más arriba. */
+@media (min-width: 641px) {
+  .zlx-pop { inset: 0; margin: auto; height: fit-content; transform: none; }
+}
 .zlx-pop-head { background: var(--blue); }
 .modal-card, .fb-pop { animation: rl-pop var(--dur-2) var(--ease) both; }
 
