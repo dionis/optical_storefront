@@ -4,7 +4,7 @@
 //
 // The materials themselves (which exist, their labels and prices) come from the
 // owner's lens matrix; this module only knows the PHYSICS of a material code:
-// its refractive index and, from it, how thick the lens ends up.
+// its refractive index and the family it belongs to.
 
 const KNOWN_INDEX = { cr39: 1.5, poly: 1.59 };
 
@@ -23,7 +23,7 @@ export function indexLabel(code) {
 }
 
 /**
- * The family a material belongs to, which decides its copy and its drawing:
+ * The family a material belongs to, which decides its copy and its photo:
  * cr39 · poly · mid (1.53–1.64) · high (1.65–1.70) · ultra (≥ 1.71).
  * An unknown code is described as standard resin rather than left blank.
  */
@@ -36,16 +36,6 @@ export function materialKind(code) {
   if (n >= 1.65) return "high";
   if (n >= 1.53) return "mid";
   return "cr39";
-}
-
-/**
- * Relative edge thickness for the drawings, 1 = standard resin. Follows the
- * usual rule of thumb: thickness shrinks with (n − 1), so 1.67 is ~25 % thinner
- * than 1.50. Clamped so a drawing never collapses to a line.
- */
-export function relativeThickness(code) {
-  const n = refractiveIndex(code) ?? 1.5;
-  return Math.max(0.42, Math.min(1, 0.5 / (n - 1)));
 }
 
 /**
@@ -80,7 +70,7 @@ export function materialTags(materials, priceOf) {
   return out;
 }
 
-/** True when a bifocal design is the flat-top 28 the drawing shows. */
+/** True when a bifocal design is the flat-top 28 the photo shows. */
 export function isFlatTop28(design) {
   if (!design) return false;
   const text = `${design.id || ""} ${design.label?.es || ""} ${design.label?.en || ""}`;

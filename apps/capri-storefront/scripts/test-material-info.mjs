@@ -2,7 +2,7 @@
 // (src/data/materialInfo.js) y las etiquetas que se derivan de la lista ofrecida.
 // Run: node scripts/test-material-info.mjs
 import assert from "node:assert/strict";
-import { indexLabel, isFlatTop28, materialKind, materialTags, refractiveIndex, relativeThickness } from "../src/data/materialInfo.js";
+import { indexLabel, isFlatTop28, materialKind, materialTags, refractiveIndex } from "../src/data/materialInfo.js";
 
 let n = 0;
 const check = (name, fn) => { fn(); n++; console.log(`ok ${n} - ${name}`); };
@@ -21,13 +21,6 @@ check("refractive index: named materials and numeric codes", () => {
 
 check("family of each material; an unknown code reads as standard resin", () => {
   assert.deepEqual(["cr39", "poly", "1.56", "1.61", "1.67", "1.74", "glass"].map(materialKind), ["cr39", "poly", "mid", "mid", "high", "ultra", "cr39"]);
-});
-
-check("a higher index is always drawn thinner, never as a line", () => {
-  const t = ["cr39", "1.56", "poly", "1.61", "1.67", "1.74"].map(relativeThickness);
-  assert.equal(t[0], 1);
-  for (let i = 1; i < t.length; i++) assert.ok(t[i] < t[i - 1], `step ${i}`);
-  assert.ok(relativeThickness("1.99") >= 0.42);
 });
 
 check("tags of the live list: cheapest, toughest, thinnest", () => {

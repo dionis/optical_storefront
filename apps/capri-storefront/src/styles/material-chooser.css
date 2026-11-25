@@ -4,21 +4,22 @@
    Diseño del dueño: recomendación · bloque que explica (material o tipo de
    lente) · comparativa de grosor · franja de beneficios · lista con etiqueta y
    precio. Azul marino + dorado, los mismos de la cabecera de la tienda.
-   - En celular y tableta vertical es un panel inferior que ocupa casi toda la
-     pantalla (el contenido se desliza dentro y «Continuar» queda siempre a la
-     vista); desde 701 px es una ventana centrada de 680 px.
+   - Las fotos son las láminas del dueño (public/ui/lens/). Los lentes llenan su
+     panel entero y los discos se funden con el fondo (mix-blend-mode: multiply
+     sobre su fondo blanco), así que no queda ningún borde de recorte a la vista.
+   - En celular y tableta vertical es un panel inferior y TODO cabe sin deslizar
+     en visión sencilla; desde 701 px es una ventana centrada de 680 px.
    - Prefijo mx-: nada de esta hoja toca otra pantalla. */
 
 .zlx-pop.zlx-pop-mat {
   --mx-navy: #062a5e;
-  --mx-navy-2: #0c3f8f;
   --mx-ink: #0d2550;
   --mx-muted: #4d5f7d;
   --mx-sky: #eaf2ff;
   --mx-line: #cddef8;
-  --mx-gold-1: #fdecb4;
-  --mx-gold-2: #ecbf4a;
-  --mx-gold-3: #c8901f;
+  --mx-gold-1: #fff3bd;
+  --mx-gold-2: #f0bb45;
+  --mx-gold-3: #c58a1c;
   --mx-cream: #fff8e2;
   display: flex; flex-direction: column;
   overflow: hidden;
@@ -47,7 +48,7 @@
   .zlx-pop.zlx-pop-mat {
     position: fixed; left: 0; right: 0; top: auto; bottom: 0;
     width: 100%; max-width: none;
-    max-height: 94vh; max-height: 94dvh;
+    max-height: 96vh; max-height: 96dvh;
     border-radius: 20px 20px 0 0;
     border-bottom: none;
   }
@@ -71,26 +72,29 @@
 
 .mx { display: flex; flex-direction: column; gap: 10px; }
 .mx button { font-family: inherit; }
+.mx svg { flex: 0 0 auto; display: block; }
 
 /* ── Recomendación ── */
 .mx-reco {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 12px;
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas: "seal lead pill" "seal hint hint";
+  align-items: center; column-gap: 10px; row-gap: 1px;
+  padding: 8px 12px;
   background: linear-gradient(180deg, #f2f7ff, #e4eeff);
   border: 1px solid var(--mx-line); border-radius: 14px;
   box-shadow: 0 1px 0 #fff inset;
 }
-.mx-reco-seal { flex: 0 0 auto; width: 34px; height: 40px; filter: drop-shadow(0 3px 4px rgba(120, 80, 0, .28)); }
-.mx-reco-txt { min-width: 0; flex: 1 1 auto; }
-.mx-reco-lead { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13.5px; line-height: 1.25; color: var(--mx-ink); }
-.mx-reco-lead b { font-weight: 800; }
+.mx-reco-seal { grid-area: seal; filter: drop-shadow(0 3px 4px rgba(120, 80, 0, .28)); }
+.mx-reco-txt { display: contents; }
+.mx-reco-txt b { grid-area: lead; font-size: 13.5px; font-weight: 800; line-height: 1.25; color: var(--mx-ink); }
+.mx-reco-txt span { grid-area: hint; font-size: 12px; line-height: 1.3; color: var(--mx-muted); }
 .mx-reco-pill {
-  display: inline-flex; align-items: center; padding: 3px 12px; border-radius: 999px;
+  grid-area: pill; justify-self: start;
+  padding: 3px 12px; border-radius: 999px;
   background: linear-gradient(180deg, #114a9f, #072c63); color: #fff;
   font-weight: 800; font-size: 12.5px; white-space: nowrap;
-  box-shadow: 0 0 0 1px rgba(236, 191, 74, .7), 0 3px 8px -4px rgba(6, 42, 94, .7);
+  box-shadow: 0 0 0 1px rgba(240, 187, 69, .75), 0 3px 8px -4px rgba(6, 42, 94, .7);
 }
-.mx-reco-hint { margin: 3px 0 0; font-size: 12px; line-height: 1.3; color: var(--mx-muted); }
 
 /* ── Bloque principal ── */
 .mx-hero {
@@ -99,43 +103,45 @@
   box-shadow: 0 10px 26px -18px rgba(6, 42, 94, .55);
 }
 
-/* Visión sencilla: el material */
+/* Visión sencilla: el material, con la foto de su lente */
 .mx-hero-mat { grid-template-columns: minmax(0, 46%) minmax(0, 1fr); }
 .mx-hero-art {
-  position: relative; min-height: 184px; margin-right: 4px;
-  display: grid; place-items: center; overflow: hidden;
-  /* filo dorado: esta capa asoma 3 px por detrás del azul, siguiendo el arco */
-  background: linear-gradient(180deg, #fdecb4 0%, #ecbf4a 48%, #c8901f 100%);
+  position: relative; min-height: 190px; margin-right: 4px; overflow: hidden;
+  /* filo dorado: esta capa asoma 3 px por detrás de la foto, siguiendo el arco */
+  background: linear-gradient(180deg, var(--mx-gold-1) 0%, var(--mx-gold-2) 48%, var(--mx-gold-3) 100%);
   clip-path: ellipse(100% 135% at 0% 50%);
 }
-.mx-hero-art::before {
-  content: ""; position: absolute; inset: 0 3px 0 0;
+/* La foto llena el panel entero (sin borde de recorte) y va un poco corrida a la
+   izquierda, porque el arco le quita sitio a la derecha. Detrás, el mismo azul
+   de la foto mientras llega, para que nunca se vea el dorado. */
+.mx-hero-photos {
+  position: absolute; inset: 0 3px 0 0; overflow: hidden;
   clip-path: ellipse(100% 135% at 0% 50%);
-  background:
-    radial-gradient(110% 80% at 18% 8%, rgba(255, 255, 255, .55) 0%, rgba(255, 255, 255, 0) 48%),
-    radial-gradient(90% 70% at 80% 104%, rgba(150, 204, 255, .7) 0%, rgba(150, 204, 255, 0) 62%),
-    linear-gradient(140deg, #0a3a86 0%, #1b60c6 48%, #74acf0 100%);
+  background: linear-gradient(180deg, #06225a 0%, #0d55a8 55%, #2a8fe0 100%);
 }
-.mx-hero-art > * { position: relative; z-index: 1; }
-.mx-hero-lens { width: 112%; max-width: 330px; height: auto; display: block; margin-left: -6%; filter: drop-shadow(0 12px 14px rgba(3, 22, 60, .35)); }
-.mx-hero-art > .mx-hero-badge {
+.mx-hero-photo {
+  position: absolute; top: 0; left: -10%; width: 110%; height: 100%; display: block;
+  object-fit: cover; object-position: 50% 47%;
+  opacity: 0; transition: opacity .3s ease;
+}
+.mx-hero-photo.on { opacity: 1; }
+.mx-hero-badge {
   position: absolute; left: 10px; top: 10px; z-index: 2;
   max-width: calc(100% - 30px);
   padding: 5px 11px; border-radius: 10px;
   background: linear-gradient(180deg, var(--mx-gold-1) 0%, var(--mx-gold-2) 60%, var(--mx-gold-3) 100%);
   border: 1px solid #b47f16; color: #0a2a5c;
-  box-shadow: 0 5px 10px -5px rgba(40, 24, 0, .6), 0 1px 0 rgba(255, 255, 255, .7) inset;
-  line-height: 1.1;
+  font-size: 12.5px; font-weight: 900; line-height: 1.1; letter-spacing: .01em;
+  box-shadow: 0 5px 10px -5px rgba(0, 10, 40, .7), 0 1px 0 rgba(255, 255, 255, .7) inset;
 }
-.mx-hero-badge b { font-size: 12.5px; font-weight: 900; letter-spacing: .01em; }
-.mx-hero-art > .mx-hero-thick {
+.mx-hero-thick {
   position: absolute; left: 46%; bottom: 9px; transform: translateX(-50%); z-index: 2;
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 11px; border-radius: 999px; white-space: nowrap;
   background: linear-gradient(180deg, var(--mx-gold-1), var(--mx-gold-2));
   border: 1px solid #b47f16; color: #0a2a5c;
   font-size: 11.5px; font-weight: 800;
-  box-shadow: 0 5px 10px -5px rgba(40, 24, 0, .6);
+  box-shadow: 0 5px 10px -5px rgba(0, 10, 40, .7);
 }
 .mx-hero-info { padding: 12px 14px 12px 8px; min-width: 0; align-self: center; }
 .mx-hero-title { margin: 0; font-size: 20px; line-height: 1.12; font-weight: 900; color: var(--mx-navy); letter-spacing: -.01em; }
@@ -146,32 +152,27 @@
 }
 .mx-hero-desc { margin: 7px 0 0; font-size: 13px; line-height: 1.38; color: #26395c; }
 .mx-bullets { list-style: none; margin: 9px 0 0; padding: 0; display: grid; gap: 6px; }
-.mx-bullets li { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; line-height: 1.2; color: var(--mx-ink); }
-.mx-bullet-ic { flex: 0 0 auto; }
+.mx-bullets li { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; line-height: 1.2; color: var(--mx-ink); }
 
-/* Bifocal y progresivo: qué es el lente */
-.mx-hero-type { grid-template-columns: minmax(0, 62%) minmax(0, 1fr); gap: 0; background: linear-gradient(180deg, #f4f8ff, #e8f0ff); }
-.mx-scene { position: relative; min-height: 0; overflow: hidden; border-radius: 15px 0 0 15px; background: #cfdcec; }
-.mx-scene-svg { display: block; width: 100%; height: 100%; min-height: 168px; font-family: inherit; }
+/* Bifocal y progresivo: la foto de la montura con sus zonas y qué es el lente */
+.mx-hero-type { grid-template-columns: minmax(0, 60%) minmax(0, 1fr); background: linear-gradient(180deg, #f4f8ff, #e8f0ff); }
+.mx-scene { position: relative; min-height: 204px; overflow: hidden; background: #0b2548; }
+/* Anclada arriba: lo que sobra se recorta por la mesa, nunca por los rótulos. */
+.mx-scene-photo { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; object-position: 50% 0; }
 .mx-scene-chip {
-  position: absolute; left: 9px; top: 9px; z-index: 1; max-width: calc(100% - 18px);
+  position: absolute; left: 9px; top: 8px; z-index: 1; max-width: calc(100% - 18px);
   padding: 5px 12px; border-radius: 999px;
   background: linear-gradient(180deg, var(--mx-gold-1) 0%, var(--mx-gold-2) 65%, var(--mx-gold-3) 100%);
   border: 1px solid #b47f16; color: #0a2a5c;
   font-size: 12.5px; font-weight: 900; line-height: 1.1;
-  box-shadow: 0 6px 12px -6px rgba(40, 24, 0, .65), 0 1px 0 rgba(255, 255, 255, .7) inset;
+  box-shadow: 0 6px 12px -6px rgba(0, 0, 0, .7), 0 1px 0 rgba(255, 255, 255, .7) inset;
 }
 .mx-what { padding: 11px 12px; min-width: 0; align-self: center; }
 .mx-what-title { margin: 0; font-size: 16px; line-height: 1.15; font-weight: 900; color: var(--mx-navy); }
 .mx-what-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.36; color: #26395c; }
 .mx-what-list { list-style: none; margin: 9px 0 0; padding: 0; display: grid; gap: 6px; }
 .mx-what-list li { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; line-height: 1.2; color: var(--mx-ink); }
-.mx-what-ic {
-  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%;
-  display: grid; place-items: center; color: #0a2a5c;
-  background: linear-gradient(180deg, var(--mx-gold-1), var(--mx-gold-2));
-  box-shadow: 0 0 0 1px #c8901f, 0 3px 6px -3px rgba(60, 36, 0, .5);
-}
+.mx-what-list svg, .mx-bullets svg, .mx-strip-list svg { filter: drop-shadow(0 2px 2px rgba(60, 36, 0, .22)); }
 
 /* ── Comparativa de grosor ── */
 .mx-compare {
@@ -181,24 +182,26 @@
   padding: 8px; box-shadow: 0 8px 20px -18px rgba(6, 42, 94, .6);
 }
 .mx-compare-title {
-  grid-area: title; margin: 0; padding: 0 4px 6px;
+  grid-area: title; margin: 0; padding: 0 4px 5px;
   display: flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; color: var(--mx-navy);
 }
-.mx-compare-title svg { flex: 0 0 auto; color: var(--mx-gold-3); }
-.mx-compare-note { grid-area: note; padding: 0 4px 6px; font-size: 10.5px; color: var(--mx-muted); white-space: nowrap; }
+.mx-compare-title svg { color: var(--mx-gold-3); }
+.mx-narrow { display: none; }
+.mx-compare-note { grid-area: note; padding: 0 4px 5px; font-size: 10.5px; color: var(--mx-muted); white-space: nowrap; }
 .mx-compare-row { grid-area: row; display: grid; grid-template-columns: repeat(var(--mx-cols, 3), minmax(0, 1fr)); gap: 4px; }
 .mx-compare-row.scroll { display: flex; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; }
 .mx-compare-row.scroll .mx-col { flex: 0 0 31%; scroll-snap-align: start; }
+/* Sin transform ni z-index en la columna: la foto se multiplica con el fondo que
+   hay DETRÁS de ella (blanco, o crema si es la elegida) y por eso no tiene borde. */
 .mx-col {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px;
-  padding: 7px 4px 8px; min-width: 0;
+  padding: 6px 4px 8px; min-width: 0;
   background: none; border: 1.5px solid transparent; border-radius: 12px; cursor: pointer;
   color: var(--mx-ink); text-align: center;
-  transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+  transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 .mx-col + .mx-col::before { content: ""; position: absolute; left: -3px; top: 14%; bottom: 14%; width: 1px; background: repeating-linear-gradient(180deg, #b9cdf0 0 3px, transparent 3px 6px); }
-.mx-col.on, .mx-col.on + .mx-col { }
 .mx-col.on::before, .mx-col.on + .mx-col::before { display: none; }
 .mx-col:hover { background: #f4f8ff; }
 .mx-col.on {
@@ -206,34 +209,33 @@
   border-color: var(--mx-gold-2);
   box-shadow: 0 8px 16px -12px rgba(140, 96, 0, .8), 0 1px 0 #fff inset;
 }
-.mx-col-disc { width: 92%; max-width: 128px; height: auto; display: block; margin-bottom: 2px; }
+.mx-col-disc { width: 96%; max-width: 150px; height: auto; display: block; mix-blend-mode: multiply; }
 .mx-col-name { font-size: 12.5px; font-weight: 900; line-height: 1.15; color: var(--mx-navy); }
 .mx-col-idx { font-size: 10.5px; font-weight: 700; color: #33507f; line-height: 1.2; }
 .mx-col-thick { font-size: 10.5px; color: var(--mx-muted); line-height: 1.2; }
 
 /* ── Franja de beneficios ── */
 .mx-strip {
-  display: grid; grid-template-columns: minmax(0, 40%) minmax(0, 1fr); align-items: stretch;
+  display: grid; grid-template-columns: minmax(0, 38%) minmax(0, 1fr); align-items: stretch;
   background: #fff; border: 1px solid var(--mx-line); border-radius: 14px; overflow: hidden;
   box-shadow: 0 8px 20px -18px rgba(6, 42, 94, .6);
 }
 .mx-strip-lead {
-  display: flex; align-items: center; gap: 9px; padding: 9px 20px 9px 12px; min-width: 0;
+  display: flex; align-items: center; gap: 9px; padding: 8px 20px 8px 12px; min-width: 0;
   background: linear-gradient(180deg, #0d4294, #06295e); color: #fff;
   clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
 }
-.mx-strip-lead svg { flex: 0 0 auto; color: var(--mx-gold-2); }
+.mx-strip-lead svg { color: var(--mx-gold-2); }
 .mx-strip-lead span { min-width: 0; display: grid; }
 .mx-strip-lead b { font-size: 15px; font-weight: 900; line-height: 1.15; }
 .mx-strip-lead small { font-size: 10.5px; line-height: 1.25; color: #d7e5ff; margin-top: 2px; }
 .mx-strip-list { list-style: none; margin: 0; padding: 6px 4px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .mx-strip-list li {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  padding: 2px 4px; text-align: center; color: var(--mx-navy);
+  padding: 0 4px; text-align: center; color: var(--mx-navy);
   font-size: 11px; font-weight: 800; line-height: 1.2;
 }
 .mx-strip-list li + li { border-left: 1px solid var(--mx-line); }
-.mx-strip-list svg { color: #0c3f8f; }
 
 /* ── Lista ── */
 .mx-list { display: grid; gap: 7px; }
@@ -255,10 +257,10 @@
 }
 .mx-row.on .mx-row-radio { border: none; background: none; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
 .mx-row-ic { color: #1f4f9c; }
-.mx-row-name { font-size: 15.5px; font-weight: 800; line-height: 1.15; color: var(--mx-navy); min-width: 0; }
+.mx-row-name { font-size: 15.5px; font-weight: 800; line-height: 1.15; color: var(--mx-navy); min-width: 0; white-space: nowrap; }
 .mx-row-tag {
-  justify-self: center;
-  padding: 4px 11px; border-radius: 999px; white-space: nowrap;
+  justify-self: center; max-width: 100%;
+  padding: 4px 11px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   background: #e3edff; border: 1px solid #c3d6f6; color: #123f86;
   font-size: 11.5px; font-weight: 800; line-height: 1.1;
 }
@@ -268,82 +270,148 @@
   border-color: var(--mx-gold-2);
   box-shadow: 0 12px 22px -14px rgba(6, 42, 94, .95), 0 0 0 1px rgba(255, 240, 190, .55) inset;
 }
-.mx-row.on .mx-row-ic { color: #fff; }
-.mx-row.on .mx-row-name, .mx-row.on .mx-row-price { color: #fff; }
+.mx-row.on .mx-row-ic, .mx-row.on .mx-row-name, .mx-row.on .mx-row-price { color: #fff; }
 .mx-row.on .mx-row-tag {
   background: linear-gradient(180deg, var(--mx-gold-1), var(--mx-gold-2)); border-color: #b47f16; color: #0a2a5c;
 }
 
 /* ── Pie: continuar, siempre a la vista ── */
 .mx-foot {
-  position: sticky; bottom: 0; z-index: 1;
-  margin: 0 -14px; padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0, #fff 30%);
+  position: sticky; bottom: 0; z-index: 3;
+  margin: 0 -14px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0, #fff 34%);
 }
-.mx-foot .mx-continue.btn { margin-top: 0; min-height: 48px; font-size: 15px; font-weight: 800; border-radius: 13px; }
+.mx-foot .mx-continue.btn { margin-top: 0; min-height: 46px; font-size: 15px; font-weight: 800; border-radius: 13px; }
 .mx-continue-ar { font-size: 18px; line-height: 1; }
-@media (min-width: 701px) { .mx-foot { margin: 0 -18px; padding: 12px 18px 16px; } }
-/* En celular y tableta vertical el botón va DESPUÉS de la lista, sin flotar: quien
-   continúa ya pasó por los precios (en bifocal y progresivo quedan bajo el pliegue). */
-@media (max-width: 700px) { .mx-foot { position: static; background: none; padding-top: 4px; } }
+@media (min-width: 701px) { .mx-foot { margin: 0 -18px; padding: 10px 18px 16px; } }
 
-/* ── Celular: bloques en una columna, lista con la etiqueta bajo el nombre ── */
-@media (max-width: 520px) {
+/* Tableta vertical (521–700 px): un punto menos de aire para que la lista entre entera. */
+@media (min-width: 521px) and (max-width: 700px) {
+  .zlx-pop.zlx-pop-mat .zlx-pop-head { padding: 12px 16px; }
+  .zlx-pop.zlx-pop-mat .zlx-pop-body { padding-top: 10px; }
   .mx { gap: 8px; }
-  .mx-reco { padding: 8px 10px; gap: 8px; }
-  .mx-reco-seal { width: 30px; height: 36px; }
-  .mx-reco-lead { font-size: 12.5px; }
-  .mx-reco-hint { font-size: 11.5px; }
-  .mx-hero-mat { grid-template-columns: minmax(0, 43%) minmax(0, 1fr); }
-  .mx-hero-art { min-height: 156px; }
-  .mx-hero-lens { width: 132%; margin-left: -16%; }
-  .mx-hero-info { padding: 10px 11px 10px 6px; }
-  .mx-hero-title { font-size: 17px; }
-  .mx-hero-desc { font-size: 12px; margin-top: 5px; }
-  .mx-bullets { gap: 4px; margin-top: 7px; }
-  .mx-bullets li { font-size: 12px; }
-  .mx-hero-badge b { font-size: 11px; }
-  .mx-hero-art > .mx-hero-thick { font-size: 10px; padding: 3px 8px; gap: 3px; bottom: 7px; }
-  .mx-hero-art > .mx-hero-badge { left: 8px; top: 8px; padding: 4px 9px; }
-  .mx-hero-type { grid-template-columns: minmax(0, 1fr); }
-  .mx-scene { border-radius: 15px 15px 0 0; }
-  .mx-scene-svg { min-height: 0; aspect-ratio: 440 / 200; height: auto; }
-  .mx-what { padding: 8px 11px 9px; }
-  .mx-what-title { font-size: 15px; }
-  .mx-what-desc { font-size: 11.5px; margin-top: 4px; }
-  .mx-what-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 7px; }
-  .mx-what-list li { flex-direction: column; text-align: center; gap: 3px; font-size: 10.5px; }
-  .mx-what-ic { width: 24px; height: 24px; }
-  .mx-strip { grid-template-columns: minmax(0, 1fr); }
-  .mx-strip-lead { clip-path: none; padding: 6px 12px; }
-  .mx-strip-lead b { font-size: 14px; }
-  .mx-strip-list { padding: 5px 2px; }
-  .mx-strip-lead svg { width: 24px; height: 24px; }
-  .mx-strip-list li { font-size: 10.5px; }
-  .mx-strip-list svg { width: 20px; height: 20px; }
-  .mx-row { grid-template-columns: 24px 22px minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 8px; row-gap: 2px; min-height: 52px; padding: 6px 12px 6px 9px; }
-  .mx-row-radio, .mx-row-ic, .mx-row-price { grid-row: 1 / span 2; }
-  .mx-row-ic { width: 22px; height: 22px; }
-  .mx-row-name { grid-column: 3; grid-row: 1; font-size: 14.5px; align-self: end; }
-  .mx-row-tag { grid-column: 3; grid-row: 2; justify-self: start; align-self: start; font-size: 10.5px; padding: 2px 9px; }
-  .mx-row-price { grid-column: 4; font-size: 17px; min-width: 44px; }
-  .mx-col-name { font-size: 11.5px; }
-  .mx-col-idx, .mx-col-thick { font-size: 10px; }
-  .mx-col { padding: 5px 3px 6px; }
-  .mx-compare { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "row" "note"; padding: 7px 7px 5px; }
-  .mx-compare-title { font-size: 11px; letter-spacing: .03em; padding-bottom: 4px; }
-  .mx-compare-note { justify-self: center; padding: 3px 0 0; font-size: 9.5px; }
-}
-@media (max-width: 350px) {
-  .mx-hero-mat { grid-template-columns: minmax(0, 1fr); }
-  .mx-hero-art { clip-path: none; margin: 0; min-height: 0; height: 128px; border-bottom: 3px solid var(--mx-gold-2); background: none; }
-  .mx-hero-art::before { clip-path: none; inset: 0; }
-  .mx-hero-lens { width: auto; height: 118px; margin: 0; }
-  .mx-hero-info { padding: 6px 12px 12px; }
+  .mx-reco { padding: 6px 12px; }
+  .mx-scene { min-height: 196px; }
+  .mx-list { gap: 6px; }
+  .mx-row { min-height: 46px; padding-top: 5px; padding-bottom: 5px; }
+  .mx-col { padding-top: 3px; padding-bottom: 6px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .mx-row, .mx-col { transition: none; }
+/* ═══ Celular (≤ 520 px) ═══════════════════════════════════════════════════
+   Misma composición que la lámina, un punto más apretada: en visión sencilla
+   todo cabe sin deslizar; en bifocal y progresivo la foto va a todo el ancho
+   (sus rótulos se leen) y lo que explica el lente queda en una sola fila. */
+@media (max-width: 520px) {
+  .zlx-pop.zlx-pop-mat .zlx-pop-head { padding: 10px 14px; }
+  .zlx-pop.zlx-pop-mat .zlx-pop-head b { font-size: 16px; }
+  .zlx-pop.zlx-pop-mat .zlx-pop-body { padding: 8px 10px 0; }
+  .mx { gap: 7px; }
+
+  .mx-reco { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "seal lead pill" "seal hint pill"; padding: 6px 9px; column-gap: 8px; border-radius: 12px; }
+  .mx-reco-seal { width: 30px; height: 28px; }
+  .mx-reco-txt b { font-size: 12px; line-height: 1.2; }
+  .mx-reco-txt span { font-size: 10.5px; line-height: 1.2; }
+  .mx-reco-pill { justify-self: end; font-size: 11.5px; padding: 4px 10px; }
+
+  .mx-hero { border-radius: 14px; }
+  .mx-hero-mat { grid-template-columns: minmax(0, 42%) minmax(0, 1fr); }
+  .mx-hero-art { min-height: 142px; }
+  .mx-hero-photo { left: -3%; width: 103%; }
+  .mx-hero-badge { left: 7px; top: 7px; padding: 4px 8px; font-size: 10.5px; border-radius: 8px; max-width: calc(100% - 22px); }
+  .mx-hero-thick { bottom: 6px; padding: 3px 8px; gap: 3px; font-size: 9.5px; }
+  .mx-hero-info { padding: 8px 10px 8px 5px; }
+  .mx-hero-title { font-size: 16px; }
+  .mx-hero-idx { margin-top: 4px; padding: 1px 8px; font-size: 11px; }
+  .mx-hero-desc { margin-top: 4px; font-size: 11.5px; line-height: 1.3; }
+  .mx-bullets { margin-top: 6px; gap: 3px; }
+  .mx-bullets li { gap: 6px; font-size: 11.5px; }
+  .mx-bullets svg { width: 18px; height: 17px; }
+
+  .mx-hero-type { grid-template-columns: minmax(0, 1fr); }
+  .mx-scene { min-height: 0; aspect-ratio: 822 / 428; }
+  .mx-scene-chip { left: 7px; top: 6px; padding: 4px 10px; font-size: 11px; }
+  .mx-what { padding: 6px 8px 7px; }
+  .mx-what-title { font-size: 14px; text-align: center; }
+  .mx-what-desc { display: none; }
+  .mx-what-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-top: 5px; }
+  .mx-what-list li { flex-direction: column; text-align: center; gap: 2px; font-size: 10px; line-height: 1.15; }
+  .mx-what-list svg { width: 23px; height: 22px; }
+
+  .mx-wide { display: none; }
+  .mx-narrow { display: inline; }
+  .mx-compare { padding: 6px 6px 5px; border-radius: 12px; }
+  .mx-compare-title { font-size: 10.5px; letter-spacing: .02em; padding: 0 2px 2px; gap: 5px; }
+  .mx-compare-title svg { width: 14px; height: 13px; }
+  .mx-compare-note { font-size: 9px; padding: 0 2px 2px; }
+  .mx-col { padding: 2px 2px 5px; border-radius: 10px; }
+  .mx-col-disc { width: 100%; max-width: 118px; }
+  .mx-col-name { font-size: 11.5px; }
+  .mx-col-idx, .mx-col-thick { font-size: 9.5px; }
+
+  .mx-strip { grid-template-columns: minmax(0, 35%) minmax(0, 1fr); border-radius: 12px; }
+  .mx-strip-lead { padding: 5px 14px 5px 8px; gap: 6px; clip-path: polygon(0 0, 100% 0, calc(100% - 9px) 100%, 0 100%); }
+  .mx-strip-lead svg { width: 22px; height: 21px; }
+  .mx-strip-lead b { font-size: 12.5px; }
+  .mx-strip-lead small { font-size: 9px; margin-top: 1px; }
+  .mx-strip-list { padding: 4px 1px; }
+  .mx-strip-list li { font-size: 9.5px; line-height: 1.15; gap: 2px; padding: 0 2px; }
+  .mx-strip-list svg { width: 23px; height: 22px; }
+
+  .mx-list { gap: 5px; }
+  .mx-row { grid-template-columns: 22px 20px auto minmax(0, 1fr) auto; gap: 6px; min-height: 44px; padding: 5px 11px 5px 8px; border-radius: 12px; }
+  .mx-row-radio { width: 22px; height: 22px; }
+  .mx-row-radio svg { width: 22px; height: 21px; }
+  .mx-row-ic { width: 20px; height: 19px; }
+  .mx-row-name { font-size: 14px; }
+  .mx-row-tag { font-size: 10px; padding: 3px 8px; }
+  .mx-row-price { font-size: 16.5px; min-width: 40px; }
+
+  .mx-foot { margin: 0 -10px; padding: 6px 10px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .mx-foot .mx-continue.btn { min-height: 44px; font-size: 14.5px; }
+}
+/* Celular: con el lente explicado arriba, la segunda línea de la recomendación sobra. */
+@media (max-width: 520px) {
+  .mx-bifocal .mx-reco-txt span, .mx-prog .mx-reco-txt span { display: none; }
+  .mx-bifocal .mx-reco, .mx-prog .mx-reco { grid-template-areas: "seal lead pill"; }
+}
+/* Celular con poca altura (barras del navegador a la vista): se quita lo que
+   repite, por orden, para que la lista y sus precios sigan sin deslizar. */
+@media (max-width: 520px) and (max-height: 770px) {
+  .mx-strip { display: none; }
+}
+@media (max-width: 520px) and (max-height: 700px) {
+  .mx-reco-txt span { display: none; }
+  .mx-reco { grid-template-areas: "seal lead pill"; }
+  .mx-what { display: none; }
+  .mx { gap: 6px; }
+  .mx-hero-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+}
+/* Celulares estrechos: la nota de la comparativa y el icono de la fila ceden su sitio. */
+@media (max-width: 380px) {
+  .mx-compare { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "row"; }
+  .mx-compare-note { display: none; }
+  .zlx-pop.zlx-pop-mat .zlx-pop-head b { font-size: 14.5px; }
+  .mx-row { grid-template-columns: 22px auto minmax(0, 1fr) auto; }
+  .mx-row .mx-row-ic { display: none; }
+  .mx-row-name { font-size: 13.5px; }
+  .mx-row-tag { font-size: 9.5px; padding: 3px 7px; }
+  .mx-reco-txt span { display: none; }
+  .mx-reco { grid-template-areas: "seal lead pill"; }
+  .mx-hero-desc { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+}
+
+/* Celulares muy estrechos (320 px): el lente gana ancho y la etiqueta baja de línea. */
+@media (max-width: 345px) {
+  .mx-hero-mat { grid-template-columns: minmax(0, 47%) minmax(0, 1fr); }
+  .mx-hero-desc { -webkit-line-clamp: 2; }
+  .mx-hero-thick { font-size: 9px; padding: 3px 6px; }
+  .mx-hero-thick svg { display: none; }
+  .mx-bullets li { font-size: 10.5px; gap: 4px; }
+  .mx-row { grid-template-columns: 22px minmax(0, 1fr) auto; grid-template-rows: auto auto; row-gap: 1px; min-height: 46px; }
+  .mx-row-radio, .mx-row-price { grid-row: 1 / span 2; }
+  .mx-row-name { grid-column: 2; grid-row: 1; align-self: end; }
+  .mx-row-tag { grid-column: 2; grid-row: 2; justify-self: start; align-self: start; padding: 2px 7px; }
+  .mx-row-price { grid-column: 3; }
 }
 
 /* Ventana centrada en pantallas bajas (portátiles de 768 px, tableta apaisada):
@@ -353,33 +421,29 @@
   .zlx-pop.zlx-pop-mat .zlx-pop-head { padding: 11px 18px; }
   .zlx-pop.zlx-pop-mat .zlx-pop-body { padding-top: 10px; }
   .mx { gap: 8px; }
-  .mx-reco { padding: 6px 12px; }
-  .mx-reco-seal { width: 28px; height: 33px; }
-  .mx-reco-hint { margin-top: 1px; }
-  .mx-hero-art { min-height: 150px; }
-  .mx-hero-lens { max-width: 260px; }
+  .mx-reco { padding: 5px 12px; }
+  .mx-reco-seal { width: 32px; height: 30px; }
+  .mx-hero-art { min-height: 156px; }
   .mx-hero-info { padding-top: 8px; padding-bottom: 8px; }
   .mx-hero-desc { margin-top: 5px; }
   .mx-bullets { margin-top: 7px; gap: 4px; }
-  .mx-scene-svg { min-height: 150px; }
+  .mx-scene { min-height: 192px; }
   .mx-what { padding: 8px 12px; }
   .mx-what-list { gap: 4px; margin-top: 7px; }
-  .mx-what-ic { width: 24px; height: 24px; }
+  .mx-what-list svg { width: 25px; height: 24px; }
   .mx-compare { padding: 6px 8px; }
-  .mx-compare-title, .mx-compare-note { padding-bottom: 2px; }
-  .mx-col { padding: 4px 4px 5px; }
-  .mx-col-disc { max-width: 104px; }
-  .mx-strip-lead { padding-top: 6px; padding-bottom: 6px; }
+  .mx-compare-title, .mx-compare-note { padding-bottom: 1px; }
+  .mx-col { padding: 2px 4px 5px; }
+  .mx-col-disc { max-width: 116px; }
+  .mx-strip-lead { padding-top: 5px; padding-bottom: 5px; }
   .mx-strip-list { padding: 4px; }
-  .mx-strip-list svg { width: 20px; height: 20px; }
-  .mx-list { gap: 6px; }
-  .mx-row { min-height: 44px; padding-top: 5px; padding-bottom: 5px; }
-  .mx-foot { padding-top: 8px; padding-bottom: 10px; }
-  .mx-foot .mx-continue.btn { min-height: 44px; }
+  .mx-strip-list svg { width: 25px; height: 24px; }
+  .mx-list { gap: 5px; }
+  .mx-row { min-height: 42px; padding-top: 4px; padding-bottom: 4px; }
+  .mx-foot { padding-top: 6px; padding-bottom: 10px; }
+  .mx-foot .mx-continue.btn { min-height: 42px; }
 }
-@media (min-width: 701px) and (max-height: 700px) {
-  .mx-hero-art { min-height: 124px; }
-  .mx-hero-lens { max-width: 210px; }
-  .mx-scene-svg { min-height: 124px; }
-  .mx-hero-desc, .mx-what-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mx-row, .mx-col, .mx-hero-photo { transition: none; }
 }
